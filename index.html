@@ -204,7 +204,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v 27 02 2026 12:00</div>
+    <div class="login-version">v 27 02 2026 12:22</div>
   </div>
 </div>
 
@@ -1410,6 +1410,7 @@ const PRODUCT_NAME_UNKNOWN_WARNING='No se reconoce el nombre del producto';
 const PRODUCT_NAME_STOP_TOKENS=new Set(['con','sin','para','por','del','las','los','una','uno','unos','unas','tipo','estilo','gran','mini','extra']);
 const PRODUCT_NAME_PERSON_TOKENS=new Set(['rafael','antonio','jose','maria','manuel','david','juan','francisco','carlos','luis','miguel','pedro','javier','isabel','ana','laura','lucia','marta','sofia','pablo','diego','alberto','fernando','roberto','sergio','andres','cristina','paula','carmen','alicia','raquel','eva','silvia','jorge','raul','oscar','lola']);
 const PRODUCT_NAME_MARKETING_TOKENS=new Set(['secreto','tradicion','tradicional','clasico','clasica','premium','gourmet','selecto','selecta','especial','delicia','receta','original','autentico','autentica','maestro','artesano','artesanal','sabor']);
+const PRODUCT_NAME_BRAND_TOKENS=new Set(['marca','grupo','company','cooperative','cooperativa','selection','seleccion','select','edition','edicion','original']);
 const PRODUCT_NAME_FOOD_HINT_TOKENS=new Set([
   'aceituna','aceitunas','aceite','salmuera','encurtido','encurtidos','conserva','conservas','verdial','verdiales','hueso','partida','partidas','alinada','alinadas',
   'arroz','pasta','fideo','fideos','fideua','macarron','macarrones','espagueti','espaguetis','lenteja','lentejas','garbanzo','garbanzos','alubia','alubias','judia','judias',
@@ -1420,6 +1421,12 @@ const PRODUCT_NAME_FOOD_HINT_TOKENS=new Set([
   'pollo','pavo','carne','ternera','cerdo','jamon','chorizo','salchicha','hamburguesa','albondiga','albondigas','croqueta','croquetas',
   'chocolate','cacao','cafe','infusion','te'
 ]);
+const PRODUCT_NAME_NONFOOD_REGEX=[
+  /\b(el|la)\s+secreto\s+de\b/i,
+  /\b(edicion|coleccion|collection|series?)\b/i,
+  /\b(www|http|instagram|facebook)\b/i,
+  /\b(s\.?l\.?|s\.?a\.?)\b/i
+];
 function getCommonProductTokensForNameValidation(){
   const counts=new Map();
   if(!Array.isArray(P)) return new Set();
@@ -1436,32 +1443,149 @@ function getCommonProductTokensForNameValidation(){
   counts.forEach((count,token)=>{if(count>=2)out.add(token)});
   return out;
 }
-function validateAIProductName(name){
-  const cleaned=canonicalizeProductName(name);
-  if(!cleaned) return {ok:false,cleaned:'',reason:'vacio',tokens:[],score:-10};
-  const meaningful=tokenize(cleaned).filter(t=>!PRODUCT_NAME_STOP_TOKENS.has(t));
-  if(!meaningful.length) return {ok:false,cleaned:'',reason:'vacio',tokens:[],score:-10};
-  const tokens=[...new Set(meaningful)];
-  const commonTokens=getCommonProductTokensForNameValidation();
+function normalizeNameCandidateType(v){
+  const n=norm(v||'');
+  if(!n) return 'otro';
+  if(n.includes('alimento')||n.includes('comida')||n==='producto') return 'alimento';
+  if(n.includes('marca')) return 'marca';
+  if(n.includes('eslogan')||n.includes('slogan')||n.includes('claim')) return 'eslogan';
+  if(n.includes('persona')||n.includes('nombre propio')||n==='persona nombre') return 'persona';
+  return 'otro';
+}
+function normalizeNameCandidateConfidence(v){
+  const n=norm(v||'');
+  if(n==='alta'||n==='high') return 'alta';
+  if(n==='media'||n==='medium') return 'media';
+  if(n==='baja'||n==='low') return 'baja';
+  return 'media';
+}
+function parseNameCandidateBool(v){
+  if(typeof v==='boolean') return v;
+  const n=norm(v||'');
+  if(!n) return null;
+  if(['si','true','1','food','comida','alimento'].includes(n)) return true;
+  if(['no','false','0','not food','no comida','no alimento'].includes(n)) return false;
+  return null;
+}
+function nameConfidenceRank(c){
+  if(c==='alta') return 3;
+  if(c==='media') return 2;
+  if(c==='baja') return 1;
+  return 0;
+}
+function splitNameCandidateText(raw){
+  const base=canonicalizeProductName(String(raw||'').replace(/[\n\r\t]+/g,' ').replace(/[“”"']/g,' ').trim());
+  if(!base) return [];
+  const parts=[base];
+  const sub=base.split(/\s(?:[-–—|/·])\s|[;:]+/).map(p=>canonicalizeProductName(p)).filter(Boolean);
+  sub.forEach(p=>parts.push(p));
+  return [...new Set(parts.filter(p=>p.length>=3&&p.length<=90).map(p=>p.replace(/\s+/g,' ').trim()))];
+}
+function addOrMergeNameCandidate(map,rawText,source,meta){
+  splitNameCandidateText(rawText).forEach(text=>{
+    const key=norm(text);
+    if(!key) return;
+    const type=normalizeNameCandidateType(meta&&meta.tipo);
+    const confidence=normalizeNameCandidateConfidence(meta&&meta.confianza);
+    const isFood=parseNameCandidateBool(meta&&meta.es_comida);
+    const reason=String((meta&&meta.motivo)||'').trim();
+    if(map.has(key)){
+      const prev=map.get(key);
+      if(prev.type==='otro'&&type!=='otro') prev.type=type;
+      if(nameConfidenceRank(confidence)>nameConfidenceRank(prev.confidence)) prev.confidence=confidence;
+      if(isFood===true) prev.isFood=true;
+      else if(isFood===false && prev.isFood==null) prev.isFood=false;
+      if(!prev.reason&&reason) prev.reason=reason;
+      prev.sources=[...new Set([...prev.sources,source])];
+      if(source==='ia_nombre') prev.preferred=true;
+      return;
+    }
+    map.set(key,{text,key,type,confidence,isFood,reason,sources:[source],preferred:source==='ia_nombre'});
+  });
+}
+function collectAINameCandidates(result){
+  const map=new Map();
+  addOrMergeNameCandidate(map,result.nombre,'ia_nombre',{tipo:'otro',confianza:'media',motivo:'campo_nombre'});
+  (Array.isArray(result.nombres_detectados)?result.nombres_detectados:[]).forEach(item=>{
+    addOrMergeNameCandidate(map,item&&item.texto,'ia_detectado',item||{});
+  });
+  (Array.isArray(result.hallazgos_texto)?result.hallazgos_texto:[]).forEach(txt=>{
+    const raw=String(txt||'').trim();
+    if(raw.length>=10) addOrMergeNameCandidate(map,raw,'hallazgo',{tipo:'otro',confianza:'baja'});
+  });
+  return [...map.values()];
+}
+function evaluateNameCandidate(candidate,commonTokens){
+  const tokens=[...new Set(tokenize(candidate.text).filter(t=>!PRODUCT_NAME_STOP_TOKENS.has(t)))];
   const hasFoodHint=tokens.some(t=>PRODUCT_NAME_FOOD_HINT_TOKENS.has(t));
-  const hasCommonToken=tokens.some(t=>commonTokens.has(t));
+  const commonHits=tokens.filter(t=>commonTokens.has(t));
+  const hasCommonToken=commonHits.length>0;
   const hasPersonToken=tokens.some(t=>PRODUCT_NAME_PERSON_TOKENS.has(t));
-  const onlyMarketingOrPerson=tokens.every(t=>PRODUCT_NAME_MARKETING_TOKENS.has(t)||PRODUCT_NAME_PERSON_TOKENS.has(t));
+  const hasBrandToken=tokens.some(t=>PRODUCT_NAME_BRAND_TOKENS.has(t));
+  const onlyMarketingOrPerson=tokens.length>0&&tokens.every(t=>PRODUCT_NAME_MARKETING_TOKENS.has(t)||PRODUCT_NAME_PERSON_TOKENS.has(t));
+  const hasNonFoodPattern=PRODUCT_NAME_NONFOOD_REGEX.some(rx=>rx.test(candidate.text));
   let score=0;
+  if(candidate.preferred) score+=1;
+  if(candidate.type==='alimento') score+=5;
+  else if(candidate.type==='marca') score-=3;
+  else if(candidate.type==='eslogan') score-=3;
+  else if(candidate.type==='persona') score-=4;
+  if(candidate.isFood===true) score+=4;
+  else if(candidate.isFood===false) score-=4;
+  if(candidate.confidence==='alta') score+=2;
+  else if(candidate.confidence==='baja') score-=1;
   if(hasFoodHint) score+=3;
-  if(hasCommonToken) score+=1;
+  if(hasCommonToken) score+=Math.min(2,commonHits.length);
   if(tokens.length>=2) score+=1;
-  if(tokens.length===1&&hasPersonToken&&!hasFoodHint&&!hasCommonToken) score-=4;
-  if(!hasFoodHint&&!hasCommonToken) score-=2;
-  if(onlyMarketingOrPerson) score-=2;
-  const ok=score>=1;
+  if(tokens.length>=4) score+=1;
+  if(tokens.length===1&&hasPersonToken&&!hasFoodHint&&!hasCommonToken) score-=5;
+  if(hasPersonToken&&!hasFoodHint&&!hasCommonToken) score-=2;
+  if(onlyMarketingOrPerson) score-=3;
+  if(hasBrandToken&&!hasFoodHint&&!hasCommonToken) score-=2;
+  if(hasNonFoodPattern&&!hasFoodHint) score-=3;
+  const foodSignal=hasFoodHint||hasCommonToken||candidate.type==='alimento'||candidate.isFood===true;
+  return {...candidate,tokens,foodSignal,score};
+}
+function explainNameDecisionReason(reason){
+  if(reason==='sin_candidatos') return PRODUCT_NAME_UNKNOWN_WARNING;
+  if(reason==='sin_indicios_comida') return 'Los textos detectados parecen marca, eslogan o texto no alimentario.';
+  if(reason==='baja_confianza') return 'No hay suficiente confianza para elegir un nombre de comida.';
+  if(reason==='ambiguo') return 'Hay varios candidatos de comida con puntuacion similar.';
+  if(reason==='no_comida') return 'El candidato principal no parece un nombre de comida.';
+  return 'Nombre de producto dudoso.';
+}
+function resolveAIProductName(result){
+  const candidates=collectAINameCandidates(result);
+  if(!candidates.length){
+    return {ok:false,selected:'',reason:'sin_candidatos',score:-10,principal:'',candidates:[]};
+  }
+  const commonTokens=getCommonProductTokensForNameValidation();
+  const ranked=candidates.map(c=>evaluateNameCandidate(c,commonTokens)).sort((a,b)=>{
+    if(b.score!==a.score) return b.score-a.score;
+    if((b.foodSignal?1:0)!==(a.foodSignal?1:0)) return (b.foodSignal?1:0)-(a.foodSignal?1:0);
+    if((b.preferred?1:0)!==(a.preferred?1:0)) return (b.preferred?1:0)-(a.preferred?1:0);
+    return b.text.length-a.text.length;
+  });
+  const best=ranked[0];
+  const second=ranked[1]||null;
+  const ambiguous=!!(second&&best.foodSignal&&second.foodSignal&&(best.score-second.score)<1.5);
+  const ok=best.foodSignal&&best.score>=3&&!ambiguous&&best.type!=='marca'&&best.type!=='eslogan'&&best.type!=='persona';
   let reason='ok';
   if(!ok){
-    if(tokens.length===1&&hasPersonToken) reason='nombre_propio';
-    else if(!hasFoodHint&&!hasCommonToken) reason='sin_indicios_comida';
+    if(!best.foodSignal) reason='sin_indicios_comida';
+    else if(best.score<3) reason='baja_confianza';
+    else if(ambiguous) reason='ambiguo';
+    else if(best.type==='marca'||best.type==='eslogan'||best.type==='persona') reason='no_comida';
     else reason='dudoso';
   }
-  return {ok,cleaned,reason,tokens,score};
+  return {
+    ok,
+    selected: ok?best.text:'',
+    reason,
+    score: best.score,
+    principal: best.text||'',
+    candidates: ranked.slice(0,5).map(c=>({texto:c.text,tipo:c.type,score:c.score,food_signal:!!c.foodSignal,confianza:c.confidence,origen:c.sources}))
+  };
 }
 const PHOTO_KEYWORD_RULES=[
   {rx:[/crust/i,/gamb/i,/langost/i,/bogavant/i,/cigala/i,/marisc/i], allergen:'CRUSTÁCEOS', level:'high'},
@@ -1494,6 +1618,20 @@ function normalizeAIPhotoResult(obj){
   const out={...obj};
   out.nombre=(out.nombre||'').toString().trim();
   out.hallazgos_texto=Array.isArray(out.hallazgos_texto)?out.hallazgos_texto.map(x=>String(x||'').trim()).filter(Boolean):[];
+  const rawDetectedNames=Array.isArray(out.nombres_detectados)?out.nombres_detectados:(Array.isArray(out.candidatos_nombre)?out.candidatos_nombre:[]);
+  const seenDetected=new Set();
+  out.nombres_detectados=rawDetectedNames.map(item=>({
+    texto:canonicalizeProductName(String((item&&item.texto)||'').trim()),
+    tipo:normalizeNameCandidateType((item&&item.tipo)||''),
+    confianza:normalizeNameCandidateConfidence((item&&item.confianza)||''),
+    es_comida:parseNameCandidateBool(item&&item.es_comida),
+    motivo:String((item&&item.motivo)||'').trim()
+  })).filter(item=>{
+    const key=norm(item.texto);
+    if(!key||seenDetected.has(key)) return false;
+    seenDetected.add(key);
+    return true;
+  });
   out.mapeo=Array.isArray(out.mapeo)?out.mapeo.map(m=>({texto:String((m&&m.texto)||'').trim(),alergeno:normalizeAllergen((m&&m.alergeno)||'')})).filter(m=>m.texto||m.alergeno):[];
   out.alergenos=[...new Set((Array.isArray(out.alergenos)?out.alergenos:[]).map(normalizeAllergen).filter(Boolean))];
   out.trazas=[...new Set((Array.isArray(out.trazas)?out.trazas:[]).map(normalizeAllergen).filter(Boolean))];
@@ -1533,7 +1671,7 @@ function parseAndValidateAI(rawText,source='photo'){
   }
   const result=normalizeAIPhotoResult(parsed);
   if(result.nombre) result.nombre=canonicalizeProductName(result.nombre);
-  addLog('INFO','PHOTO_PARSED_RESULT','PHOTO_PARSED_RESULT',{source,parsed:{nombre:result.nombre,hallazgos_texto:result.hallazgos_texto,mapeo:result.mapeo,alergenos:result.alergenos,trazas:result.trazas,warning:result.warning||''}});
+  addLog('INFO','PHOTO_PARSED_RESULT','PHOTO_PARSED_RESULT',{source,parsed:{nombre:result.nombre,nombres_detectados:result.nombres_detectados,hallazgos_texto:result.hallazgos_texto,mapeo:result.mapeo,alergenos:result.alergenos,trazas:result.trazas,warning:result.warning||''}});
   const alergSet=new Set([...(result.alergenos||[]),...(result.trazas||[])].map(normalizeAllergen));
   const mapeoDiff=[];
   result.hallazgos_texto.forEach(txt=>{
@@ -1553,24 +1691,29 @@ function parseAndValidateAI(rawText,source='photo'){
     if(hit && !alergSet.has(rule.allergen)) keywordAlerts.push({allergen:rule.allergen,level:rule.level,pattern:hit.toString()});
   });
   if(keywordAlerts.length) addLog('WARN','PHOTO_KEYWORD_ALERT','PHOTO_KEYWORD_ALERT',{source,alerts:keywordAlerts});
+  const nameDecision=resolveAIProductName(result);
   result.review_alerts={mapeo:mapeoDiff,keywords:keywordAlerts,nombre:[]};
-  if(result.nombre){
-    const nameCheck=validateAIProductName(result.nombre);
-    if(nameCheck.ok){
-      result.nombre=nameCheck.cleaned;
-    }else{
-      const discardedName=result.nombre;
-      result.nombre='';
-      result.review_alerts.nombre.push({nombre_detectado:discardedName,motivo:nameCheck.reason,score:nameCheck.score,tokens:nameCheck.tokens});
-      result.warning=result.warning?`${result.warning} · ${PRODUCT_NAME_UNKNOWN_WARNING}`:PRODUCT_NAME_UNKNOWN_WARNING;
-      addLog(LOG_LEVELS.WARN,ERROR_CODES.PHOTO_NAME_UNCERTAIN,`Nombre IA descartado: ${discardedName}`,{source,motivo:nameCheck.reason,score:nameCheck.score,tokens:nameCheck.tokens});
+  result.name_decision={ok:nameDecision.ok,reason:nameDecision.reason,score:nameDecision.score,principal:nameDecision.principal,candidates:nameDecision.candidates};
+  if(nameDecision.ok){
+    if(result.nombre&&norm(result.nombre)!==norm(nameDecision.selected)){
+      addLog(LOG_LEVELS.INFO,'PHOTO_NAME_CORRECTED',`Nombre IA ajustado: ${result.nombre} -> ${nameDecision.selected}`,{source,reason:nameDecision.reason,score:nameDecision.score});
     }
+    result.nombre=nameDecision.selected;
   }else{
-    result.review_alerts.nombre.push({nombre_detectado:'',motivo:'vacio',score:-10,tokens:[]});
-    if(!result.warning) result.warning=PRODUCT_NAME_UNKNOWN_WARNING;
+    const discardedName=result.nombre||nameDecision.principal||'';
+    result.nombre='';
+    result.review_alerts.nombre.push({
+      motivo:nameDecision.reason,
+      detalle:explainNameDecisionReason(nameDecision.reason),
+      candidato_principal:discardedName,
+      score:nameDecision.score,
+      candidatos:nameDecision.candidates
+    });
+    result.warning=result.warning?`${result.warning} · ${PRODUCT_NAME_UNKNOWN_WARNING}`:PRODUCT_NAME_UNKNOWN_WARNING;
+    addLog(LOG_LEVELS.WARN,ERROR_CODES.PHOTO_NAME_UNCERTAIN,`Nombre IA descartado: ${discardedName||'sin candidato'}`,{source,motivo:nameDecision.reason,score:nameDecision.score,candidates:nameDecision.candidates});
   }
   const hasHighKeyword=keywordAlerts.some(a=>a.level==='high');
-  const hasNameIssue=result.review_alerts.nombre.length>0;
+  const hasNameIssue=!nameDecision.ok;
   result.requires_review=!!(mapeoDiff.length || hasHighKeyword || hasNameIssue);
   return result;
 }
@@ -1599,7 +1742,8 @@ function buildReviewReason(result){
   }
   if(ra.nombre&&ra.nombre.length){
     ra.nombre.forEach(n=>{
-      if(n&&n.nombre_detectado) parts.push(`Nombre detectado dudoso: "${n.nombre_detectado}".`);
+      if(n&&n.candidato_principal) parts.push(`Nombre descartado: "${n.candidato_principal}".`);
+      if(n&&n.detalle) parts.push(n.detalle);
       else parts.push(PRODUCT_NAME_UNKNOWN_WARNING+'.');
     });
   }
@@ -2085,9 +2229,13 @@ MISMO ALÉRGENO EN VARIOS IDIOMAS: Si ves "apio", "celery", "céleri", "Sellerie
 PASO 3 — VERIFICACIÓN
 Revisa que no hayas omitido ningún alérgeno o traza que SÍ aparezca escrito en la imagen. Inclúyelos todos en hallazgos_texto, mapeo, alergenos y/o trazas.
 
-NOMBRE DEL PRODUCTO: Usa el nombre del alimento/comida tal como aparece en el envase (título principal en español). Respeta mayúsculas de la primera letra de cada palabra significativa (ej.: "Salteado rústico - Mezcla de verduras"). No inventes ni reordenes.
+PASO 4 — NOMBRE DEL PRODUCTO (SEMÁNTICA DE COMIDA)
+- Identifica hasta 5 candidatos de texto para nombre y clasifícalos: alimento, marca, eslogan, persona u otro.
+- Marca si cada candidato es comida o no comida.
+- El campo "nombre" DEBE ser exclusivamente el candidato de tipo alimento con mayor confianza.
 - No uses marca, nombre de persona ni eslogan/publicidad como nombre de producto (ej.: "Rafael", "El secreto de ...").
 - Si no puedes identificar con claridad un nombre de comida, devuelve "nombre":"" y en warning: "No se reconoce el nombre del producto".
+- Incluye siempre el array "nombres_detectados" aunque esté vacío.
 
 ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
 - Incluye SOLO lo que esté EXPLÍCITAMENTE escrito (ingredientes, "puede contener", "presencia fortuita", etc.).
@@ -2098,7 +2246,7 @@ ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
 Si la zona de alérgenos está cortada o la imagen está muy borrosa y no puedes leer el texto pequeño, indica "warning" y lista solo lo que sí puedas leer.
 
 Responde SOLO JSON (sin markdown ni bloques \`\`\`json). No incluyas texto antes o después del objeto.
-{"nombre":"...","hallazgos_texto":["..."],"mapeo":[{"texto":"...","alergeno":"..."}],"alergenos":["..."],"trazas":["..."],"notas":"","warning":""}`;
+{"nombre":"...","nombres_detectados":[{"texto":"...","tipo":"alimento|marca|eslogan|persona|otro","es_comida":true,"confianza":"alta|media|baja","motivo":"..."}],"hallazgos_texto":["..."],"mapeo":[{"texto":"...","alergeno":"..."}],"alergenos":["..."],"trazas":["..."],"notas":"","warning":""}`;
 
 async function apiCall(content){
   const key=getApiKey();
@@ -2258,7 +2406,7 @@ async function analyzePhotos(photoList){
       addAnalysisSection(analysisId,'F_decision',{decision:'error',error:'Respuesta no interpretable'}); finishPhotoAnalysis(analysisId,e);
       throw new Error('Respuesta no interpretable');
     }
-    addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, alergenos: result.alergenos||[], trazas: result.trazas||[], hallazgos_texto: result.hallazgos_texto, mapeo: result.mapeo, warning: result.warning||'', normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
+    addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, nombres_detectados: result.nombres_detectados||[], name_decision: result.name_decision||null, alergenos: result.alergenos||[], trazas: result.trazas||[], hallazgos_texto: result.hallazgos_texto, mapeo: result.mapeo, warning: result.warning||'', normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
     addAnalysisSection(analysisId,'E_validations',{ review_alerts: result.review_alerts||null, requires_review: !!result.requires_review, quality_warning: result.warning||null });
     aiS.innerHTML='✓ Análisis completado';
     if(result.nombre){
@@ -2389,7 +2537,7 @@ async function processQueue(){
           addAnalysisSection(analysisId,'F_decision',{decision:'error',error:'parse'}); finishPhotoAnalysis(analysisId,e);
           throw new Error('parse');
         }
-        addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, alergenos: result.alergenos||[], trazas: result.trazas||[], normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
+        addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, nombres_detectados: result.nombres_detectados||[], name_decision: result.name_decision||null, alergenos: result.alergenos||[], trazas: result.trazas||[], normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
         addAnalysisSection(analysisId,'E_validations',{ review_alerts: result.review_alerts||null, requires_review: !!result.requires_review });
         if(result.nombre)result.nombre=autoCorrectName(result.nombre);
         if(result.warning){
@@ -2537,7 +2685,7 @@ async function autoProcessPhoto(dataUrl){
       showErrorModal('Automático','Respuesta de IA no válida',dataUrl,ERROR_CODES.JSON_PARSE_ERROR);
       throw new Error('parse');
     }
-    addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, alergenos: result.alergenos||[], trazas: result.trazas||[], normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
+    addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, nombres_detectados: result.nombres_detectados||[], name_decision: result.name_decision||null, alergenos: result.alergenos||[], trazas: result.trazas||[], normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
     addAnalysisSection(analysisId,'E_validations',{ review_alerts: result.review_alerts||null, requires_review: !!result.requires_review });
     if(result.nombre)result.nombre=autoCorrectName(result.nombre);
     const allA=sortAllergens([...new Set([...(result.alergenos||[]),...(result.trazas||[])])].filter(a=>AL.includes(a)));
@@ -2882,7 +3030,7 @@ async function processBatch(){
         throw new Error(errorMsg);
       }
 
-      addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, alergenos: result.alergenos||[], trazas: result.trazas||[], normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
+      addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, nombres_detectados: result.nombres_detectados||[], name_decision: result.name_decision||null, alergenos: result.alergenos||[], trazas: result.trazas||[], normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
       addAnalysisSection(analysisId,'E_validations',{ review_alerts: result.review_alerts||null, requires_review: !!result.requires_review });
 
       if(result.nombre){
