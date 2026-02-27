@@ -204,7 +204,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v 27 02 2026 12:42</div>
+    <div class="login-version">v 27 02 2026 13:02</div>
   </div>
 </div>
 
@@ -1749,6 +1749,18 @@ function buildReviewReason(result){
   }
   return parts.length?parts.join(' '):'Revisión recomendada.';
 }
+function recomputeReviewStateFromAlerts(result){
+  if(!result||typeof result!=='object') return;
+  const ra=result.review_alerts||{};
+  const hasMap=Array.isArray(ra.mapeo)&&ra.mapeo.length>0;
+  const hasHighKeyword=Array.isArray(ra.keywords)&&ra.keywords.some(k=>k&&k.level==='high');
+  const hasNameIssue=Array.isArray(ra.nombre)&&ra.nombre.length>0;
+  result.requires_review=!!(hasMap||hasHighKeyword||hasNameIssue);
+}
+function removeUnknownNameWarning(msg){
+  const parts=String(msg||'').split('·').map(s=>s.trim()).filter(Boolean).filter(s=>s!==PRODUCT_NAME_UNKNOWN_WARNING);
+  return parts.join(' · ');
+}
 function sortAllergens(arr){const uniq=[...new Set(arr)];return uniq.sort((a,b)=>AL.indexOf(a)-AL.indexOf(b) || a.localeCompare(b,'es'))}
 function similarity(a,b){const na=norm(a),nb=norm(b);if(na===nb)return 1;const ta=tokenize(a),tb=tokenize(b);if(!ta.length||!tb.length)return 0;if(Math.abs(ta.length-tb.length)>3)return 0;const sa=new Set(ta),sb=new Set(tb);const inter=new Set([...sa].filter(x=>sb.has(x)));const union=new Set([...sa,...sb]);const jaccard=inter.size/union.size;let sub=0;const smaller=Math.min(sa.size,sb.size);if(smaller>=2){const ss=sa.size<=sb.size?sa:sb;const bs=sa.size<=sb.size?sb:sa;if([...ss].every(t=>bs.has(t)))sub=smaller/Math.max(sa.size,sb.size)}return Math.max(jaccard,sub)}
 function findMatch(name,excludeIdx){let best=null,bs=0;for(let i=0;i<P.length;i++){if(i===excludeIdx)continue;const s=similarity(name,P[i].n);if(s>bs){bs=s;best={index:i,product:P[i],score:s}}}return(best&&bs>=0.70)?best:null}
@@ -2247,6 +2259,29 @@ Si la zona de alérgenos está cortada o la imagen está muy borrosa y no puedes
 
 Responde SOLO JSON (sin markdown ni bloques \`\`\`json). No incluyas texto antes o después del objeto.
 {"nombre":"...","nombres_detectados":[{"texto":"...","tipo":"alimento|marca|eslogan|persona|otro","es_comida":true,"confianza":"alta|media|baja","motivo":"..."}],"hallazgos_texto":["..."],"mapeo":[{"texto":"...","alergeno":"..."}],"alergenos":["..."],"trazas":["..."],"notas":"","warning":""}`;
+const NAME_RECOVERY_PROMPT=`Eres un extractor de nombre de producto alimentario desde foto(s) de etiqueta.
+
+OBJETIVO ÚNICO:
+- Identificar el nombre COMESTIBLE del producto.
+- No devolver marca, persona, eslogan ni texto corporativo como nombre.
+
+REGLAS:
+- Si hay 2 fotos, pertenecen al mismo producto.
+- Extrae hasta 6 candidatos reales del texto visible (frontal y lateral).
+- Clasifica cada candidato en: alimento, marca, eslogan, persona u otro.
+- Marca si cada candidato es comida (true/false) y nivel de confianza (alta/media/baja).
+- El campo "nombre" debe ser el mejor candidato de comida.
+- Si no hay evidencia suficiente, devuelve "nombre":"" y warning:"No se reconoce el nombre del producto".
+
+Responde SOLO JSON:
+{"nombre":"...","nombres_detectados":[{"texto":"...","tipo":"alimento|marca|eslogan|persona|otro","es_comida":true,"confianza":"alta|media|baja","motivo":"..."}],"notas":"","warning":""}`;
+
+function extractTextFromChatPayload(data){
+  const rawContent=data&&data.choices&&data.choices[0]&&data.choices[0].message?data.choices[0].message.content:'';
+  return Array.isArray(rawContent)
+    ? rawContent.map(p=>p&&p.type==='text'?p.text:'').join('').trim()
+    : String(rawContent||'').trim();
+}
 
 async function apiCall(content){
   const key=getApiKey();
@@ -2333,6 +2368,9 @@ function compressPhotoForAI(dataUrl){
   });
 }
 async function buildPhotoRequest(photoList){
+  return buildPhotoRequestWithPrompt(photoList,AI_PROMPT);
+}
+async function buildPhotoRequestWithPrompt(photoList,promptText){
   const list=Array.isArray(photoList)?photoList:[photoList].filter(Boolean);
   const compressed=await Promise.all(list.map(du=>compressPhotoForAI(du)));
   const content=compressed.map(c=>{
@@ -2341,10 +2379,69 @@ async function buildPhotoRequest(photoList){
     const data=(dataUrl.split(',')[1]||'');
     return {type:'image',source:{type:'base64',media_type:mediaType,data:data}};
   });
-  content.push({type:'text',text:AI_PROMPT});
+  content.push({type:'text',text:promptText||AI_PROMPT});
   const dimensions=(compressed||[]).map(c=>typeof c==='object'&&c.width!=null?{w:c.width,h:c.height}:null).filter(Boolean);
   const metadata={ n_photos: list.length, dimensions, max_size: PHOTO_MAX_SIZE, quality: PHOTO_JPEG_QUALITY };
   return { content, metadata };
+}
+async function recoverMissingProductName(result,photoList,source){
+  if(!result||result.nombre) return result;
+  const list=Array.isArray(photoList)?photoList:[photoList].filter(Boolean);
+  if(!list.length||!getApiKey()) return result;
+  try{
+    addLog(LOG_LEVELS.INFO,'PHOTO_NAME_RECOVERY_START','Intentando recuperar nombre de producto',{source,n_photos:list.length});
+    const { content }=await buildPhotoRequestWithPrompt(list,NAME_RECOVERY_PROMPT);
+    const resp=await apiCall(content);
+    if(!resp||!resp.ok){
+      addLog(LOG_LEVELS.WARN,'PHOTO_NAME_RECOVERY_FAIL','Recuperación de nombre no disponible',{source,status:resp?resp.status:'no_response'});
+      return result;
+    }
+    const data=await resp.json();
+    const text=extractTextFromChatPayload(data);
+    let parsed;
+    try{
+      parsed=extractJsonFromAIResponse(text);
+    }catch(_){
+      addLog(LOG_LEVELS.WARN,'PHOTO_NAME_RECOVERY_PARSE','No se pudo interpretar recuperación de nombre',{source,raw:String(text).slice(0,200)});
+      return result;
+    }
+    const recoveryRaw={
+      nombre:(parsed&&parsed.nombre)||'',
+      nombres_detectados:(parsed&&parsed.nombres_detectados)||(parsed&&parsed.candidatos_nombre)||[],
+      hallazgos_texto:(parsed&&parsed.hallazgos_texto)||[],
+      notas:(parsed&&parsed.notas)||'',
+      warning:(parsed&&parsed.warning)||''
+    };
+    const recovered=normalizeAIPhotoResult(recoveryRaw);
+    if(recovered.nombre) recovered.nombre=canonicalizeProductName(recovered.nombre);
+    const decision=resolveAIProductName(recovered);
+    if(!decision.ok||!decision.selected){
+      addLog(LOG_LEVELS.WARN,ERROR_CODES.PHOTO_NAME_UNCERTAIN,'Recuperación sin nombre fiable',{source,motivo:decision.reason,score:decision.score,candidates:decision.candidates});
+      return result;
+    }
+    result.nombre=decision.selected;
+    result.name_decision={ok:true,reason:'recovery_'+decision.reason,score:decision.score,principal:decision.principal,candidates:decision.candidates};
+    const mergedNames=[...(Array.isArray(result.nombres_detectados)?result.nombres_detectados:[]),...(Array.isArray(recovered.nombres_detectados)?recovered.nombres_detectados:[])];
+    if(mergedNames.length){
+      const seen=new Set();
+      result.nombres_detectados=mergedNames.filter(item=>{
+        const key=norm(item&&item.texto||'');
+        if(!key||seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    }
+    if(!result.review_alerts||typeof result.review_alerts!=='object') result.review_alerts={mapeo:[],keywords:[],nombre:[]};
+    result.review_alerts.nombre=[];
+    const cleanedCurrentWarning=removeUnknownNameWarning(result.warning);
+    const cleanedRecoveryWarning=removeUnknownNameWarning(recovered.warning);
+    result.warning=cleanedCurrentWarning||cleanedRecoveryWarning||'';
+    recomputeReviewStateFromAlerts(result);
+    addLog(LOG_LEVELS.INFO,'PHOTO_NAME_RECOVERY_OK',`Nombre recuperado: ${result.nombre}`,{source,score:decision.score,candidates:decision.candidates});
+  }catch(err){
+    addLog(LOG_LEVELS.WARN,'PHOTO_NAME_RECOVERY_ERROR','Error en recuperación de nombre',{source,error:err&&err.message?err.message:String(err)});
+  }
+  return result;
 }
 
 async function analyzePhotos(photoList){
@@ -2406,6 +2503,7 @@ async function analyzePhotos(photoList){
       addAnalysisSection(analysisId,'F_decision',{decision:'error',error:'Respuesta no interpretable'}); finishPhotoAnalysis(analysisId,e);
       throw new Error('Respuesta no interpretable');
     }
+    result=await recoverMissingProductName(result,photoList,'manual_photo');
     addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, nombres_detectados: result.nombres_detectados||[], name_decision: result.name_decision||null, alergenos: result.alergenos||[], trazas: result.trazas||[], hallazgos_texto: result.hallazgos_texto, mapeo: result.mapeo, warning: result.warning||'', normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
     addAnalysisSection(analysisId,'E_validations',{ review_alerts: result.review_alerts||null, requires_review: !!result.requires_review, quality_warning: result.warning||null });
     aiS.innerHTML='✓ Análisis completado';
@@ -2530,13 +2628,14 @@ async function processQueue(){
           finishPhotoAnalysis(analysisId,new Error(errorMsg));
           throw new Error(errorMsg);
         }
-        const data=await resp.json();const text=data.choices?.[0]?.message?.content||'';
+        const data=await resp.json();const text=extractTextFromChatPayload(data);
         const possibleTruncated=String(text).length>=2990;
         addAnalysisSection(analysisId,'C_raw_output',{ raw_text: String(text).slice(0,5000), length: text.length, markdown_like: /```/.test(text), possible_truncated: possibleTruncated });
         let result;try{result=parseAndValidateAI(text,'photo_queue_batch')}catch(e){
           addAnalysisSection(analysisId,'F_decision',{decision:'error',error:'parse'}); finishPhotoAnalysis(analysisId,e);
           throw new Error('parse');
         }
+        result=await recoverMissingProductName(result,pl,'photo_queue_batch');
         addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, nombres_detectados: result.nombres_detectados||[], name_decision: result.name_decision||null, alergenos: result.alergenos||[], trazas: result.trazas||[], normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
         addAnalysisSection(analysisId,'E_validations',{ review_alerts: result.review_alerts||null, requires_review: !!result.requires_review });
         if(result.nombre)result.nombre=autoCorrectName(result.nombre);
@@ -2673,7 +2772,7 @@ async function autoProcessPhoto(dataUrl){
       const err=await resp.json().catch(()=>({}));
       throw new Error(err.error?.message||errorMsg);
     }
-    const data=await resp.json();const text=data.choices?.[0]?.message?.content||'';
+    const data=await resp.json();const text=extractTextFromChatPayload(data);
     const possibleTruncated=String(text).length>=2990;
     addAnalysisSection(analysisId,'C_raw_output',{ raw_text: String(text).slice(0,5000), length: text.length, markdown_like: /```/.test(text), possible_truncated: possibleTruncated });
     let result;
@@ -2685,6 +2784,7 @@ async function autoProcessPhoto(dataUrl){
       showErrorModal('Automático','Respuesta de IA no válida',dataUrl,ERROR_CODES.JSON_PARSE_ERROR);
       throw new Error('parse');
     }
+    result=await recoverMissingProductName(result,[dataUrl],'auto_flow');
     addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, nombres_detectados: result.nombres_detectados||[], name_decision: result.name_decision||null, alergenos: result.alergenos||[], trazas: result.trazas||[], normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
     addAnalysisSection(analysisId,'E_validations',{ review_alerts: result.review_alerts||null, requires_review: !!result.requires_review });
     if(result.nombre)result.nombre=autoCorrectName(result.nombre);
@@ -3016,7 +3116,7 @@ async function processBatch(){
       }
 
       const data=await resp.json();
-      const text=data.choices?.[0]?.message?.content||'';
+      const text=extractTextFromChatPayload(data);
       const possibleTruncated=String(text).length>=2990;
       addAnalysisSection(analysisId,'C_raw_output',{ raw_text: String(text).slice(0,5000), length: text.length, markdown_like: /```/.test(text), possible_truncated: possibleTruncated });
       let result;
@@ -3029,6 +3129,7 @@ async function processBatch(){
         finishPhotoAnalysis(analysisId,e);
         throw new Error(errorMsg);
       }
+      result=await recoverMissingProductName(result,[dataUrl],'lote');
 
       addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, nombres_detectados: result.nombres_detectados||[], name_decision: result.name_decision||null, alergenos: result.alergenos||[], trazas: result.trazas||[], normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
       addAnalysisSection(analysisId,'E_validations',{ review_alerts: result.review_alerts||null, requires_review: !!result.requires_review });
