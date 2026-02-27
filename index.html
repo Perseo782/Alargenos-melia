@@ -204,7 +204,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">V27.02.26h11:05</div>
+    <div class="login-version">v 27 02 2026 12:00</div>
   </div>
 </div>
 
@@ -614,6 +614,7 @@ const ERROR_CODES={
   NETWORK_TIMEOUT:'NETWORK_TIMEOUT',
   PHOTO_UNREADABLE:'PHOTO_UNREADABLE',
   PHOTO_NO_NAME:'PHOTO_NO_NAME',
+  PHOTO_NAME_UNCERTAIN:'PHOTO_NAME_UNCERTAIN',
   PHOTO_QUALITY:'PHOTO_QUALITY',
   JSON_PARSE_ERROR:'JSON_PARSE_ERROR',
   GDRIVE_AUTH_FAILED:'GDRIVE_AUTH_FAILED',
@@ -1405,6 +1406,63 @@ const q=document.getElementById('q'),xb=document.getElementById('xb'),ls=documen
 
 function norm(s){return s.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim()}
 function tokenize(s){return norm(s).split(' ').filter(w=>w.length>2)}
+const PRODUCT_NAME_UNKNOWN_WARNING='No se reconoce el nombre del producto';
+const PRODUCT_NAME_STOP_TOKENS=new Set(['con','sin','para','por','del','las','los','una','uno','unos','unas','tipo','estilo','gran','mini','extra']);
+const PRODUCT_NAME_PERSON_TOKENS=new Set(['rafael','antonio','jose','maria','manuel','david','juan','francisco','carlos','luis','miguel','pedro','javier','isabel','ana','laura','lucia','marta','sofia','pablo','diego','alberto','fernando','roberto','sergio','andres','cristina','paula','carmen','alicia','raquel','eva','silvia','jorge','raul','oscar','lola']);
+const PRODUCT_NAME_MARKETING_TOKENS=new Set(['secreto','tradicion','tradicional','clasico','clasica','premium','gourmet','selecto','selecta','especial','delicia','receta','original','autentico','autentica','maestro','artesano','artesanal','sabor']);
+const PRODUCT_NAME_FOOD_HINT_TOKENS=new Set([
+  'aceituna','aceitunas','aceite','salmuera','encurtido','encurtidos','conserva','conservas','verdial','verdiales','hueso','partida','partidas','alinada','alinadas',
+  'arroz','pasta','fideo','fideos','fideua','macarron','macarrones','espagueti','espaguetis','lenteja','lentejas','garbanzo','garbanzos','alubia','alubias','judia','judias',
+  'pan','bolleria','galleta','galletas','bizcocho','cereal','cereales','harina','salsa','sopa','sopas','caldo','pure','crema',
+  'verdura','verduras','hortaliza','hortalizas','fruta','frutas','tomate','tomates','patata','patatas','papa','papas',
+  'queso','leche','yogur','yogurt','mantequilla','nata','huevo','huevos','mayonesa',
+  'atun','salmon','bacalao','merluza','pescado','marisco','calamar','pulpo','mejillon','mejillones',
+  'pollo','pavo','carne','ternera','cerdo','jamon','chorizo','salchicha','hamburguesa','albondiga','albondigas','croqueta','croquetas',
+  'chocolate','cacao','cafe','infusion','te'
+]);
+function getCommonProductTokensForNameValidation(){
+  const counts=new Map();
+  if(!Array.isArray(P)) return new Set();
+  P.forEach(item=>{
+    const uniq=[...new Set(tokenize((item&&item.n)||''))];
+    uniq.forEach(t=>{
+      if(t.length<4) return;
+      if(PRODUCT_NAME_STOP_TOKENS.has(t)) return;
+      if(PRODUCT_NAME_PERSON_TOKENS.has(t)) return;
+      counts.set(t,(counts.get(t)||0)+1);
+    });
+  });
+  const out=new Set();
+  counts.forEach((count,token)=>{if(count>=2)out.add(token)});
+  return out;
+}
+function validateAIProductName(name){
+  const cleaned=canonicalizeProductName(name);
+  if(!cleaned) return {ok:false,cleaned:'',reason:'vacio',tokens:[],score:-10};
+  const meaningful=tokenize(cleaned).filter(t=>!PRODUCT_NAME_STOP_TOKENS.has(t));
+  if(!meaningful.length) return {ok:false,cleaned:'',reason:'vacio',tokens:[],score:-10};
+  const tokens=[...new Set(meaningful)];
+  const commonTokens=getCommonProductTokensForNameValidation();
+  const hasFoodHint=tokens.some(t=>PRODUCT_NAME_FOOD_HINT_TOKENS.has(t));
+  const hasCommonToken=tokens.some(t=>commonTokens.has(t));
+  const hasPersonToken=tokens.some(t=>PRODUCT_NAME_PERSON_TOKENS.has(t));
+  const onlyMarketingOrPerson=tokens.every(t=>PRODUCT_NAME_MARKETING_TOKENS.has(t)||PRODUCT_NAME_PERSON_TOKENS.has(t));
+  let score=0;
+  if(hasFoodHint) score+=3;
+  if(hasCommonToken) score+=1;
+  if(tokens.length>=2) score+=1;
+  if(tokens.length===1&&hasPersonToken&&!hasFoodHint&&!hasCommonToken) score-=4;
+  if(!hasFoodHint&&!hasCommonToken) score-=2;
+  if(onlyMarketingOrPerson) score-=2;
+  const ok=score>=1;
+  let reason='ok';
+  if(!ok){
+    if(tokens.length===1&&hasPersonToken) reason='nombre_propio';
+    else if(!hasFoodHint&&!hasCommonToken) reason='sin_indicios_comida';
+    else reason='dudoso';
+  }
+  return {ok,cleaned,reason,tokens,score};
+}
 const PHOTO_KEYWORD_RULES=[
   {rx:[/crust/i,/gamb/i,/langost/i,/bogavant/i,/cigala/i,/marisc/i], allergen:'CRUSTÁCEOS', level:'high'},
   {rx:[/lech/i,/lacte/i,/suero/i,/casein/i,/mantequill/i], allergen:'LÁCTEO', level:'high'},
@@ -1474,6 +1532,7 @@ function parseAndValidateAI(rawText,source='photo'){
     throw e;
   }
   const result=normalizeAIPhotoResult(parsed);
+  if(result.nombre) result.nombre=canonicalizeProductName(result.nombre);
   addLog('INFO','PHOTO_PARSED_RESULT','PHOTO_PARSED_RESULT',{source,parsed:{nombre:result.nombre,hallazgos_texto:result.hallazgos_texto,mapeo:result.mapeo,alergenos:result.alergenos,trazas:result.trazas,warning:result.warning||''}});
   const alergSet=new Set([...(result.alergenos||[]),...(result.trazas||[])].map(normalizeAllergen));
   const mapeoDiff=[];
@@ -1494,8 +1553,25 @@ function parseAndValidateAI(rawText,source='photo'){
     if(hit && !alergSet.has(rule.allergen)) keywordAlerts.push({allergen:rule.allergen,level:rule.level,pattern:hit.toString()});
   });
   if(keywordAlerts.length) addLog('WARN','PHOTO_KEYWORD_ALERT','PHOTO_KEYWORD_ALERT',{source,alerts:keywordAlerts});
-  result.review_alerts={mapeo:mapeoDiff,keywords:keywordAlerts};
-  result.requires_review=!!(mapeoDiff.length || keywordAlerts.some(a=>a.level==='high'));
+  result.review_alerts={mapeo:mapeoDiff,keywords:keywordAlerts,nombre:[]};
+  if(result.nombre){
+    const nameCheck=validateAIProductName(result.nombre);
+    if(nameCheck.ok){
+      result.nombre=nameCheck.cleaned;
+    }else{
+      const discardedName=result.nombre;
+      result.nombre='';
+      result.review_alerts.nombre.push({nombre_detectado:discardedName,motivo:nameCheck.reason,score:nameCheck.score,tokens:nameCheck.tokens});
+      result.warning=result.warning?`${result.warning} · ${PRODUCT_NAME_UNKNOWN_WARNING}`:PRODUCT_NAME_UNKNOWN_WARNING;
+      addLog(LOG_LEVELS.WARN,ERROR_CODES.PHOTO_NAME_UNCERTAIN,`Nombre IA descartado: ${discardedName}`,{source,motivo:nameCheck.reason,score:nameCheck.score,tokens:nameCheck.tokens});
+    }
+  }else{
+    result.review_alerts.nombre.push({nombre_detectado:'',motivo:'vacio',score:-10,tokens:[]});
+    if(!result.warning) result.warning=PRODUCT_NAME_UNKNOWN_WARNING;
+  }
+  const hasHighKeyword=keywordAlerts.some(a=>a.level==='high');
+  const hasNameIssue=result.review_alerts.nombre.length>0;
+  result.requires_review=!!(mapeoDiff.length || hasHighKeyword || hasNameIssue);
   return result;
 }
 function isAutoOk(result){
@@ -1519,6 +1595,12 @@ function buildReviewReason(result){
         parts.push(`"${m.texto}" debería incluir: ${m.faltan_en_resultado.join(', ')}`);
       else if(m.motivo==='sin_mapeo')
         parts.push(`Texto "${m.texto}" sin alérgeno asignado.`);
+    });
+  }
+  if(ra.nombre&&ra.nombre.length){
+    ra.nombre.forEach(n=>{
+      if(n&&n.nombre_detectado) parts.push(`Nombre detectado dudoso: "${n.nombre_detectado}".`);
+      else parts.push(PRODUCT_NAME_UNKNOWN_WARNING+'.');
     });
   }
   return parts.length?parts.join(' '):'Revisión recomendada.';
@@ -2003,7 +2085,9 @@ MISMO ALÉRGENO EN VARIOS IDIOMAS: Si ves "apio", "celery", "céleri", "Sellerie
 PASO 3 — VERIFICACIÓN
 Revisa que no hayas omitido ningún alérgeno o traza que SÍ aparezca escrito en la imagen. Inclúyelos todos en hallazgos_texto, mapeo, alergenos y/o trazas.
 
-NOMBRE DEL PRODUCTO: Usa el nombre tal como aparece en el envase (título principal en español). Respeta mayúsculas de la primera letra de cada palabra significativa (ej.: "Salteado rústico - Mezcla de verduras"). No inventes ni reordenes.
+NOMBRE DEL PRODUCTO: Usa el nombre del alimento/comida tal como aparece en el envase (título principal en español). Respeta mayúsculas de la primera letra de cada palabra significativa (ej.: "Salteado rústico - Mezcla de verduras"). No inventes ni reordenes.
+- No uses marca, nombre de persona ni eslogan/publicidad como nombre de producto (ej.: "Rafael", "El secreto de ...").
+- Si no puedes identificar con claridad un nombre de comida, devuelve "nombre":"" y en warning: "No se reconoce el nombre del producto".
 
 ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
 - Incluye SOLO lo que esté EXPLÍCITAMENTE escrito (ingredientes, "puede contener", "presencia fortuita", etc.).
@@ -2505,7 +2589,8 @@ async function autoProcessPhoto(dataUrl){
     }else{
       addAnalysisSection(analysisId,'F_decision',{decision:'no_guardar',motivo:'sin_nombre'});
       finishPhotoAnalysis(analysisId);
-      showErrorModal('Automático','No se detectó nombre del producto',dataUrl,ERROR_CODES.PHOTO_NO_NAME);
+      const noNameReason=String(result.warning||'').trim()||'No se detectó nombre del producto';
+      showErrorModal('Automático',noNameReason,dataUrl,ERROR_CODES.PHOTO_NO_NAME);
     }
   }catch(err){
     aiS.innerHTML='Error: '+err.message+' — Haz clic para reintentar';
@@ -2805,7 +2890,7 @@ async function processBatch(){
         productName=result.nombre;
       }else{
         errorCode=ERROR_CODES.PHOTO_NO_NAME;
-        errorMsg='No se detectó nombre del producto';
+        errorMsg=String(result.warning||'').trim()||'No se detectó nombre del producto';
         addAnalysisSection(analysisId,'F_decision',{decision:'no_guardar',motivo:'sin_nombre'});
         finishPhotoAnalysis(analysisId);
         throw new Error(errorMsg);
