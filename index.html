@@ -2192,7 +2192,7 @@ Si el texto está incompleto o no se ve la zona de alérgenos, indica "warning" 
 Responde SOLO JSON (sin markdown ni bloques \`\`\`json). No incluyas texto antes o después del objeto.
 {"nombre":"...","hallazgos_texto":["..."],"mapeo":[{"texto":"...","alergeno":"..."}],"alergenos":["..."],"trazas":["..."],"notas":"","warning":""}`;
 
-async function apiCall(content){
+async function apiCall(content, options){
   const key=getApiKey();
   if(!key){
     return new Response(JSON.stringify({error:{message:'Clave API no configurada'}}),{status:401,statusText:'Unauthorized'});
@@ -2214,9 +2214,15 @@ async function apiCall(content){
   // Instrucciones primero, luego imágenes (Gemini sigue mejor el formato así)
   const parts=textPrompt?[{text:textPrompt},...imageParts]:imageParts;
 
+  // Con GPT las instrucciones iban en "system" y se cumplían bien. Con Gemini hay que poner
+  // TODO el prompt en systemInstruction; si no, el modelo no sigue bien las reglas.
+  const systemText=(options&&options.systemInstruction)
+    ?options.systemInstruction
+    :'Responde ÚNICAMENTE con un objeto JSON válido en el formato exacto que te pida el usuario. No incluyas texto antes ni después del JSON, ni bloques de markdown (```). Sin explicaciones. En ese JSON, el campo "nombre" es SIEMPRE el título del producto (el que aparece al inicio de la etiqueta o del texto), nunca un fragmento de la lista de ingredientes.';
+
   const url='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key='+encodeURIComponent(key);
   const body=JSON.stringify({
-    systemInstruction:{ parts:[{ text:'Responde ÚNICAMENTE con un objeto JSON válido en el formato exacto que te pida el usuario. No incluyas texto antes ni después del JSON, ni bloques de markdown (```). Sin explicaciones. En ese JSON, el campo "nombre" es SIEMPRE el título del producto (el que aparece al inicio de la etiqueta o del texto), nunca un fragmento de la lista de ingredientes.' }] },
+    systemInstruction:{ parts:[{ text: systemText }] },
     contents:[{role:'user',parts}],
     generationConfig:{maxOutputTokens:3000,temperature:0}
   });
@@ -2287,10 +2293,11 @@ async function buildPhotoRequest(photoList){
     const data=(dataUrl.split(',')[1]||'');
     return {type:'image',source:{type:'base64',media_type:mediaType,data:data}};
   });
-  content.push({type:'text',text:AI_PROMPT});
+  // Las instrucciones completas (AI_PROMPT) se envían como systemInstruction en apiCall, no aquí.
+  // Así Gemini las cumple igual que GPT cumplía el "system" message.
   const dimensions=(compressed||[]).map(c=>typeof c==='object'&&c.width!=null?{w:c.width,h:c.height}:null).filter(Boolean);
   const metadata={ n_photos: list.length, dimensions, max_size: PHOTO_MAX_SIZE, quality: PHOTO_JPEG_QUALITY };
-  return { content, metadata };
+  return { content, metadata, systemPrompt: AI_PROMPT };
 }
 
 async function analyzePhotos(photoList){
@@ -2370,9 +2377,10 @@ async function analyzePhotos(photoList){
     if(openAiKey){
       aiS.innerHTML='<span class="spinner"></span> Interpretando con IA (nombre y alérgenos)…';
       try{
-        const textPrompt=AI_PROMPT_FROM_OCR+'\n\n--- TEXTO DE LA ETIQUETA ---\n'+String(ocrText).slice(0,12000);
-        const content=[{ type:'text', text: textPrompt }];
-        const iaResp=await apiCall(content);
+        // Instrucciones completas en systemInstruction (como el "system" de GPT); solo el texto OCR en el user.
+        const userText='--- TEXTO DE LA ETIQUETA ---\n'+String(ocrText).slice(0,12000);
+        const content=[{ type:'text', text: userText }];
+        const iaResp=await apiCall(content,{ systemInstruction: AI_PROMPT_FROM_OCR });
         if(iaResp&&iaResp.ok){
           const iaData=await iaResp.json();
           const text=iaData.choices?.[0]?.message?.content||'';
@@ -2498,7 +2506,7 @@ async function processQueue(){
         const { analysisId }=startPhotoAnalysis('automático',pl.length,metadata);
         queueAnalysisId=analysisId;
         addAnalysisSection(analysisId,'B_input',{ dimensions: metadata.dimensions });
-        const resp=await apiCall(content);
+        const resp=await apiCall(content,{ systemInstruction: metadata.systemPrompt || AI_PROMPT });
         if(!resp.ok){
           let errorCode,errorMsg;
           if(resp.status===401){
@@ -2639,7 +2647,7 @@ async function autoProcessPhoto(dataUrl){
   const { analysisId }=startPhotoAnalysis('automático',1,metadata);
   addAnalysisSection(analysisId,'B_input',{ dimensions: metadata.dimensions });
   try{
-    const resp=await apiCall(content);
+    const resp=await apiCall(content,{ systemInstruction: metadata.systemPrompt || AI_PROMPT });
     if(!resp.ok){
       let errorCode,errorMsg;
       if(resp.status===401){
@@ -2982,7 +2990,7 @@ async function processBatch(){
     let productName='';
 
     try{
-      const resp=await apiCall(content);
+      const resp=await apiCall(content,{ systemInstruction: metadata.systemPrompt || AI_PROMPT });
       if(!resp.ok){
         if(resp.status===401){
           errorCode=ERROR_CODES.API_AUTH_FAILED;
