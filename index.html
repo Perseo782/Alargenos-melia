@@ -204,7 +204,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">V27.02.26h11:05</div>
+    <div class="login-version">v 27 02 2026 14:28</div>
   </div>
 </div>
 
@@ -1405,6 +1405,101 @@ const q=document.getElementById('q'),xb=document.getElementById('xb'),ls=documen
 
 function norm(s){return s.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim()}
 function tokenize(s){return norm(s).split(' ').filter(w=>w.length>2)}
+const NAME_UNKNOWN_WARNING='No se reconoce el nombre del producto';
+const NAME_STOP_WORDS=new Set(['con','sin','para','por','del','las','los','una','uno','unos','unas','tipo','estilo','gran','mini','extra']);
+const NAME_FOOD_HINT_TOKENS=new Set([
+  'aceituna','aceitunas','aceite','salmuera','encurtido','encurtidos','conserva','conservas','verdial','verdiales','hueso','partida','partidas','alinada','alinadas',
+  'arroz','pasta','fideo','fideos','fideua','macarron','macarrones','espagueti','espaguetis','lenteja','lentejas','garbanzo','garbanzos','alubia','alubias','judia','judias',
+  'pan','bolleria','galleta','galletas','bizcocho','cereal','cereales','harina','salsa','sopa','sopas','caldo','pure','crema',
+  'verdura','verduras','hortaliza','hortalizas','fruta','frutas','tomate','tomates','patata','patatas','papa','papas',
+  'queso','leche','yogur','yogurt','mantequilla','nata','huevo','huevos','mayonesa',
+  'atun','salmon','bacalao','merluza','pescado','marisco','calamar','pulpo','mejillon','mejillones',
+  'pollo','pavo','carne','ternera','cerdo','jamon','chorizo','salchicha','hamburguesa','albondiga','albondigas','croqueta','croquetas',
+  'chocolate','cacao','cafe','infusion','te'
+]);
+const NAME_PERSON_TOKENS=new Set(['rafael','antonio','jose','maria','manuel','david','juan','francisco','carlos','luis','miguel','pedro','javier','isabel','ana','laura','lucia','marta','sofia','pablo','diego','alberto','fernando','roberto','sergio','andres','cristina','paula','carmen','alicia','raquel','eva','silvia','jorge','raul','oscar','lola']);
+const NAME_NONFOOD_TOKENS=new Set(['ingredientes','contiene','trazas','presencia','fortuita','lote','caducidad','consumo','preferente','fabricado','envasado','direccion','telefono','nutricional','energia','proteinas','hidratos','grasas','sal']);
+const NAME_ALLERGEN_TOKENS=new Set(['apio','soja','sesamo','mostaza','sulfitos','pescado','molusco','moluscos','huevo','huevos','lacteo','lacteos','cereales','cacahuete','cacahuetes','altramuces','altramuz','crustaceos','crustaceo']);
+const NAME_NONFOOD_PATTERNS=[/\b(el|la)\s+secreto\s+de\b/i,/\b(edicion|coleccion|collection|serie)\b/i,/\b(www|http|instagram|facebook)\b/i,/\b(s\.?l\.?|s\.?a\.?)\b/i];
+function cleanNameCandidateText(text){
+  let s=String(text||'').replace(/[\n\r\t]+/g,' ').replace(/\s+/g,' ').trim();
+  if(!s) return '';
+  s=s.replace(/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ\s]{2,30}:\s*/,'');
+  s=s.replace(/^[\-\u2022*•·]+/,'').trim();
+  s=s.replace(/\s{2,}/g,' ');
+  return canonicalizeProductName(s);
+}
+function getCommonDbFoodTokens(){
+  const counts=new Map();
+  if(!Array.isArray(P)) return new Set();
+  P.forEach(item=>{
+    const toks=[...new Set(tokenize((item&&item.n)||''))];
+    toks.forEach(t=>{
+      if(t.length<4) return;
+      if(NAME_STOP_WORDS.has(t)||NAME_NONFOOD_TOKENS.has(t)||NAME_PERSON_TOKENS.has(t)||NAME_ALLERGEN_TOKENS.has(t)) return;
+      counts.set(t,(counts.get(t)||0)+1);
+    });
+  });
+  const out=new Set();
+  counts.forEach((n,t)=>{if(n>=2)out.add(t)});
+  return out;
+}
+function extractNameCandidates(result){
+  const seen=new Set();
+  const out=[];
+  const push=(raw,source)=>{
+    const cleaned=cleanNameCandidateText(raw);
+    if(!cleaned||cleaned.length<3||cleaned.length>90) return;
+    const key=norm(cleaned);
+    if(!key||seen.has(key)) return;
+    seen.add(key);
+    out.push({text:cleaned,source});
+  };
+  push(result&&result.nombre,'primary');
+  (Array.isArray(result&&result.hallazgos_texto)?result.hallazgos_texto:[]).forEach(txt=>{
+    String(txt||'').split(/[;|]/).forEach(seg=>push(seg,'hallazgo'));
+  });
+  (Array.isArray(result&&result.mapeo)?result.mapeo:[]).forEach(m=>push(m&&m.texto,'mapeo'));
+  return out;
+}
+function evaluateNameCandidate(candidate,commonDbTokens){
+  const tokens=[...new Set(tokenize(candidate.text).filter(t=>!NAME_STOP_WORDS.has(t)))];
+  if(!tokens.length) return {...candidate,score:-99,foodSignal:false};
+  const dbHits=tokens.filter(t=>commonDbTokens.has(t));
+  const foodHits=tokens.filter(t=>NAME_FOOD_HINT_TOKENS.has(t));
+  const hasPerson=tokens.some(t=>NAME_PERSON_TOKENS.has(t));
+  const hasNonFood=tokens.some(t=>NAME_NONFOOD_TOKENS.has(t));
+  const allergenOnly=tokens.every(t=>NAME_ALLERGEN_TOKENS.has(t));
+  const patternPenalty=NAME_NONFOOD_PATTERNS.some(rx=>rx.test(candidate.text));
+  let score=0;
+  if(candidate.source==='primary') score+=1;
+  if(foodHits.length) score+=3;
+  if(dbHits.length) score+=Math.min(2,dbHits.length);
+  if(tokens.length>=2&&tokens.length<=8) score+=1;
+  if(tokens.length===1&&!foodHits.length&&!dbHits.length) score-=2;
+  if(tokens.length>9) score-=2;
+  if(hasPerson&&!foodHits.length&&!dbHits.length) score-=5;
+  if(hasNonFood) score-=2;
+  if(allergenOnly) score-=4;
+  if(patternPenalty&&!foodHits.length) score-=3;
+  if(/[0-9]/.test(candidate.text)) score-=1;
+  const foodSignal=(foodHits.length>0||dbHits.length>0)&&!allergenOnly&&!(hasPerson&&!foodHits.length&&!dbHits.length);
+  return {...candidate,score,foodSignal,tokens,foodHits:foodHits.length,dbHits:dbHits.length};
+}
+function resolveProductNameForFood(result){
+  const candidates=extractNameCandidates(result);
+  if(!candidates.length) return {name:'',reason:'sin_candidatos',best:null};
+  const commonDbTokens=getCommonDbFoodTokens();
+  const ranked=candidates.map(c=>evaluateNameCandidate(c,commonDbTokens)).sort((a,b)=>{
+    if(b.score!==a.score) return b.score-a.score;
+    if((b.foodSignal?1:0)!==(a.foodSignal?1:0)) return (b.foodSignal?1:0)-(a.foodSignal?1:0);
+    if((b.source==='primary'?1:0)!==(a.source==='primary'?1:0)) return (b.source==='primary'?1:0)-(a.source==='primary'?1:0);
+    return b.text.length-a.text.length;
+  });
+  const best=ranked[0];
+  if(best&&best.foodSignal&&best.score>=3) return {name:best.text,reason:'ok',best};
+  return {name:'',reason:'sin_nombre_comida',best};
+}
 const PHOTO_KEYWORD_RULES=[
   {rx:[/crust/i,/gamb/i,/langost/i,/bogavant/i,/cigala/i,/marisc/i], allergen:'CRUSTÁCEOS', level:'high'},
   {rx:[/lech/i,/lacte/i,/suero/i,/casein/i,/mantequill/i], allergen:'LÁCTEO', level:'high'},
@@ -1474,6 +1569,18 @@ function parseAndValidateAI(rawText,source='photo'){
     throw e;
   }
   const result=normalizeAIPhotoResult(parsed);
+  const nameResolved=resolveProductNameForFood(result);
+  if(nameResolved.name){
+    if(norm(nameResolved.name)!==norm(result.nombre||'')){
+      addLog(LOG_LEVELS.INFO,'PHOTO_NAME_RESOLVED',`Nombre corregido: ${result.nombre||'vacío'} -> ${nameResolved.name}`,{source,reason:nameResolved.reason});
+    }
+    result.nombre=nameResolved.name;
+  }else{
+    const discarded=result.nombre||'';
+    result.nombre='';
+    if(!result.warning) result.warning=NAME_UNKNOWN_WARNING;
+    addLog(LOG_LEVELS.WARN,'PHOTO_NAME_FILTERED',`Nombre descartado: ${discarded||'vacío'}`,{source,reason:nameResolved.reason,best:nameResolved.best?{text:nameResolved.best.text,score:nameResolved.best.score,foodSignal:nameResolved.best.foodSignal}:null});
+  }
   addLog('INFO','PHOTO_PARSED_RESULT','PHOTO_PARSED_RESULT',{source,parsed:{nombre:result.nombre,hallazgos_texto:result.hallazgos_texto,mapeo:result.mapeo,alergenos:result.alergenos,trazas:result.trazas,warning:result.warning||''}});
   const alergSet=new Set([...(result.alergenos||[]),...(result.trazas||[])].map(normalizeAllergen));
   const mapeoDiff=[];
