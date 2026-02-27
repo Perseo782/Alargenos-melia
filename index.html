@@ -204,7 +204,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v 27 02 2026 14:51</div>
+    <div class="login-version">v 27 02 2026 15:50</div>
   </div>
 </div>
 
@@ -1543,6 +1543,124 @@ const PHOTO_KEYWORD_RULES=[
   {rx:[/altramu/i,/lupino/i], allergen:'ALTRAMUZ', level:'high'},
   {rx:[/e322/i], allergen:'SOJA', level:'info'}
 ];
+const SULFITE_E_CODES=new Set(['E220','E221','E222','E223','E224','E225','E226','E227','E228']);
+const SULFITE_TEXT_EVIDENCE_RX=[/\bsulfitos?\b/i,/\bdi[oó]xido\s+de\s+azufre\b/i,/\banh[ií]drido\s+sulfuroso\b/i];
+const LECITHIN_TEXT_EVIDENCE_RX=[/\blecitin(?:a|as)\b/i,/\blecithin(?:s)?\b/i];
+const SOY_TEXT_EVIDENCE_RX=[/\bde\s+soj[ae]\b/i,/\bsoj[ae]\b/i,/\bsoybean\b/i,/\bsoy\b/i];
+const SOY_DERIVATIVE_EVIDENCE_RX=[/\btofu\b/i,/\bmiso\b/i,/\bedamame\b/i];
+
+function extractECodes(text){
+  const codes=new Set();
+  const src=String(text||'');
+  if(!src) return [];
+  const rx=/\be[\s-]?(\d{3,4})\b/gi;
+  let m;
+  while((m=rx.exec(src))!==null) codes.add(`E${m[1]}`);
+  return [...codes];
+}
+function isSulfiteECode(code){
+  return SULFITE_E_CODES.has(String(code||'').toUpperCase());
+}
+function extractDiagnosticEvidenceTexts(result,rawText){
+  const texts=[];
+  const push=v=>{
+    const s=String(v||'').trim();
+    if(s) texts.push(s);
+  };
+  (Array.isArray(result&&result.hallazgos_texto)?result.hallazgos_texto:[]).forEach(push);
+  (Array.isArray(result&&result.mapeo)?result.mapeo:[]).forEach(m=>push(m&&m.texto));
+  push(result&&result.notas);
+  if(!texts.length){
+    const raw=String(rawText||'').trim();
+    if(raw){
+      try{
+        const parsed=extractJsonFromAIResponse(raw);
+        (Array.isArray(parsed&&parsed.hallazgos_texto)?parsed.hallazgos_texto:[]).forEach(push);
+        (Array.isArray(parsed&&parsed.mapeo)?parsed.mapeo:[]).forEach(m=>push(m&&m.texto));
+        push(parsed&&parsed.notas);
+      }catch(_){
+        push(raw);
+      }
+    }
+  }
+  return texts;
+}
+function removeAllergenFromResult(result,allergen){
+  const target=normalizeAllergen(allergen);
+  if(!target) return false;
+  let removed=false;
+  const drop=arr=>{
+    if(!Array.isArray(arr)) return [];
+    const next=arr.filter(a=>normalizeAllergen(a)!==target);
+    if(next.length!==arr.length) removed=true;
+    return next;
+  };
+  result.alergenos=drop(result.alergenos);
+  result.trazas=drop(result.trazas);
+  return removed;
+}
+function isNeutralOnlyENumberText(text){
+  const src=String(text||'');
+  const eCodes=extractECodes(src);
+  if(!eCodes.length) return false;
+  if(eCodes.some(isSulfiteECode)) return false;
+  const compact=norm(src)
+    .replace(/e\s*\d{3,4}/g,' ')
+    .replace(/\b(y|e|o|and|or)\b/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+  return compact.length===0;
+}
+function isOnlyE322OrLecithinText(text){
+  const src=String(text||'');
+  if(!src) return false;
+  if(SOY_TEXT_EVIDENCE_RX.some(rx=>rx.test(src))||SOY_DERIVATIVE_EVIDENCE_RX.some(rx=>rx.test(src))) return false;
+  const eCodes=extractECodes(src);
+  const hasOnlyE322=eCodes.length>0&&eCodes.every(c=>c==='E322');
+  const hasLecithin=LECITHIN_TEXT_EVIDENCE_RX.some(rx=>rx.test(src));
+  if(!hasOnlyE322&&!hasLecithin) return false;
+  const compact=norm(src)
+    .replace(/e\s*322/g,' ')
+    .replace(/\b(lecitin(a|as|e|es)|lecithin(s)?)\b/g,' ')
+    .replace(/\b(y|e|o|and|or|emulgente|emulgentes)\b/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+  return compact.length===0;
+}
+function applyENumberFalsePositivePatch(result,rawText,source){
+  const evidenceTexts=extractDiagnosticEvidenceTexts(result,rawText);
+  const combinedEvidence=evidenceTexts.join(' ');
+  const detectedECodes=[...new Set(evidenceTexts.flatMap(extractECodes))].sort((a,b)=>Number(a.slice(1))-Number(b.slice(1)));
+  const sulfiteECodes=detectedECodes.filter(isSulfiteECode);
+  const hasSulfiteTextEvidence=SULFITE_TEXT_EVIDENCE_RX.some(rx=>rx.test(combinedEvidence));
+  const hasSulfiteEvidence=hasSulfiteTextEvidence||sulfiteECodes.length>0;
+  const hasSulfitosMarked=[...(result.alergenos||[]),...(result.trazas||[])].some(a=>normalizeAllergen(a)==='SULFITOS');
+  if(hasSulfitosMarked&&!hasSulfiteEvidence&&removeAllergenFromResult(result,'SULFITOS')){
+    addLog(LOG_LEVELS.WARN,'E_CODE_FALSE_POSITIVE_REMOVED','SULFITOS eliminado sin evidencia textual ni E220-E228',{
+      source,
+      removed_allergen:'SULFITOS',
+      detected_e_codes:detectedECodes,
+      reason:'SULFITOS sin evidencia textual ni E220-E228'
+    });
+  }
+  const hasE322=detectedECodes.includes('E322');
+  const hasLecithin=LECITHIN_TEXT_EVIDENCE_RX.some(rx=>rx.test(combinedEvidence));
+  const hasSoyEvidence=SOY_TEXT_EVIDENCE_RX.some(rx=>rx.test(combinedEvidence))||SOY_DERIVATIVE_EVIDENCE_RX.some(rx=>rx.test(combinedEvidence));
+  if((hasE322||hasLecithin)&&!hasSoyEvidence){
+    const hasMappedSoyFromOtherText=(Array.isArray(result.mapeo)?result.mapeo:[]).some(m=>{
+      if(normalizeAllergen(m&&m.alergeno)!=='SOJA') return false;
+      return !isOnlyE322OrLecithinText(m&&m.texto);
+    });
+    if(!hasMappedSoyFromOtherText&&removeAllergenFromResult(result,'SOJA')){
+      addLog(LOG_LEVELS.WARN,'E322_AMBIGUOUS_NO_SOY','SOJA eliminada por E322/lecitina sin evidencia explícita de soja',{
+        source,
+        removed_allergen:'SOJA',
+        detected_e_codes:detectedECodes,
+        reason:'E322/lecitina sin "de soja" ni evidencia explícita de soja'
+      });
+    }
+  }
+}
 
 function normalizeAllergen(s){
   const t=String(s||'').trim();
@@ -1607,10 +1725,12 @@ function parseAndValidateAI(rawText,source='photo'){
     if(!result.warning) result.warning=NAME_UNKNOWN_WARNING;
     addLog(LOG_LEVELS.WARN,'PHOTO_NAME_FILTERED',`Nombre descartado: ${discarded||'vacío'}`,{source,reason:nameResolved.reason,best:nameResolved.best?{text:nameResolved.best.text,score:nameResolved.best.score,foodSignal:nameResolved.best.foodSignal}:null});
   }
+  applyENumberFalsePositivePatch(result,rawText,source);
   addLog('INFO','PHOTO_PARSED_RESULT','PHOTO_PARSED_RESULT',{source,parsed:{nombre:result.nombre,hallazgos_texto:result.hallazgos_texto,mapeo:result.mapeo,alergenos:result.alergenos,trazas:result.trazas,warning:result.warning||''}});
   const alergSet=new Set([...(result.alergenos||[]),...(result.trazas||[])].map(normalizeAllergen));
   const mapeoDiff=[];
   result.hallazgos_texto.forEach(txt=>{
+    if(isNeutralOnlyENumberText(txt)) return;
     const key=norm(txt);
     const exact=result.mapeo.filter(m=>norm(m.texto)===key).map(m=>m.alergeno).filter(Boolean);
     const byContains=result.mapeo.filter(m=>key.includes(norm(m.texto))||norm(m.texto).includes(key)).map(m=>m.alergeno).filter(Boolean);
