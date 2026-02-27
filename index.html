@@ -204,7 +204,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v 27 02 2026 13:14</div>
+    <div class="login-version">V27.02.26h11:05</div>
   </div>
 </div>
 
@@ -614,7 +614,6 @@ const ERROR_CODES={
   NETWORK_TIMEOUT:'NETWORK_TIMEOUT',
   PHOTO_UNREADABLE:'PHOTO_UNREADABLE',
   PHOTO_NO_NAME:'PHOTO_NO_NAME',
-  PHOTO_NAME_UNCERTAIN:'PHOTO_NAME_UNCERTAIN',
   PHOTO_QUALITY:'PHOTO_QUALITY',
   JSON_PARSE_ERROR:'JSON_PARSE_ERROR',
   GDRIVE_AUTH_FAILED:'GDRIVE_AUTH_FAILED',
@@ -1406,187 +1405,6 @@ const q=document.getElementById('q'),xb=document.getElementById('xb'),ls=documen
 
 function norm(s){return s.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim()}
 function tokenize(s){return norm(s).split(' ').filter(w=>w.length>2)}
-const PRODUCT_NAME_UNKNOWN_WARNING='No se reconoce el nombre del producto';
-const PRODUCT_NAME_STOP_TOKENS=new Set(['con','sin','para','por','del','las','los','una','uno','unos','unas','tipo','estilo','gran','mini','extra']);
-const PRODUCT_NAME_PERSON_TOKENS=new Set(['rafael','antonio','jose','maria','manuel','david','juan','francisco','carlos','luis','miguel','pedro','javier','isabel','ana','laura','lucia','marta','sofia','pablo','diego','alberto','fernando','roberto','sergio','andres','cristina','paula','carmen','alicia','raquel','eva','silvia','jorge','raul','oscar','lola']);
-const PRODUCT_NAME_MARKETING_TOKENS=new Set(['secreto','tradicion','tradicional','clasico','clasica','premium','gourmet','selecto','selecta','especial','delicia','receta','original','autentico','autentica','maestro','artesano','artesanal','sabor']);
-const PRODUCT_NAME_BRAND_TOKENS=new Set(['marca','grupo','company','cooperative','cooperativa','selection','seleccion','select','edition','edicion','original']);
-const PRODUCT_NAME_FOOD_HINT_TOKENS=new Set([
-  'aceituna','aceitunas','aceite','salmuera','encurtido','encurtidos','conserva','conservas','verdial','verdiales','hueso','partida','partidas','alinada','alinadas',
-  'arroz','pasta','fideo','fideos','fideua','macarron','macarrones','espagueti','espaguetis','lenteja','lentejas','garbanzo','garbanzos','alubia','alubias','judia','judias',
-  'pan','bolleria','galleta','galletas','bizcocho','cereal','cereales','harina','salsa','sopa','sopas','caldo','pure','crema',
-  'verdura','verduras','hortaliza','hortalizas','fruta','frutas','tomate','tomates','patata','patatas','papa','papas',
-  'queso','leche','yogur','yogurt','mantequilla','nata','huevo','huevos','mayonesa',
-  'atun','salmon','bacalao','merluza','pescado','marisco','calamar','pulpo','mejillon','mejillones',
-  'pollo','pavo','carne','ternera','cerdo','jamon','chorizo','salchicha','hamburguesa','albondiga','albondigas','croqueta','croquetas',
-  'chocolate','cacao','cafe','infusion','te'
-]);
-const PRODUCT_NAME_NONFOOD_REGEX=[
-  /\b(el|la)\s+secreto\s+de\b/i,
-  /\b(edicion|coleccion|collection|series?)\b/i,
-  /\b(www|http|instagram|facebook)\b/i,
-  /\b(s\.?l\.?|s\.?a\.?)\b/i
-];
-function getCommonProductTokensForNameValidation(){
-  const counts=new Map();
-  if(!Array.isArray(P)) return new Set();
-  P.forEach(item=>{
-    const uniq=[...new Set(tokenize((item&&item.n)||''))];
-    uniq.forEach(t=>{
-      if(t.length<4) return;
-      if(PRODUCT_NAME_STOP_TOKENS.has(t)) return;
-      if(PRODUCT_NAME_PERSON_TOKENS.has(t)) return;
-      counts.set(t,(counts.get(t)||0)+1);
-    });
-  });
-  const out=new Set();
-  counts.forEach((count,token)=>{if(count>=2)out.add(token)});
-  return out;
-}
-function normalizeNameCandidateType(v){
-  const n=norm(v||'');
-  if(!n) return 'otro';
-  if(n.includes('alimento')||n.includes('comida')||n==='producto') return 'alimento';
-  if(n.includes('marca')) return 'marca';
-  if(n.includes('eslogan')||n.includes('slogan')||n.includes('claim')) return 'eslogan';
-  if(n.includes('persona')||n.includes('nombre propio')||n==='persona nombre') return 'persona';
-  return 'otro';
-}
-function normalizeNameCandidateConfidence(v){
-  const n=norm(v||'');
-  if(n==='alta'||n==='high') return 'alta';
-  if(n==='media'||n==='medium') return 'media';
-  if(n==='baja'||n==='low') return 'baja';
-  return 'media';
-}
-function parseNameCandidateBool(v){
-  if(typeof v==='boolean') return v;
-  const n=norm(v||'');
-  if(!n) return null;
-  if(['si','true','1','food','comida','alimento'].includes(n)) return true;
-  if(['no','false','0','not food','no comida','no alimento'].includes(n)) return false;
-  return null;
-}
-function nameConfidenceRank(c){
-  if(c==='alta') return 3;
-  if(c==='media') return 2;
-  if(c==='baja') return 1;
-  return 0;
-}
-function splitNameCandidateText(raw){
-  const base=canonicalizeProductName(String(raw||'').replace(/[\n\r\t]+/g,' ').replace(/[“”"']/g,' ').trim());
-  if(!base) return [];
-  const parts=[base];
-  const sub=base.split(/\s(?:[-–—|/·])\s|[;:]+/).map(p=>canonicalizeProductName(p)).filter(Boolean);
-  sub.forEach(p=>parts.push(p));
-  return [...new Set(parts.filter(p=>p.length>=3&&p.length<=90).map(p=>p.replace(/\s+/g,' ').trim()))];
-}
-function addOrMergeNameCandidate(map,rawText,source,meta){
-  splitNameCandidateText(rawText).forEach(text=>{
-    const key=norm(text);
-    if(!key) return;
-    const type=normalizeNameCandidateType(meta&&meta.tipo);
-    const confidence=normalizeNameCandidateConfidence(meta&&meta.confianza);
-    const isFood=parseNameCandidateBool(meta&&meta.es_comida);
-    const reason=String((meta&&meta.motivo)||'').trim();
-    if(map.has(key)){
-      const prev=map.get(key);
-      if(prev.type==='otro'&&type!=='otro') prev.type=type;
-      if(nameConfidenceRank(confidence)>nameConfidenceRank(prev.confidence)) prev.confidence=confidence;
-      if(isFood===true) prev.isFood=true;
-      else if(isFood===false && prev.isFood==null) prev.isFood=false;
-      if(!prev.reason&&reason) prev.reason=reason;
-      prev.sources=[...new Set([...prev.sources,source])];
-      if(source==='ia_nombre') prev.preferred=true;
-      return;
-    }
-    map.set(key,{text,key,type,confidence,isFood,reason,sources:[source],preferred:source==='ia_nombre'});
-  });
-}
-function collectAINameCandidates(result){
-  const map=new Map();
-  addOrMergeNameCandidate(map,result.nombre,'ia_nombre',{tipo:'otro',confianza:'media',motivo:'campo_nombre'});
-  (Array.isArray(result.nombres_detectados)?result.nombres_detectados:[]).forEach(item=>{
-    addOrMergeNameCandidate(map,item&&item.texto,'ia_detectado',item||{});
-  });
-  (Array.isArray(result.hallazgos_texto)?result.hallazgos_texto:[]).forEach(txt=>{
-    const raw=String(txt||'').trim();
-    if(raw.length>=10) addOrMergeNameCandidate(map,raw,'hallazgo',{tipo:'otro',confianza:'baja'});
-  });
-  return [...map.values()];
-}
-function evaluateNameCandidate(candidate,commonTokens){
-  const tokens=[...new Set(tokenize(candidate.text).filter(t=>!PRODUCT_NAME_STOP_TOKENS.has(t)))];
-  const hasFoodHint=tokens.some(t=>PRODUCT_NAME_FOOD_HINT_TOKENS.has(t));
-  const commonHits=tokens.filter(t=>commonTokens.has(t));
-  const hasCommonToken=commonHits.length>0;
-  const hasPersonToken=tokens.some(t=>PRODUCT_NAME_PERSON_TOKENS.has(t));
-  const hasBrandToken=tokens.some(t=>PRODUCT_NAME_BRAND_TOKENS.has(t));
-  const onlyMarketingOrPerson=tokens.length>0&&tokens.every(t=>PRODUCT_NAME_MARKETING_TOKENS.has(t)||PRODUCT_NAME_PERSON_TOKENS.has(t));
-  const hasNonFoodPattern=PRODUCT_NAME_NONFOOD_REGEX.some(rx=>rx.test(candidate.text));
-  let score=0;
-  if(candidate.preferred) score+=1;
-  if(candidate.type==='alimento') score+=5;
-  else if(candidate.type==='marca') score-=3;
-  else if(candidate.type==='eslogan') score-=3;
-  else if(candidate.type==='persona') score-=4;
-  if(candidate.isFood===true) score+=4;
-  else if(candidate.isFood===false) score-=4;
-  if(candidate.confidence==='alta') score+=2;
-  else if(candidate.confidence==='baja') score-=1;
-  if(hasFoodHint) score+=3;
-  if(hasCommonToken) score+=Math.min(2,commonHits.length);
-  if(tokens.length>=2) score+=1;
-  if(tokens.length>=4) score+=1;
-  if(tokens.length===1&&hasPersonToken&&!hasFoodHint&&!hasCommonToken) score-=5;
-  if(hasPersonToken&&!hasFoodHint&&!hasCommonToken) score-=2;
-  if(onlyMarketingOrPerson) score-=3;
-  if(hasBrandToken&&!hasFoodHint&&!hasCommonToken) score-=2;
-  if(hasNonFoodPattern&&!hasFoodHint) score-=3;
-  const foodSignal=hasFoodHint||hasCommonToken||candidate.type==='alimento'||candidate.isFood===true;
-  return {...candidate,tokens,foodSignal,score};
-}
-function explainNameDecisionReason(reason){
-  if(reason==='sin_candidatos') return PRODUCT_NAME_UNKNOWN_WARNING;
-  if(reason==='sin_indicios_comida') return 'Los textos detectados parecen marca, eslogan o texto no alimentario.';
-  if(reason==='baja_confianza') return 'No hay suficiente confianza para elegir un nombre de comida.';
-  if(reason==='ambiguo') return 'Hay varios candidatos de comida con puntuacion similar.';
-  if(reason==='no_comida') return 'El candidato principal no parece un nombre de comida.';
-  return 'Nombre de producto dudoso.';
-}
-function resolveAIProductName(result){
-  const candidates=collectAINameCandidates(result);
-  if(!candidates.length){
-    return {ok:false,selected:'',reason:'sin_candidatos',score:-10,principal:'',candidates:[]};
-  }
-  const commonTokens=getCommonProductTokensForNameValidation();
-  const ranked=candidates.map(c=>evaluateNameCandidate(c,commonTokens)).sort((a,b)=>{
-    if(b.score!==a.score) return b.score-a.score;
-    if((b.foodSignal?1:0)!==(a.foodSignal?1:0)) return (b.foodSignal?1:0)-(a.foodSignal?1:0);
-    if((b.preferred?1:0)!==(a.preferred?1:0)) return (b.preferred?1:0)-(a.preferred?1:0);
-    return b.text.length-a.text.length;
-  });
-  const best=ranked[0];
-  const second=ranked[1]||null;
-  const ambiguous=!!(second&&best.foodSignal&&second.foodSignal&&(best.score-second.score)<1.5);
-  const ok=best.foodSignal&&best.score>=3&&!ambiguous&&best.type!=='marca'&&best.type!=='eslogan'&&best.type!=='persona';
-  let reason='ok';
-  if(!ok){
-    if(!best.foodSignal) reason='sin_indicios_comida';
-    else if(best.score<3) reason='baja_confianza';
-    else if(ambiguous) reason='ambiguo';
-    else if(best.type==='marca'||best.type==='eslogan'||best.type==='persona') reason='no_comida';
-    else reason='dudoso';
-  }
-  return {
-    ok,
-    selected: ok?best.text:'',
-    reason,
-    score: best.score,
-    principal: best.text||'',
-    candidates: ranked.slice(0,5).map(c=>({texto:c.text,tipo:c.type,score:c.score,food_signal:!!c.foodSignal,confianza:c.confidence,origen:c.sources}))
-  };
-}
 const PHOTO_KEYWORD_RULES=[
   {rx:[/crust/i,/gamb/i,/langost/i,/bogavant/i,/cigala/i,/marisc/i], allergen:'CRUSTÁCEOS', level:'high'},
   {rx:[/lech/i,/lacte/i,/suero/i,/casein/i,/mantequill/i], allergen:'LÁCTEO', level:'high'},
@@ -1596,7 +1414,7 @@ const PHOTO_KEYWORD_RULES=[
   {rx:[/sesam/i,/tahini/i,/tahina/i], allergen:'SÉSAMO', level:'high'},
   {rx:[/soja/i,/edamame/i,/miso/i,/tofu/i], allergen:'SOJA', level:'high'},
   {rx:[/mostaz/i], allergen:'MOSTAZA', level:'high'},
-  {rx:[/sulfit/i,/sulphit/i,/anh[ií]drido\s+sulfuroso/i,/d[ií]oxido\s+de\s+azufre/i,/e[\s-]?22[0-8]/i], allergen:'SULFITOS', level:'high'},
+  {rx:[/sulfit/i,/anhidrido\s+sulfuroso/i,/e22[0-8]/i], allergen:'SULFITOS', level:'high'},
   {rx:[/apio/i], allergen:'APIO', level:'high'},
   {rx:[/cacahuet/i,/mani/i], allergen:'CACAHUETES', level:'high'},
   {rx:[/pescad/i,/atun/i,/salmon/i,/bacalao/i,/merluza/i], allergen:'PESCADO', level:'high'},
@@ -1618,20 +1436,6 @@ function normalizeAIPhotoResult(obj){
   const out={...obj};
   out.nombre=(out.nombre||'').toString().trim();
   out.hallazgos_texto=Array.isArray(out.hallazgos_texto)?out.hallazgos_texto.map(x=>String(x||'').trim()).filter(Boolean):[];
-  const rawDetectedNames=Array.isArray(out.nombres_detectados)?out.nombres_detectados:(Array.isArray(out.candidatos_nombre)?out.candidatos_nombre:[]);
-  const seenDetected=new Set();
-  out.nombres_detectados=rawDetectedNames.map(item=>({
-    texto:canonicalizeProductName(String((item&&item.texto)||'').trim()),
-    tipo:normalizeNameCandidateType((item&&item.tipo)||''),
-    confianza:normalizeNameCandidateConfidence((item&&item.confianza)||''),
-    es_comida:parseNameCandidateBool(item&&item.es_comida),
-    motivo:String((item&&item.motivo)||'').trim()
-  })).filter(item=>{
-    const key=norm(item.texto);
-    if(!key||seenDetected.has(key)) return false;
-    seenDetected.add(key);
-    return true;
-  });
   out.mapeo=Array.isArray(out.mapeo)?out.mapeo.map(m=>({texto:String((m&&m.texto)||'').trim(),alergeno:normalizeAllergen((m&&m.alergeno)||'')})).filter(m=>m.texto||m.alergeno):[];
   out.alergenos=[...new Set((Array.isArray(out.alergenos)?out.alergenos:[]).map(normalizeAllergen).filter(Boolean))];
   out.trazas=[...new Set((Array.isArray(out.trazas)?out.trazas:[]).map(normalizeAllergen).filter(Boolean))];
@@ -1670,28 +1474,8 @@ function parseAndValidateAI(rawText,source='photo'){
     throw e;
   }
   const result=normalizeAIPhotoResult(parsed);
-  if(result.nombre) result.nombre=canonicalizeProductName(result.nombre);
-  addLog('INFO','PHOTO_PARSED_RESULT','PHOTO_PARSED_RESULT',{source,parsed:{nombre:result.nombre,nombres_detectados:result.nombres_detectados,hallazgos_texto:result.hallazgos_texto,mapeo:result.mapeo,alergenos:result.alergenos,trazas:result.trazas,warning:result.warning||''}});
-  const textForCheck=[
-    result.hallazgos_texto.join(' '),
-    (result.mapeo||[]).map(m=>m&&m.texto?m.texto:'').join(' '),
-    result.notas||'',
-    String(rawText||'')
-  ].filter(Boolean).join(' ');
+  addLog('INFO','PHOTO_PARSED_RESULT','PHOTO_PARSED_RESULT',{source,parsed:{nombre:result.nombre,hallazgos_texto:result.hallazgos_texto,mapeo:result.mapeo,alergenos:result.alergenos,trazas:result.trazas,warning:result.warning||''}});
   const alergSet=new Set([...(result.alergenos||[]),...(result.trazas||[])].map(normalizeAllergen));
-  const sulfiteEvidence=/sulfit|sulphit|anh[ií]drido\s+sulfuroso|d[ií]oxido\s+de\s+azufre|e[\s-]?22[0-8]/i.test(textForCheck);
-  if(sulfiteEvidence && !alergSet.has('SULFITOS')){
-    result.trazas=[...new Set([...(result.trazas||[]),'SULFITOS'])];
-    alergSet.add('SULFITOS');
-    addLog(LOG_LEVELS.INFO,'PHOTO_SULFITES_RECOVERED','SULFITOS añadido por evidencia textual',{source});
-  }
-  const lupinEvidence=/altramu|lupin|lupino/i.test(textForCheck);
-  if(alergSet.has('ALTRAMUZ') && !lupinEvidence){
-    result.alergenos=(result.alergenos||[]).filter(a=>a!=='ALTRAMUZ');
-    result.trazas=(result.trazas||[]).filter(a=>a!=='ALTRAMUZ');
-    alergSet.delete('ALTRAMUZ');
-    addLog(LOG_LEVELS.WARN,'PHOTO_ALTRAMUZ_REMOVED','ALTRAMUZ eliminado por falta de evidencia textual',{source});
-  }
   const mapeoDiff=[];
   result.hallazgos_texto.forEach(txt=>{
     const key=norm(txt);
@@ -1703,36 +1487,15 @@ function parseAndValidateAI(rawText,source='photo'){
     if(miss.length)mapeoDiff.push({texto:txt,mapeado:mapped,faltan_en_resultado:miss});
   });
   if(mapeoDiff.length) addLog('WARN','PHOTO_MAPEO_DIFF','PHOTO_MAPEO_DIFF',{source,diff:mapeoDiff});
+  const textForCheck=(result.hallazgos_texto.join(' ')||String(rawText||''));
   const keywordAlerts=[];
   PHOTO_KEYWORD_RULES.forEach(rule=>{
     const hit=rule.rx.find(rx=>rx.test(textForCheck));
     if(hit && !alergSet.has(rule.allergen)) keywordAlerts.push({allergen:rule.allergen,level:rule.level,pattern:hit.toString()});
   });
   if(keywordAlerts.length) addLog('WARN','PHOTO_KEYWORD_ALERT','PHOTO_KEYWORD_ALERT',{source,alerts:keywordAlerts});
-  const nameDecision=resolveAIProductName(result);
-  result.review_alerts={mapeo:mapeoDiff,keywords:keywordAlerts,nombre:[]};
-  result.name_decision={ok:nameDecision.ok,reason:nameDecision.reason,score:nameDecision.score,principal:nameDecision.principal,candidates:nameDecision.candidates};
-  if(nameDecision.ok){
-    if(result.nombre&&norm(result.nombre)!==norm(nameDecision.selected)){
-      addLog(LOG_LEVELS.INFO,'PHOTO_NAME_CORRECTED',`Nombre IA ajustado: ${result.nombre} -> ${nameDecision.selected}`,{source,reason:nameDecision.reason,score:nameDecision.score});
-    }
-    result.nombre=nameDecision.selected;
-  }else{
-    const discardedName=result.nombre||nameDecision.principal||'';
-    result.nombre='';
-    result.review_alerts.nombre.push({
-      motivo:nameDecision.reason,
-      detalle:explainNameDecisionReason(nameDecision.reason),
-      candidato_principal:discardedName,
-      score:nameDecision.score,
-      candidatos:nameDecision.candidates
-    });
-    result.warning=result.warning?`${result.warning} · ${PRODUCT_NAME_UNKNOWN_WARNING}`:PRODUCT_NAME_UNKNOWN_WARNING;
-    addLog(LOG_LEVELS.WARN,ERROR_CODES.PHOTO_NAME_UNCERTAIN,`Nombre IA descartado: ${discardedName||'sin candidato'}`,{source,motivo:nameDecision.reason,score:nameDecision.score,candidates:nameDecision.candidates});
-  }
-  const hasHighKeyword=keywordAlerts.some(a=>a.level==='high');
-  const hasNameIssue=!nameDecision.ok;
-  result.requires_review=!!(mapeoDiff.length || hasHighKeyword || hasNameIssue);
+  result.review_alerts={mapeo:mapeoDiff,keywords:keywordAlerts};
+  result.requires_review=!!(mapeoDiff.length || keywordAlerts.some(a=>a.level==='high'));
   return result;
 }
 function isAutoOk(result){
@@ -1758,26 +1521,7 @@ function buildReviewReason(result){
         parts.push(`Texto "${m.texto}" sin alérgeno asignado.`);
     });
   }
-  if(ra.nombre&&ra.nombre.length){
-    ra.nombre.forEach(n=>{
-      if(n&&n.candidato_principal) parts.push(`Nombre descartado: "${n.candidato_principal}".`);
-      if(n&&n.detalle) parts.push(n.detalle);
-      else parts.push(PRODUCT_NAME_UNKNOWN_WARNING+'.');
-    });
-  }
   return parts.length?parts.join(' '):'Revisión recomendada.';
-}
-function recomputeReviewStateFromAlerts(result){
-  if(!result||typeof result!=='object') return;
-  const ra=result.review_alerts||{};
-  const hasMap=Array.isArray(ra.mapeo)&&ra.mapeo.length>0;
-  const hasHighKeyword=Array.isArray(ra.keywords)&&ra.keywords.some(k=>k&&k.level==='high');
-  const hasNameIssue=Array.isArray(ra.nombre)&&ra.nombre.length>0;
-  result.requires_review=!!(hasMap||hasHighKeyword||hasNameIssue);
-}
-function removeUnknownNameWarning(msg){
-  const parts=String(msg||'').split('·').map(s=>s.trim()).filter(Boolean).filter(s=>s!==PRODUCT_NAME_UNKNOWN_WARNING);
-  return parts.join(' · ');
 }
 function sortAllergens(arr){const uniq=[...new Set(arr)];return uniq.sort((a,b)=>AL.indexOf(a)-AL.indexOf(b) || a.localeCompare(b,'es'))}
 function similarity(a,b){const na=norm(a),nb=norm(b);if(na===nb)return 1;const ta=tokenize(a),tb=tokenize(b);if(!ta.length||!tb.length)return 0;if(Math.abs(ta.length-tb.length)>3)return 0;const sa=new Set(ta),sb=new Set(tb);const inter=new Set([...sa].filter(x=>sb.has(x)));const union=new Set([...sa,...sb]);const jaccard=inter.size/union.size;let sub=0;const smaller=Math.min(sa.size,sb.size);if(smaller>=2){const ss=sa.size<=sb.size?sa:sb;const bs=sa.size<=sb.size?sb:sa;if([...ss].every(t=>bs.has(t)))sub=smaller/Math.max(sa.size,sb.size)}return Math.max(jaccard,sub)}
@@ -2259,9 +2003,7 @@ MISMO ALÉRGENO EN VARIOS IDIOMAS: Si ves "apio", "celery", "céleri", "Sellerie
 PASO 3 — VERIFICACIÓN
 Revisa que no hayas omitido ningún alérgeno o traza que SÍ aparezca escrito en la imagen. Inclúyelos todos en hallazgos_texto, mapeo, alergenos y/o trazas.
 
-NOMBRE DEL PRODUCTO: Usa el nombre del alimento/comida tal como aparece en el envase (título principal en español). Respeta mayúsculas de la primera letra de cada palabra significativa (ej.: "Salteado rústico - Mezcla de verduras"). No inventes ni reordenes.
-- No uses marca, nombre de persona ni eslogan/publicidad como nombre de producto (ej.: "Rafael", "El secreto de ...").
-- Si no puedes identificar con claridad un nombre de comida, devuelve "nombre":"" y en warning: "No se reconoce el nombre del producto".
+NOMBRE DEL PRODUCTO: Usa el nombre tal como aparece en el envase (título principal en español). Respeta mayúsculas de la primera letra de cada palabra significativa (ej.: "Salteado rústico - Mezcla de verduras"). No inventes ni reordenes.
 
 ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
 - Incluye SOLO lo que esté EXPLÍCITAMENTE escrito (ingredientes, "puede contener", "presencia fortuita", etc.).
@@ -2273,29 +2015,6 @@ Si la zona de alérgenos está cortada o la imagen está muy borrosa y no puedes
 
 Responde SOLO JSON (sin markdown ni bloques \`\`\`json). No incluyas texto antes o después del objeto.
 {"nombre":"...","hallazgos_texto":["..."],"mapeo":[{"texto":"...","alergeno":"..."}],"alergenos":["..."],"trazas":["..."],"notas":"","warning":""}`;
-const NAME_RECOVERY_PROMPT=`Eres un extractor de nombre de producto alimentario desde foto(s) de etiqueta.
-
-OBJETIVO ÚNICO:
-- Identificar el nombre COMESTIBLE del producto.
-- No devolver marca, persona, eslogan ni texto corporativo como nombre.
-
-REGLAS:
-- Si hay 2 fotos, pertenecen al mismo producto.
-- Extrae hasta 6 candidatos reales del texto visible (frontal y lateral).
-- Clasifica cada candidato en: alimento, marca, eslogan, persona u otro.
-- Marca si cada candidato es comida (true/false) y nivel de confianza (alta/media/baja).
-- El campo "nombre" debe ser el mejor candidato de comida.
-- Si no hay evidencia suficiente, devuelve "nombre":"" y warning:"No se reconoce el nombre del producto".
-
-Responde SOLO JSON:
-{"nombre":"...","nombres_detectados":[{"texto":"...","tipo":"alimento|marca|eslogan|persona|otro","es_comida":true,"confianza":"alta|media|baja","motivo":"..."}],"notas":"","warning":""}`;
-
-function extractTextFromChatPayload(data){
-  const rawContent=data&&data.choices&&data.choices[0]&&data.choices[0].message?data.choices[0].message.content:'';
-  return Array.isArray(rawContent)
-    ? rawContent.map(p=>p&&p.type==='text'?p.text:'').join('').trim()
-    : String(rawContent||'').trim();
-}
 
 async function apiCall(content){
   const key=getApiKey();
@@ -2382,9 +2101,6 @@ function compressPhotoForAI(dataUrl){
   });
 }
 async function buildPhotoRequest(photoList){
-  return buildPhotoRequestWithPrompt(photoList,AI_PROMPT);
-}
-async function buildPhotoRequestWithPrompt(photoList,promptText){
   const list=Array.isArray(photoList)?photoList:[photoList].filter(Boolean);
   const compressed=await Promise.all(list.map(du=>compressPhotoForAI(du)));
   const content=compressed.map(c=>{
@@ -2393,69 +2109,10 @@ async function buildPhotoRequestWithPrompt(photoList,promptText){
     const data=(dataUrl.split(',')[1]||'');
     return {type:'image',source:{type:'base64',media_type:mediaType,data:data}};
   });
-  content.push({type:'text',text:promptText||AI_PROMPT});
+  content.push({type:'text',text:AI_PROMPT});
   const dimensions=(compressed||[]).map(c=>typeof c==='object'&&c.width!=null?{w:c.width,h:c.height}:null).filter(Boolean);
   const metadata={ n_photos: list.length, dimensions, max_size: PHOTO_MAX_SIZE, quality: PHOTO_JPEG_QUALITY };
   return { content, metadata };
-}
-async function recoverMissingProductName(result,photoList,source){
-  if(!result||result.nombre) return result;
-  const list=Array.isArray(photoList)?photoList:[photoList].filter(Boolean);
-  if(!list.length||!getApiKey()) return result;
-  try{
-    addLog(LOG_LEVELS.INFO,'PHOTO_NAME_RECOVERY_START','Intentando recuperar nombre de producto',{source,n_photos:list.length});
-    const { content }=await buildPhotoRequestWithPrompt(list,NAME_RECOVERY_PROMPT);
-    const resp=await apiCall(content);
-    if(!resp||!resp.ok){
-      addLog(LOG_LEVELS.WARN,'PHOTO_NAME_RECOVERY_FAIL','Recuperación de nombre no disponible',{source,status:resp?resp.status:'no_response'});
-      return result;
-    }
-    const data=await resp.json();
-    const text=extractTextFromChatPayload(data);
-    let parsed;
-    try{
-      parsed=extractJsonFromAIResponse(text);
-    }catch(_){
-      addLog(LOG_LEVELS.WARN,'PHOTO_NAME_RECOVERY_PARSE','No se pudo interpretar recuperación de nombre',{source,raw:String(text).slice(0,200)});
-      return result;
-    }
-    const recoveryRaw={
-      nombre:(parsed&&parsed.nombre)||'',
-      nombres_detectados:(parsed&&parsed.nombres_detectados)||(parsed&&parsed.candidatos_nombre)||[],
-      hallazgos_texto:(parsed&&parsed.hallazgos_texto)||[],
-      notas:(parsed&&parsed.notas)||'',
-      warning:(parsed&&parsed.warning)||''
-    };
-    const recovered=normalizeAIPhotoResult(recoveryRaw);
-    if(recovered.nombre) recovered.nombre=canonicalizeProductName(recovered.nombre);
-    const decision=resolveAIProductName(recovered);
-    if(!decision.ok||!decision.selected){
-      addLog(LOG_LEVELS.WARN,ERROR_CODES.PHOTO_NAME_UNCERTAIN,'Recuperación sin nombre fiable',{source,motivo:decision.reason,score:decision.score,candidates:decision.candidates});
-      return result;
-    }
-    result.nombre=decision.selected;
-    result.name_decision={ok:true,reason:'recovery_'+decision.reason,score:decision.score,principal:decision.principal,candidates:decision.candidates};
-    const mergedNames=[...(Array.isArray(result.nombres_detectados)?result.nombres_detectados:[]),...(Array.isArray(recovered.nombres_detectados)?recovered.nombres_detectados:[])];
-    if(mergedNames.length){
-      const seen=new Set();
-      result.nombres_detectados=mergedNames.filter(item=>{
-        const key=norm(item&&item.texto||'');
-        if(!key||seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-    }
-    if(!result.review_alerts||typeof result.review_alerts!=='object') result.review_alerts={mapeo:[],keywords:[],nombre:[]};
-    result.review_alerts.nombre=[];
-    const cleanedCurrentWarning=removeUnknownNameWarning(result.warning);
-    const cleanedRecoveryWarning=removeUnknownNameWarning(recovered.warning);
-    result.warning=cleanedCurrentWarning||cleanedRecoveryWarning||'';
-    recomputeReviewStateFromAlerts(result);
-    addLog(LOG_LEVELS.INFO,'PHOTO_NAME_RECOVERY_OK',`Nombre recuperado: ${result.nombre}`,{source,score:decision.score,candidates:decision.candidates});
-  }catch(err){
-    addLog(LOG_LEVELS.WARN,'PHOTO_NAME_RECOVERY_ERROR','Error en recuperación de nombre',{source,error:err&&err.message?err.message:String(err)});
-  }
-  return result;
 }
 
 async function analyzePhotos(photoList){
@@ -2517,8 +2174,7 @@ async function analyzePhotos(photoList){
       addAnalysisSection(analysisId,'F_decision',{decision:'error',error:'Respuesta no interpretable'}); finishPhotoAnalysis(analysisId,e);
       throw new Error('Respuesta no interpretable');
     }
-    result=await recoverMissingProductName(result,photoList,'manual_photo');
-    addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, nombres_detectados: result.nombres_detectados||[], name_decision: result.name_decision||null, alergenos: result.alergenos||[], trazas: result.trazas||[], hallazgos_texto: result.hallazgos_texto, mapeo: result.mapeo, warning: result.warning||'', normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
+    addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, alergenos: result.alergenos||[], trazas: result.trazas||[], hallazgos_texto: result.hallazgos_texto, mapeo: result.mapeo, warning: result.warning||'', normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
     addAnalysisSection(analysisId,'E_validations',{ review_alerts: result.review_alerts||null, requires_review: !!result.requires_review, quality_warning: result.warning||null });
     aiS.innerHTML='✓ Análisis completado';
     if(result.nombre){
@@ -2642,15 +2298,14 @@ async function processQueue(){
           finishPhotoAnalysis(analysisId,new Error(errorMsg));
           throw new Error(errorMsg);
         }
-        const data=await resp.json();const text=extractTextFromChatPayload(data);
+        const data=await resp.json();const text=data.choices?.[0]?.message?.content||'';
         const possibleTruncated=String(text).length>=2990;
         addAnalysisSection(analysisId,'C_raw_output',{ raw_text: String(text).slice(0,5000), length: text.length, markdown_like: /```/.test(text), possible_truncated: possibleTruncated });
         let result;try{result=parseAndValidateAI(text,'photo_queue_batch')}catch(e){
           addAnalysisSection(analysisId,'F_decision',{decision:'error',error:'parse'}); finishPhotoAnalysis(analysisId,e);
           throw new Error('parse');
         }
-        result=await recoverMissingProductName(result,pl,'photo_queue_batch');
-        addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, nombres_detectados: result.nombres_detectados||[], name_decision: result.name_decision||null, alergenos: result.alergenos||[], trazas: result.trazas||[], normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
+        addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, alergenos: result.alergenos||[], trazas: result.trazas||[], normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
         addAnalysisSection(analysisId,'E_validations',{ review_alerts: result.review_alerts||null, requires_review: !!result.requires_review });
         if(result.nombre)result.nombre=autoCorrectName(result.nombre);
         if(result.warning){
@@ -2786,7 +2441,7 @@ async function autoProcessPhoto(dataUrl){
       const err=await resp.json().catch(()=>({}));
       throw new Error(err.error?.message||errorMsg);
     }
-    const data=await resp.json();const text=extractTextFromChatPayload(data);
+    const data=await resp.json();const text=data.choices?.[0]?.message?.content||'';
     const possibleTruncated=String(text).length>=2990;
     addAnalysisSection(analysisId,'C_raw_output',{ raw_text: String(text).slice(0,5000), length: text.length, markdown_like: /```/.test(text), possible_truncated: possibleTruncated });
     let result;
@@ -2798,8 +2453,7 @@ async function autoProcessPhoto(dataUrl){
       showErrorModal('Automático','Respuesta de IA no válida',dataUrl,ERROR_CODES.JSON_PARSE_ERROR);
       throw new Error('parse');
     }
-    result=await recoverMissingProductName(result,[dataUrl],'auto_flow');
-    addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, nombres_detectados: result.nombres_detectados||[], name_decision: result.name_decision||null, alergenos: result.alergenos||[], trazas: result.trazas||[], normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
+    addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, alergenos: result.alergenos||[], trazas: result.trazas||[], normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
     addAnalysisSection(analysisId,'E_validations',{ review_alerts: result.review_alerts||null, requires_review: !!result.requires_review });
     if(result.nombre)result.nombre=autoCorrectName(result.nombre);
     const allA=sortAllergens([...new Set([...(result.alergenos||[]),...(result.trazas||[])])].filter(a=>AL.includes(a)));
@@ -2851,8 +2505,7 @@ async function autoProcessPhoto(dataUrl){
     }else{
       addAnalysisSection(analysisId,'F_decision',{decision:'no_guardar',motivo:'sin_nombre'});
       finishPhotoAnalysis(analysisId);
-      const noNameReason=String(result.warning||'').trim()||'No se detectó nombre del producto';
-      showErrorModal('Automático',noNameReason,dataUrl,ERROR_CODES.PHOTO_NO_NAME);
+      showErrorModal('Automático','No se detectó nombre del producto',dataUrl,ERROR_CODES.PHOTO_NO_NAME);
     }
   }catch(err){
     aiS.innerHTML='Error: '+err.message+' — Haz clic para reintentar';
@@ -3130,7 +2783,7 @@ async function processBatch(){
       }
 
       const data=await resp.json();
-      const text=extractTextFromChatPayload(data);
+      const text=data.choices?.[0]?.message?.content||'';
       const possibleTruncated=String(text).length>=2990;
       addAnalysisSection(analysisId,'C_raw_output',{ raw_text: String(text).slice(0,5000), length: text.length, markdown_like: /```/.test(text), possible_truncated: possibleTruncated });
       let result;
@@ -3143,9 +2796,8 @@ async function processBatch(){
         finishPhotoAnalysis(analysisId,e);
         throw new Error(errorMsg);
       }
-      result=await recoverMissingProductName(result,[dataUrl],'lote');
 
-      addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, nombres_detectados: result.nombres_detectados||[], name_decision: result.name_decision||null, alergenos: result.alergenos||[], trazas: result.trazas||[], normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
+      addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, alergenos: result.alergenos||[], trazas: result.trazas||[], normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
       addAnalysisSection(analysisId,'E_validations',{ review_alerts: result.review_alerts||null, requires_review: !!result.requires_review });
 
       if(result.nombre){
@@ -3153,7 +2805,7 @@ async function processBatch(){
         productName=result.nombre;
       }else{
         errorCode=ERROR_CODES.PHOTO_NO_NAME;
-        errorMsg=String(result.warning||'').trim()||'No se detectó nombre del producto';
+        errorMsg='No se detectó nombre del producto';
         addAnalysisSection(analysisId,'F_decision',{decision:'no_guardar',motivo:'sin_nombre'});
         finishPhotoAnalysis(analysisId);
         throw new Error(errorMsg);
