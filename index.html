@@ -404,6 +404,12 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <button class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section">
+    <h3>🔍 Revisión de incoherencias</h3>
+    <div class="settings-info">Analiza toda la base de datos para detectar alérgenos que probablemente faltan o que parecen incorrectos. Usa reglas locales e inteligencia artificial.</div>
+    <button class="save-btn" id="auditRunBtn" style="background:var(--warm8)">Ejecutar revisión de incoherencias</button>
+    <div id="auditLastRun" style="font-size:11px;color:var(--text2);margin-top:8px;display:none"></div>
+  </div>
+  <div class="settings-section">
     <h3>📝 Registro de diagnóstico</h3>
     <div class="settings-info" style="margin-bottom:6px">Estado de la app y registro de lo que haces: <strong>sincronización</strong> (inicio, fin, subida/descarga, errores), <strong>revisión de incoherencias</strong>, guardados, fusiones, altas manuales, importación Excel y errores. Exporta o copia para auditoría.</div>
     <div id="appStatus"></div>
@@ -412,12 +418,6 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
       <button class="save-btn" id="copyLogsBtn">📋 Copiar diagnóstico completo</button>
       <button class="save-btn" id="clearLogsBtn" style="background:var(--warm8-40)">🗑️ Limpiar registro</button>
     </div>
-  </div>
-  <div class="settings-section">
-    <h3>🔍 Revisión de incoherencias</h3>
-    <div class="settings-info">Analiza toda la base de datos para detectar alérgenos que probablemente faltan o que parecen incorrectos. Usa reglas locales e inteligencia artificial.</div>
-    <button class="save-btn" id="auditRunBtn" style="background:var(--warm8)">Ejecutar revisión de incoherencias</button>
-    <div id="auditLastRun" style="font-size:11px;color:var(--text2);margin-top:8px;display:none"></div>
   </div>
   <button class="logout-btn" id="logoutBtn">Cerrar sesión</button>
 </div></div>
@@ -554,6 +554,12 @@ settingsBg.addEventListener('click',e=>{if(e.target===settingsBg)closeSettings()
 window.addEventListener('popstate',()=>{
   const state=history.state;
   if(!state||!state.app){
+    if(!confirm('¿Desea salir?')){
+      history.pushState({app:true,stack:['main']},'',APP_ENTRY_URL||window.location.href.replace(/#.*$/,''));
+      applyNavStack(['main']);
+      return;
+    }
+    window.close();
     if(APP_ENTRY_URL) window.location.href=APP_ENTRY_URL;
     return;
   }
@@ -3557,13 +3563,6 @@ if(gdriveToken&&checkSession()){
     }
   });
 }
-
-// Auto-sync cuando el usuario vuelve a la pestaña
-document.addEventListener('visibilitychange', () => {
-  if(document.visibilityState === 'visible' && gdriveToken && navigator.onLine) {
-    setTimeout(() => gdriveSmartSync('foreground'), 1000);
-  }
-});
 
 // Init
 if(checkSession()){render();updateGDriveUI();updateSyncStatusUI();if(photoQueue.length&&navigator.onLine&&getApiKey())setTimeout(processQueue,1000)}
