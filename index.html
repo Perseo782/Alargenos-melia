@@ -204,7 +204,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">V27.02.26h20:40</div>
+    <div class="login-version">V27.02.26h20:57</div>
   </div>
 </div>
 
@@ -2037,10 +2037,23 @@ function handleImg(e){
 }
 
 analyzeBtn.addEventListener('click',()=>{
-  const key=getApiKey();
-  if(!key){showToast('Configura la clave API en Ajustes (⚙)','info');return}
+  const vKey=getVisionApiKey();
+  if(!vKey){
+    showToast('Configura la API Key de Google (campo de Drive) en Ajustes (⚙)','info');
+    return;
+  }
   const pl=photos.filter(Boolean);
-  if(!navigator.onLine){photoQueue.push({photos:pl,timestamp:Date.now()});saveQueue();updateQueueBar();showToast(`📷 ${pl.length} foto(s) en cola`,'queue');document.getElementById('aiStatus').innerHTML='Sin conexión — fotos en cola.';document.getElementById('aiStatus').classList.add('show');return}
+  if(!pl.length){
+    showToast('No hay ninguna foto cargada','info');
+    return;
+  }
+  if(!navigator.onLine){
+    const aiS=document.getElementById('aiStatus');
+    aiS.innerHTML='Sin conexión — la lectura de foto con Google Vision necesita internet.';
+    aiS.classList.add('show');
+    showToast('Sin conexión — no se puede analizar la foto ahora','info');
+    return;
+  }
   analyzePhotos(pl);
 });
 
