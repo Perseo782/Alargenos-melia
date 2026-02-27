@@ -204,7 +204,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v 27 02 2026 15:50</div>
+    <div class="login-version">V27.02.26h20:40</div>
   </div>
 </div>
 
@@ -948,6 +948,84 @@ document.addEventListener('DOMContentLoaded',()=>{
 });
 
 function getApiKey(){return localStorage.getItem('alerg_apikey')||''}
+function getVisionApiKey(){return localStorage.getItem('gdrive_api_key')||''}
+
+function extractTextFromVisionResponse(data){
+  try{
+    const responses = (data && data.responses) || [];
+    let text = '';
+    responses.forEach(r=>{
+      if(r && r.fullTextAnnotation && r.fullTextAnnotation.text){
+        text += (text ? '\n\n' : '') + r.fullTextAnnotation.text;
+      }else if(Array.isArray(r && r.textAnnotations) && r.textAnnotations.length){
+        text += (text ? '\n\n' : '') + (r.textAnnotations[0].description || '');
+      }
+    });
+    return String(text || '').trim();
+  }catch(_){
+    return '';
+  }
+}
+
+function buildResultFromOcrText(rawText){
+  const text=String(rawText||'').replace(/\r/g,'');
+  const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
+  let nombre='';
+  for(const line of lines){
+    const low=line.toLowerCase();
+    if(low.includes('ingrediente')||low.includes('alérgen')||low.includes('alergen')||low.includes('allergen')) continue;
+    if(line.length>=3&&line.length<=80){nombre=line;break;}
+  }
+  if(!nombre) nombre=lines[0]||'';
+
+  const hallazgos_texto=[];
+  const alergenos=new Set();
+  const trazas=new Set();
+  const mapeo=[];
+
+  const ALLERGEN_RULES=[
+    {allergen:'CEREALES',rx:[/gluten/i,/trig/i,/trigo/i,/cebad/i,/avena/i,/centen/i]},
+    {allergen:'LÁCTEO',rx:[/leche/i,/lácte/i,/lactos/i,/suero/i,/queso/i,/mantequill/i]},
+    {allergen:'HUEVO',rx:[/huevo/i,/huevos/i,/egg/i,/ovoalb/i]},
+    {allergen:'FRUTOS SECOS',rx:[/almendr/i,/nuez/i,/avellan/i,/pistach/i,/anacard/i,/frutos?\s+secos?/i]},
+    {allergen:'CACAHUETES',rx:[/cacahuet[ea]/i,/peanut/i,/man[ií]/i]},
+    {allergen:'SOJA',rx:[/soja/i,/soy/i,/edamame/i,/miso/i,/tofu/i]},
+    {allergen:'SÉSAMO',rx:[/sésam/i,/sesam/i,/tahin[ií]/i]},
+    {allergen:'APIO',rx:[/apio/i,/celery/i,/céleri/i]},
+    {allergen:'MOSTAZA',rx:[/mostaz/i,/mustard/i]},
+    {allergen:'SULFITOS',rx:[/sulfit/i,/anhídrido\s+sulfuroso/i,/anhidrido\s+sulfuroso/i,/e22[0-8]/i]},
+    {allergen:'PESCADO',rx:[/pescad/i,/atun/i,/atún/i,/salmon/i,/salmón/i,/bacalao/i,/merluza/i]},
+    {allergen:'CRUSTÁCEOS',rx:[/crustac[eé]o/i,/gamb[ao]/i,/langost/i,/marisc/i]},
+    {allergen:'MOLUSCO',rx:[/mejillon/i,/mejillón/i,/almej/i,/pulpo/i,/calamar/i,/molusc/i]},
+    {allergen:'ALTRAMUZ',rx:[/altramuz/i,/lupin/i]}
+  ];
+
+  lines.forEach(line=>{
+    const low=line.toLowerCase();
+    const isAllergenLine=/al[ée]rgenos?/i.test(line)||/allergen/i.test(line)||/contiene/i.test(line)||/puede contener/i.test(line)||/trazas/i.test(line);
+    if(!isAllergenLine) return;
+    hallazgos_texto.push(line);
+    const isTrace=/puede contener|trazas/i.test(low);
+    ALLERGEN_RULES.forEach(rule=>{
+      const hit=rule.rx.find(rx=>rx.test(line));
+      if(hit){
+        if(isTrace)trazas.add(rule.allergen);
+        else alergenos.add(rule.allergen);
+        mapeo.push({texto:line,alergeno:rule.allergen});
+      }
+    });
+  });
+
+  return{
+    nombre,
+    hallazgos_texto,
+    mapeo,
+    alergenos:[...alergenos],
+    trazas:[...trazas],
+    notas:'',
+    warning:''
+  };
+}
 
 // ─── AUTOCORRECT ───
 const ACCENT_MAP={
@@ -1405,127 +1483,6 @@ const q=document.getElementById('q'),xb=document.getElementById('xb'),ls=documen
 
 function norm(s){return s.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim()}
 function tokenize(s){return norm(s).split(' ').filter(w=>w.length>2)}
-const NAME_UNKNOWN_WARNING='No se reconoce el nombre del producto';
-const NAME_STOP_WORDS=new Set(['con','sin','para','por','del','las','los','una','uno','unos','unas','tipo','estilo','gran','mini','extra']);
-const NAME_FOOD_HINT_TOKENS=new Set([
-  'aceituna','aceitunas','aceite','salmuera','encurtido','encurtidos','conserva','conservas','verdial','verdiales','hueso','partida','partidas','alinada','alinadas',
-  'arroz','pasta','fideo','fideos','fideua','macarron','macarrones','espagueti','espaguetis','lenteja','lentejas','garbanzo','garbanzos','alubia','alubias','judia','judias',
-  'pan','bolleria','galleta','galletas','bizcocho','cereal','cereales','harina','salsa','sopa','sopas','caldo','pure','crema',
-  'verdura','verduras','hortaliza','hortalizas','fruta','frutas','tomate','tomates','patata','patatas','papa','papas',
-  'queso','leche','yogur','yogurt','mantequilla','nata','huevo','huevos','mayonesa',
-  'atun','salmon','bacalao','merluza','pescado','marisco','calamar','pulpo','mejillon','mejillones',
-  'pollo','pavo','carne','ternera','cerdo','jamon','chorizo','salchicha','hamburguesa','albondiga','albondigas','croqueta','croquetas',
-  'chocolate','cacao','cafe','infusion','te'
-]);
-const NAME_PERSON_TOKENS=new Set(['rafael','antonio','jose','maria','manuel','david','juan','francisco','carlos','luis','miguel','pedro','javier','isabel','ana','laura','lucia','marta','sofia','pablo','diego','alberto','fernando','roberto','sergio','andres','cristina','paula','carmen','alicia','raquel','eva','silvia','jorge','raul','oscar','lola']);
-const NAME_NONFOOD_TOKENS=new Set(['ingredientes','contiene','trazas','presencia','fortuita','lote','caducidad','consumo','preferente','fabricado','envasado','direccion','telefono','nutricional','energia','proteinas','hidratos','grasas','sal']);
-const NAME_ALLERGEN_TOKENS=new Set(['apio','soja','sesamo','mostaza','sulfitos','pescado','molusco','moluscos','huevo','huevos','lacteo','lacteos','cereales','cacahuete','cacahuetes','altramuces','altramuz','crustaceos','crustaceo']);
-const NAME_NONFOOD_PATTERNS=[/\b(el|la)\s+secreto\s+de\b/i,/\b(edicion|coleccion|collection|serie)\b/i,/\b(www|http|instagram|facebook)\b/i,/\b(s\.?l\.?|s\.?a\.?)\b/i];
-function cleanNameCandidateText(text){
-  let s=String(text||'').replace(/[\n\r\t]+/g,' ').replace(/\s+/g,' ').trim();
-  if(!s) return '';
-  s=s.replace(/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ\s]{2,30}:\s*/,'');
-  s=s.replace(/^[\-\u2022*•·]+/,'').trim();
-  s=s.replace(/[.,;:]+$/,'').trim();
-  s=s.replace(/\s{2,}/g,' ');
-  return canonicalizeProductName(s);
-}
-function getCommonDbFoodTokens(){
-  const counts=new Map();
-  if(!Array.isArray(P)) return new Set();
-  P.forEach(item=>{
-    const toks=[...new Set(tokenize((item&&item.n)||''))];
-    toks.forEach(t=>{
-      if(t.length<4) return;
-      if(NAME_STOP_WORDS.has(t)||NAME_NONFOOD_TOKENS.has(t)||NAME_PERSON_TOKENS.has(t)||NAME_ALLERGEN_TOKENS.has(t)) return;
-      counts.set(t,(counts.get(t)||0)+1);
-    });
-  });
-  const out=new Set();
-  counts.forEach((n,t)=>{if(n>=2)out.add(t)});
-  return out;
-}
-function extractNameCandidates(result){
-  const seen=new Set();
-  const out=[];
-  const push=(raw,source)=>{
-    const cleaned=cleanNameCandidateText(raw);
-    if(!cleaned||cleaned.length<3||cleaned.length>90) return;
-    const key=norm(cleaned);
-    if(!key||seen.has(key)) return;
-    seen.add(key);
-    out.push({text:cleaned,source});
-  };
-  push(result&&result.nombre,'primary');
-  push(result&&result.notas,'notas');
-  (Array.isArray(result&&result.hallazgos_texto)?result.hallazgos_texto:[]).forEach(txt=>{
-    String(txt||'').split(/[;|]/).forEach(seg=>push(seg,'hallazgo'));
-  });
-  (Array.isArray(result&&result.mapeo)?result.mapeo:[]).forEach(m=>push(m&&m.texto,'mapeo'));
-  return out;
-}
-function evaluateNameCandidate(candidate,commonDbTokens){
-  const tokens=[...new Set(tokenize(candidate.text).filter(t=>!NAME_STOP_WORDS.has(t)))];
-  if(!tokens.length) return {...candidate,score:-99,foodSignal:false};
-  const dbHits=tokens.filter(t=>commonDbTokens.has(t));
-  const foodHits=tokens.filter(t=>NAME_FOOD_HINT_TOKENS.has(t));
-  const hasPerson=tokens.some(t=>NAME_PERSON_TOKENS.has(t));
-  const hasNonFood=tokens.some(t=>NAME_NONFOOD_TOKENS.has(t));
-  const allergenOnly=tokens.every(t=>NAME_ALLERGEN_TOKENS.has(t));
-  const patternPenalty=NAME_NONFOOD_PATTERNS.some(rx=>rx.test(candidate.text));
-  const isVeryShortGeneric=tokens.length<=2&&foodHits.length>=1&&dbHits.length===0;
-  let score=0;
-  if(candidate.source==='primary') score+=1;
-  if(candidate.source==='hallazgo'||candidate.source==='notas') score+=0.5;
-  if(foodHits.length) score+=3;
-  if(dbHits.length) score+=Math.min(2,dbHits.length);
-  if(tokens.length>=2&&tokens.length<=8) score+=1;
-  if(tokens.length===1&&!foodHits.length&&!dbHits.length) score-=2;
-  if(tokens.length>9) score-=2;
-  if(hasPerson&&!foodHits.length&&!dbHits.length) score-=5;
-  if(hasNonFood) score-=2;
-  if(allergenOnly) score-=4;
-  if(patternPenalty&&!foodHits.length) score-=3;
-  if(isVeryShortGeneric) score-=1;
-  if(/[0-9]/.test(candidate.text)) score-=1;
-  const foodSignal=(foodHits.length>0||dbHits.length>0)&&!allergenOnly&&!(hasPerson&&!foodHits.length&&!dbHits.length);
-  return {...candidate,score,foodSignal,tokens,foodHits:foodHits.length,dbHits:dbHits.length,isVeryShortGeneric};
-}
-function chooseSpecificVariant(best,ranked){
-  if(!best) return best;
-  let chosen=best;
-  const baseTokens=new Set(best.tokens||[]);
-  const bestNorm=norm(best.text||'');
-  const descriptorRx=/\b(con|sin|partid|aliñ|rellen|salmuera|sabor|estilo|marinad|trocead|entera|enteras)\b/i;
-  ranked.forEach(c=>{
-    if(!c||c===best) return;
-    if(!c.foodSignal) return;
-    if(c.score < (best.score-1)) return;
-    if((c.tokens||[]).length <= (best.tokens||[]).length) return;
-    const cNorm=norm(c.text||'');
-    const baseIsPrefix=bestNorm&&cNorm.startsWith(bestNorm+' ');
-    const isSuperset=[...baseTokens].every(t=>c.tokens.includes(t));
-    const hasDescriptor=descriptorRx.test(cNorm);
-    if((baseIsPrefix || (isSuperset&&hasDescriptor)) && c.text.length>chosen.text.length){
-      chosen=c;
-    }
-  });
-  return chosen;
-}
-function resolveProductNameForFood(result){
-  const candidates=extractNameCandidates(result);
-  if(!candidates.length) return {name:'',reason:'sin_candidatos',best:null};
-  const commonDbTokens=getCommonDbFoodTokens();
-  const ranked=candidates.map(c=>evaluateNameCandidate(c,commonDbTokens)).sort((a,b)=>{
-    if(b.score!==a.score) return b.score-a.score;
-    if((b.foodSignal?1:0)!==(a.foodSignal?1:0)) return (b.foodSignal?1:0)-(a.foodSignal?1:0);
-    if((b.source==='primary'?1:0)!==(a.source==='primary'?1:0)) return (b.source==='primary'?1:0)-(a.source==='primary'?1:0);
-    return b.text.length-a.text.length;
-  });
-  const best=chooseSpecificVariant(ranked[0],ranked);
-  if(best&&best.foodSignal&&best.score>=3) return {name:best.text,reason:'ok',best};
-  return {name:'',reason:'sin_nombre_comida',best};
-}
 const PHOTO_KEYWORD_RULES=[
   {rx:[/crust/i,/gamb/i,/langost/i,/bogavant/i,/cigala/i,/marisc/i], allergen:'CRUSTÁCEOS', level:'high'},
   {rx:[/lech/i,/lacte/i,/suero/i,/casein/i,/mantequill/i], allergen:'LÁCTEO', level:'high'},
@@ -1543,124 +1500,6 @@ const PHOTO_KEYWORD_RULES=[
   {rx:[/altramu/i,/lupino/i], allergen:'ALTRAMUZ', level:'high'},
   {rx:[/e322/i], allergen:'SOJA', level:'info'}
 ];
-const SULFITE_E_CODES=new Set(['E220','E221','E222','E223','E224','E225','E226','E227','E228']);
-const SULFITE_TEXT_EVIDENCE_RX=[/\bsulfitos?\b/i,/\bdi[oó]xido\s+de\s+azufre\b/i,/\banh[ií]drido\s+sulfuroso\b/i];
-const LECITHIN_TEXT_EVIDENCE_RX=[/\blecitin(?:a|as)\b/i,/\blecithin(?:s)?\b/i];
-const SOY_TEXT_EVIDENCE_RX=[/\bde\s+soj[ae]\b/i,/\bsoj[ae]\b/i,/\bsoybean\b/i,/\bsoy\b/i];
-const SOY_DERIVATIVE_EVIDENCE_RX=[/\btofu\b/i,/\bmiso\b/i,/\bedamame\b/i];
-
-function extractECodes(text){
-  const codes=new Set();
-  const src=String(text||'');
-  if(!src) return [];
-  const rx=/\be[\s-]?(\d{3,4})\b/gi;
-  let m;
-  while((m=rx.exec(src))!==null) codes.add(`E${m[1]}`);
-  return [...codes];
-}
-function isSulfiteECode(code){
-  return SULFITE_E_CODES.has(String(code||'').toUpperCase());
-}
-function extractDiagnosticEvidenceTexts(result,rawText){
-  const texts=[];
-  const push=v=>{
-    const s=String(v||'').trim();
-    if(s) texts.push(s);
-  };
-  (Array.isArray(result&&result.hallazgos_texto)?result.hallazgos_texto:[]).forEach(push);
-  (Array.isArray(result&&result.mapeo)?result.mapeo:[]).forEach(m=>push(m&&m.texto));
-  push(result&&result.notas);
-  if(!texts.length){
-    const raw=String(rawText||'').trim();
-    if(raw){
-      try{
-        const parsed=extractJsonFromAIResponse(raw);
-        (Array.isArray(parsed&&parsed.hallazgos_texto)?parsed.hallazgos_texto:[]).forEach(push);
-        (Array.isArray(parsed&&parsed.mapeo)?parsed.mapeo:[]).forEach(m=>push(m&&m.texto));
-        push(parsed&&parsed.notas);
-      }catch(_){
-        push(raw);
-      }
-    }
-  }
-  return texts;
-}
-function removeAllergenFromResult(result,allergen){
-  const target=normalizeAllergen(allergen);
-  if(!target) return false;
-  let removed=false;
-  const drop=arr=>{
-    if(!Array.isArray(arr)) return [];
-    const next=arr.filter(a=>normalizeAllergen(a)!==target);
-    if(next.length!==arr.length) removed=true;
-    return next;
-  };
-  result.alergenos=drop(result.alergenos);
-  result.trazas=drop(result.trazas);
-  return removed;
-}
-function isNeutralOnlyENumberText(text){
-  const src=String(text||'');
-  const eCodes=extractECodes(src);
-  if(!eCodes.length) return false;
-  if(eCodes.some(isSulfiteECode)) return false;
-  const compact=norm(src)
-    .replace(/e\s*\d{3,4}/g,' ')
-    .replace(/\b(y|e|o|and|or)\b/g,' ')
-    .replace(/\s+/g,' ')
-    .trim();
-  return compact.length===0;
-}
-function isOnlyE322OrLecithinText(text){
-  const src=String(text||'');
-  if(!src) return false;
-  if(SOY_TEXT_EVIDENCE_RX.some(rx=>rx.test(src))||SOY_DERIVATIVE_EVIDENCE_RX.some(rx=>rx.test(src))) return false;
-  const eCodes=extractECodes(src);
-  const hasOnlyE322=eCodes.length>0&&eCodes.every(c=>c==='E322');
-  const hasLecithin=LECITHIN_TEXT_EVIDENCE_RX.some(rx=>rx.test(src));
-  if(!hasOnlyE322&&!hasLecithin) return false;
-  const compact=norm(src)
-    .replace(/e\s*322/g,' ')
-    .replace(/\b(lecitin(a|as|e|es)|lecithin(s)?)\b/g,' ')
-    .replace(/\b(y|e|o|and|or|emulgente|emulgentes)\b/g,' ')
-    .replace(/\s+/g,' ')
-    .trim();
-  return compact.length===0;
-}
-function applyENumberFalsePositivePatch(result,rawText,source){
-  const evidenceTexts=extractDiagnosticEvidenceTexts(result,rawText);
-  const combinedEvidence=evidenceTexts.join(' ');
-  const detectedECodes=[...new Set(evidenceTexts.flatMap(extractECodes))].sort((a,b)=>Number(a.slice(1))-Number(b.slice(1)));
-  const sulfiteECodes=detectedECodes.filter(isSulfiteECode);
-  const hasSulfiteTextEvidence=SULFITE_TEXT_EVIDENCE_RX.some(rx=>rx.test(combinedEvidence));
-  const hasSulfiteEvidence=hasSulfiteTextEvidence||sulfiteECodes.length>0;
-  const hasSulfitosMarked=[...(result.alergenos||[]),...(result.trazas||[])].some(a=>normalizeAllergen(a)==='SULFITOS');
-  if(hasSulfitosMarked&&!hasSulfiteEvidence&&removeAllergenFromResult(result,'SULFITOS')){
-    addLog(LOG_LEVELS.WARN,'E_CODE_FALSE_POSITIVE_REMOVED','SULFITOS eliminado sin evidencia textual ni E220-E228',{
-      source,
-      removed_allergen:'SULFITOS',
-      detected_e_codes:detectedECodes,
-      reason:'SULFITOS sin evidencia textual ni E220-E228'
-    });
-  }
-  const hasE322=detectedECodes.includes('E322');
-  const hasLecithin=LECITHIN_TEXT_EVIDENCE_RX.some(rx=>rx.test(combinedEvidence));
-  const hasSoyEvidence=SOY_TEXT_EVIDENCE_RX.some(rx=>rx.test(combinedEvidence))||SOY_DERIVATIVE_EVIDENCE_RX.some(rx=>rx.test(combinedEvidence));
-  if((hasE322||hasLecithin)&&!hasSoyEvidence){
-    const hasMappedSoyFromOtherText=(Array.isArray(result.mapeo)?result.mapeo:[]).some(m=>{
-      if(normalizeAllergen(m&&m.alergeno)!=='SOJA') return false;
-      return !isOnlyE322OrLecithinText(m&&m.texto);
-    });
-    if(!hasMappedSoyFromOtherText&&removeAllergenFromResult(result,'SOJA')){
-      addLog(LOG_LEVELS.WARN,'E322_AMBIGUOUS_NO_SOY','SOJA eliminada por E322/lecitina sin evidencia explícita de soja',{
-        source,
-        removed_allergen:'SOJA',
-        detected_e_codes:detectedECodes,
-        reason:'E322/lecitina sin "de soja" ni evidencia explícita de soja'
-      });
-    }
-  }
-}
 
 function normalizeAllergen(s){
   const t=String(s||'').trim();
@@ -1713,24 +1552,10 @@ function parseAndValidateAI(rawText,source='photo'){
     throw e;
   }
   const result=normalizeAIPhotoResult(parsed);
-  const nameResolved=resolveProductNameForFood(result);
-  if(nameResolved.name){
-    if(norm(nameResolved.name)!==norm(result.nombre||'')){
-      addLog(LOG_LEVELS.INFO,'PHOTO_NAME_RESOLVED',`Nombre corregido: ${result.nombre||'vacío'} -> ${nameResolved.name}`,{source,reason:nameResolved.reason});
-    }
-    result.nombre=nameResolved.name;
-  }else{
-    const discarded=result.nombre||'';
-    result.nombre='';
-    if(!result.warning) result.warning=NAME_UNKNOWN_WARNING;
-    addLog(LOG_LEVELS.WARN,'PHOTO_NAME_FILTERED',`Nombre descartado: ${discarded||'vacío'}`,{source,reason:nameResolved.reason,best:nameResolved.best?{text:nameResolved.best.text,score:nameResolved.best.score,foodSignal:nameResolved.best.foodSignal}:null});
-  }
-  applyENumberFalsePositivePatch(result,rawText,source);
   addLog('INFO','PHOTO_PARSED_RESULT','PHOTO_PARSED_RESULT',{source,parsed:{nombre:result.nombre,hallazgos_texto:result.hallazgos_texto,mapeo:result.mapeo,alergenos:result.alergenos,trazas:result.trazas,warning:result.warning||''}});
   const alergSet=new Set([...(result.alergenos||[]),...(result.trazas||[])].map(normalizeAllergen));
   const mapeoDiff=[];
   result.hallazgos_texto.forEach(txt=>{
-    if(isNeutralOnlyENumberText(txt)) return;
     const key=norm(txt);
     const exact=result.mapeo.filter(m=>norm(m.texto)===key).map(m=>m.alergeno).filter(Boolean);
     const byContains=result.mapeo.filter(m=>key.includes(norm(m.texto))||norm(m.texto).includes(key)).map(m=>m.alergeno).filter(Boolean);
@@ -2257,8 +2082,6 @@ PASO 3 — VERIFICACIÓN
 Revisa que no hayas omitido ningún alérgeno o traza que SÍ aparezca escrito en la imagen. Inclúyelos todos en hallazgos_texto, mapeo, alergenos y/o trazas.
 
 NOMBRE DEL PRODUCTO: Usa el nombre tal como aparece en el envase (título principal en español). Respeta mayúsculas de la primera letra de cada palabra significativa (ej.: "Salteado rústico - Mezcla de verduras"). No inventes ni reordenes.
-- Devuelve la denominación MÁS ESPECÍFICA visible para diferenciar variantes (ej.: "con hueso", "partidas", "aliñadas", "rellenas", "en salmuera", etc.) cuando aparezcan en la etiqueta.
-- No devuelvas una versión recortada/generica si se ve una denominación más completa (ej.: si aparece "Aceitunas verdes con hueso partidas aliñadas", NO devolver solo "Aceitunas verdes").
 
 ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
 - Incluye SOLO lo que esté EXPLÍCITAMENTE escrito (ingredientes, "puede contener", "presencia fortuita", etc.).
@@ -2372,99 +2195,106 @@ async function buildPhotoRequest(photoList){
 
 async function analyzePhotos(photoList){
   analysisAborted=false;
-  if(window.__lastAnalysisId && typeof finishPhotoAnalysis==='function'){
-    const prev=(typeof diagnosticAnalyses!=='undefined'&&diagnosticAnalyses)||[];
-    const a=prev.find(x=>x.analysis_id===window.__lastAnalysisId);
-    if(a && !a.finished_at){ addAnalysisSection(window.__lastAnalysisId,'F_decision',{decision:'no_guardar',motivo:'nuevo_análisis_sin_guardar'}); finishPhotoAnalysis(window.__lastAnalysisId); }
-  }
   const aiS=document.getElementById('aiStatus'),aiR=document.getElementById('aiResult');
   aiS.innerHTML='<span class="spinner"></span> Preparando imagen…';aiS.classList.add('show');aiR.classList.remove('show');hideMatch('aiMatch');aiCurrentMatch=null;
-  const { content, metadata }=await buildPhotoRequest(photoList);
-  if(analysisAborted){aiS.innerHTML='❌ Análisis cancelado';return;}
-  const { analysisId }=startPhotoAnalysis('manual',Array.isArray(photoList)?photoList.length:1,metadata);
-  addAnalysisSection(analysisId,'B_input',{ dimensions: metadata.dimensions });
-  aiS.innerHTML='<span class="spinner"></span> Enviando y analizando…';
+
+  const list=Array.isArray(photoList)?photoList.filter(Boolean):[photoList].filter(Boolean);
+  if(!list.length){aiS.innerHTML='No hay fotos para analizar';return;}
+
+  const visionKey=getVisionApiKey();
+  if(!visionKey){
+    aiS.innerHTML='Configura la API Key de Google (campo de Drive) en Ajustes.';
+    return;
+  }
+
   try{
-    const resp=await apiCall(content);
+    const compressed=await Promise.all(list.map(du=>compressPhotoForAI(du)));
+    if(analysisAborted){aiS.innerHTML='❌ Análisis cancelado';return;}
+
+    aiS.innerHTML='<span class="spinner"></span> Enviando y analizando…';
+
+    const images=compressed.map(c=>{
+      const dataUrl=typeof c==='object'&&c.dataUrl!=null?c.dataUrl:c;
+      return (String(dataUrl||'').split(',')[1]||'').trim();
+    }).filter(Boolean);
+
+    if(!images.length){
+      aiS.innerHTML='No se pudo preparar la imagen para analizar';
+      return;
+    }
+
+    const body={
+      requests:images.map(img=>({
+        image:{content:img},
+        features:[{type:'DOCUMENT_TEXT_DETECTION'}],
+        imageContext:{languageHints:['es','en','fr','de']}
+      }))
+    };
+
+    const resp=await fetch('https://vision.googleapis.com/v1/images:annotate?key='+encodeURIComponent(visionKey),{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body)
+    });
 
     if(analysisAborted){
       aiS.innerHTML='❌ Análisis cancelado';
-      addLog(LOG_LEVELS.INFO,'ANALYSIS_CANCELLED','Usuario canceló análisis',{});
-      addAnalysisSection(analysisId,'F_decision',{decision:'no_guardar',motivo:'cancelado'}); finishPhotoAnalysis(analysisId);
       return;
     }
 
     if(!resp.ok){
-      let errorCode,errorMsg;
-      if(resp.status===401){
-        errorCode=ERROR_CODES.API_AUTH_FAILED;
-        errorMsg='Clave API inválida';
-      }else if(resp.status===429){
-        errorCode=ERROR_CODES.API_RATE_LIMIT;
-        errorMsg='Límite de llamadas alcanzado';
-      }else if(resp.status>=500){
-        errorCode=ERROR_CODES.API_SERVER_ERROR;
-        errorMsg=`Error del servidor (${resp.status})`;
-      }else{
-        errorCode=ERROR_CODES.API_INVALID_RESPONSE;
-        errorMsg=`Error HTTP ${resp.status}`;
-      }
-      addLog(LOG_LEVELS.ERROR,errorCode,`Error en análisis de foto: ${errorMsg}`,{status:resp.status});
-      addAnalysisSection(analysisId,'F_decision',{decision:'error',error:errorMsg}); finishPhotoAnalysis(analysisId,new Error(errorMsg));
-      const err=await resp.json().catch(()=>({}));
-      throw new Error(err.error?.message||errorMsg);
+      const msg='Error Vision ('+resp.status+')';
+      aiS.innerHTML='Error: '+msg;
+      return;
     }
+
     const data=await resp.json();
-    const rawContent=data.choices?.[0]?.message?.content;
-    const text=Array.isArray(rawContent)
-      ? rawContent.map(p=>p&&p.type==='text'?p.text:'').join('').trim()
-      : (rawContent||'').trim();
-    const possibleTruncated=text.length>=2990;
-    addAnalysisSection(analysisId,'C_raw_output',{ raw_text: String(text).slice(0,5000), length: text.length, markdown_like: /```/.test(text), possible_truncated: possibleTruncated });
-    let result;
-    try{
-      result=parseAndValidateAI(text,'manual_photo');
-    }catch(e){
-      addLog(LOG_LEVELS.ERROR,ERROR_CODES.JSON_PARSE_ERROR,'Respuesta de IA no válida',{response:String(text).substring(0,150)});
-      addAnalysisSection(analysisId,'F_decision',{decision:'error',error:'Respuesta no interpretable'}); finishPhotoAnalysis(analysisId,e);
-      throw new Error('Respuesta no interpretable');
+    const ocrText=extractTextFromVisionResponse(data);
+    if(!ocrText){
+      aiS.innerHTML='No se pudo leer texto en la etiqueta';
+      return;
     }
-    addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, alergenos: result.alergenos||[], trazas: result.trazas||[], hallazgos_texto: result.hallazgos_texto, mapeo: result.mapeo, warning: result.warning||'', normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
-    addAnalysisSection(analysisId,'E_validations',{ review_alerts: result.review_alerts||null, requires_review: !!result.requires_review, quality_warning: result.warning||null });
+
+    const rawResult=buildResultFromOcrText(ocrText);
+    const result=normalizeAIPhotoResult(rawResult);
+
     aiS.innerHTML='✓ Análisis completado';
-    if(result.nombre){
-      result.nombre=autoCorrectName(result.nombre);
-      addLog(LOG_LEVELS.INFO,'PHOTO_ANALYZED',`Foto analizada: ${result.nombre}`,{allergens:(result.alergenos||[]).length+(result.trazas||[]).length,requires_review:!!result.requires_review});
-    }else{
-      addLog(LOG_LEVELS.WARN,ERROR_CODES.PHOTO_NO_NAME,'Foto sin nombre detectado',{});
-    }
     window.__lastAIPhotoAnalysis=result;
-    window.__lastAnalysisId=analysisId;
+    window.__lastAnalysisId=null;
+
     const allA=sortAllergens([...new Set([...(result.alergenos||[]),...(result.trazas||[])])].filter(a=>AL.includes(a)));
     document.getElementById('aiName').value=result.nombre||'';
     setSelected('aiAllergens',allA);
-    let warn='';if(result.trazas&&result.trazas.length)warn='Trazas incluidas: '+result.trazas.join(', ');
-    if(result.notas)warn+=(warn?' · ':'')+result.notas;document.getElementById('aiWarn').textContent=warn;
+
+    let warn='';
+    if(result.trazas&&result.trazas.length)warn='Trazas incluidas: '+result.trazas.join(', ');
+    if(result.notas)warn+=(warn?' · ':'')+result.notas;
+    document.getElementById('aiWarn').textContent=warn;
+
     if(result.warning){
       showPhotoWarning(result.nombre||'Producto desconocido',result.warning);
-      addLog(LOG_LEVELS.WARN,ERROR_CODES.PHOTO_QUALITY,`Calidad de foto: ${result.nombre||'Desconocido'}`,{warning:result.warning});
     }
-    if(result.nombre){const match=findMatch(result.nombre);aiCurrentMatch=match;if(match){showMatch('aiMatch',match);document.getElementById('aiSave').textContent='Actualizar existente'}else document.getElementById('aiSave').textContent='Guardar producto nuevo'}
+
+    if(result.nombre){
+      const match=findMatch(result.nombre);
+      aiCurrentMatch=match;
+      if(match){
+        showMatch('aiMatch',match);
+        document.getElementById('aiSave').textContent='Actualizar existente';
+      }else{
+        document.getElementById('aiSave').textContent='Guardar producto nuevo';
+      }
+    }
+
     aiR.classList.add('show');
     const saveBtn=document.getElementById('aiSave');
-    if(saveBtn){
-      saveBtn.disabled=false;
-      console.log('[FIX] Botón aiSave habilitado forzosamente');
-    }
+    if(saveBtn){saveBtn.disabled=false;}
     updateSave('aiAllergens');
   }catch(err){
     if(analysisAborted){
-      console.log('[ANALYZE] Error ignorado - análisis cancelado');
       return;
     }
     aiS.innerHTML='Error: '+err.message;
-    addLog(LOG_LEVELS.ERROR,ERROR_CODES.API_INVALID_RESPONSE,`Error en análisis: ${err.message}`,{});
-    if(window.__lastAnalysisId===analysisId){ const ax=(typeof diagnosticAnalyses!=='undefined'&&diagnosticAnalyses||[]).find(x=>x.analysis_id===analysisId); if(ax&&!ax.finished_at){ addAnalysisSection(analysisId,'F_decision',{decision:'error',error:err.message}); finishPhotoAnalysis(analysisId,err); } }
   }
 }
 
