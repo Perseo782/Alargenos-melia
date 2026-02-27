@@ -1030,7 +1030,39 @@ function buildResultFromOcrText(rawText){
   };
 }
 
-// ─── AUTOCORRECT ───
+/** Si la IA devolvió un fragmento de ingredientes como "nombre", lo corrige usando el inicio del texto OCR (título real). */
+function fixNombreFromOcr(nombre, ocrText){
+  const n=(nombre||'').trim();
+  if(!n) return n;
+  const ocr=String(ocrText||'').trim();
+  if(!ocr) return n;
+  const looksLikeIngredients=/ingredientes?|E-\d|marina,|potenciador|harina de maíz|harina de trigo|sal,|agua,|pimiento,|cebolla,|aceite|grasa vegetal|Ngredientes/i.test(n) || (n.length>50 && /,/.test(n));
+  if(!looksLikeIngredients) return n;
+  const lines=ocr.replace(/\r/g,'').split('\n').map(l=>l.trim()).filter(Boolean);
+  const stopWords=/ingredientes?|información nutricional|kcal|E-\d|peso neto|peso bruto|modo de empleo/i;
+  const candidatos=[];
+  for(const line of lines){
+    if(stopWords.test(line)) break;
+    if(line.length>=2&&line.length<=120&&!/^\d+$/.test(line)) candidatos.push(line);
+  }
+  if(candidatos.length===0) return n;
+  let combined=candidatos[0];
+  if(candidatos.length>=2){
+    const needMore=combined.length<25;
+    if(needMore){
+      let i=1;
+      for(;i<Math.min(candidatos.length,6);i++){
+        const next=combined+' '+candidatos[i];
+        if(next.length>75) break;
+        combined=next;
+      }
+    }
+  }
+  combined=combined.replace(/\s+/g,' ').trim();
+  const atPeriod=combined.indexOf('.');
+  if(atPeriod>20) combined=combined.slice(0,atPeriod).trim();
+  return combined||n;
+}
 const ACCENT_MAP={
   'rucula':'Rúcula','sesamo':'Sésamo','atun':'Atún','jamon':'Jamón','salmon':'Salmón',
   'melocoton':'Melocotón','esparragos':'Espárragos','esparrago':'Espárrago',
@@ -2184,7 +2216,7 @@ async function apiCall(content){
 
   const url='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key='+encodeURIComponent(key);
   const body=JSON.stringify({
-    systemInstruction:{ parts:[{ text:'Responde ÚNICAMENTE con un objeto JSON válido en el formato exacto que te pida el usuario. No incluyas texto antes ni después del JSON, ni bloques de markdown (```). Sin explicaciones.' }] },
+    systemInstruction:{ parts:[{ text:'Responde ÚNICAMENTE con un objeto JSON válido en el formato exacto que te pida el usuario. No incluyas texto antes ni después del JSON, ni bloques de markdown (```). Sin explicaciones. En ese JSON, el campo "nombre" es SIEMPRE el título del producto (el que aparece al inicio de la etiqueta o del texto), nunca un fragmento de la lista de ingredientes.' }] },
     contents:[{role:'user',parts}],
     generationConfig:{maxOutputTokens:3000,temperature:0}
   });
@@ -2345,6 +2377,7 @@ async function analyzePhotos(photoList){
           const iaData=await iaResp.json();
           const text=iaData.choices?.[0]?.message?.content||'';
           result=parseAndValidateAI(text,'vision');
+          result.nombre=fixNombreFromOcr(result.nombre,ocrText);
           result=normalizeAIPhotoResult(result);
         }else{
           result=normalizeAIPhotoResult(buildResultFromOcrText(ocrText));
