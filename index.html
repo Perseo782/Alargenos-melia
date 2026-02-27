@@ -404,6 +404,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
     <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0 pruebas</span></div>
     <button class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
+    <button class="save-btn" id="ocrNameFixBtn" style="background:var(--warm8-60);margin-top:8px" title="Usa el OCR guardado en análisis previos para actualizar nombres de productos (p. ej. nombre completo en vez de solo «Aceitunas»)">Reaplicar nombres desde OCR guardado</button>
   </div>
   <div class="settings-section">
     <h3>🔍 Revisión de incoherencias</h3>
@@ -732,6 +733,29 @@ function finishPhotoAnalysis(analysisId, error){
   if(error) a.F_decision = a.F_decision || { decision: 'error', error: String(error.message || error) };
   persistAnalyses();
 }
+
+// Reaplica la lógica de nombre (buildResultFromOcrText) al OCR guardado en análisis previos y actualiza productos.
+function applyOcrNameFix(){
+  if(!Array.isArray(P)||!Array.isArray(diagnosticAnalyses)) return 0;
+  let updated=0;
+  for(const a of diagnosticAnalyses){
+    const raw=a.C_raw_output&&a.C_raw_output.raw_text;
+    const saved=a.G_saved_result;
+    if(!raw||!saved||typeof saved.product_index!=='number') continue;
+    const idx=saved.product_index;
+    if(idx<0||idx>=P.length) continue;
+    const res=buildResultFromOcrText(raw);
+    const newNombre=(res&&res.nombre)?String(res.nombre).trim():'';
+    if(!newNombre) continue;
+    const current=P[idx].n||'';
+    if(newNombre!==current&&newNombre.length>current.length){
+      P[idx].n=newNombre;
+      updated++;
+    }
+  }
+  if(updated>0) saveDB();
+  return updated;
+}
 // addLog unificado: acepta tanto la firma antigua (level,code,message,details)
 // como la nueva (event, details) usada por el sistema de sync
 function addLog(levelOrEvent, codeOrDetails, message, details={}){
@@ -971,10 +995,16 @@ function buildResultFromOcrText(rawText){
   const text=String(rawText||'').replace(/\r/g,'');
   const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
   let nombre='';
+  const candidatos=[];
   for(const line of lines){
     const low=line.toLowerCase();
     if(low.includes('ingrediente')||low.includes('alérgen')||low.includes('alergen')||low.includes('allergen')) continue;
-    if(line.length>=3&&line.length<=80){nombre=line;break;}
+    if(low.includes('información nutricional')||low.includes('peso neto')||low.includes('peso bruto')) continue;
+    if(line.length>=3&&line.length<=120) candidatos.push(line);
+  }
+  if(candidatos.length){
+    candidatos.sort((a,b)=>b.length-a.length);
+    nombre=candidatos[0];
   }
   if(!nombre) nombre=lines[0]||'';
 
@@ -1102,6 +1132,11 @@ setTimeout(() => {
     product_count: P ? P.length : 0,
     local_last_update: localStorage.getItem('local_last_update') || null
   });
+  if(localStorage.getItem('ocr_name_fix_v1_done')!=='1'&&typeof applyOcrNameFix==='function'){
+    const n=applyOcrNameFix();
+    if(n>0) showToast('Se actualizaron '+n+' nombre(s) desde el OCR guardado','info');
+    localStorage.setItem('ocr_name_fix_v1_done','1');
+  }
 }, 0);
 let photoQueue=[];try{const s=localStorage.getItem('alergenos_queue');if(s)photoQueue=JSON.parse(s)}catch(e){}
 let queuePendingReview=[];
@@ -2107,6 +2142,53 @@ Si la zona de alérgenos está cortada o la imagen está muy borrosa y no puedes
 Responde SOLO JSON (sin markdown ni bloques \`\`\`json). No incluyas texto antes o después del objeto.
 {"nombre":"...","hallazgos_texto":["..."],"mapeo":[{"texto":"...","alergeno":"..."}],"alergenos":["..."],"trazas":["..."],"notas":"","warning":""}`;
 
+const AI_PROMPT_FROM_OCR=`Eres un sistema de lectura de etiquetas alimentarias. A continuación se te da el TEXTO EXTRAÍDO de una etiqueta (OCR). No tienes imagen; solo este texto. Tu tarea es extraer el nombre del producto y TODOS los alérgenos presentes en el texto, con las MISMAS reglas que si tuvieras la imagen.
+
+PASO 1 — LEE TODO EL TEXTO RELEVANTE
+Lee el texto completo. Busca en:
+- Lista de ingredientes (negrita, mayúsculas, subrayado)
+- "Contiene", "Alérgenos"
+- "Puede contener", "Trazas de", "PUEDE CONTENER TRAZAS DE"
+- "Presencia fortuita de", "Elaborado en", "Fabricado en"
+
+PASO 2 — HALLAZGOS Y MAPEO
+Extrae TODOS los términos detectados y mapea SIEMPRE a los 14 nombres oficiales:
+ALTRAMUZ, APIO, CACAHUETES, CEREALES, CRUSTÁCEOS, FRUTOS SECOS, HUEVO, LÁCTEO, MOLUSCO, MOSTAZA, PESCADO, SÉSAMO, SOJA, SULFITOS
+
+Conversión obligatoria (ejemplos):
+gluten/trigo/cebada/avena/centeno/sémola de trigo -> CEREALES
+leche/lácteos/nata/suero/caseína/mantequilla -> LÁCTEO
+huevo/huevos/clara/yema/ovoalbúmina -> HUEVO
+gamba/langostino/cangrejo/crustáceo/marisco -> CRUSTÁCEOS
+almendra/nuez/avellana/pistacho/anacardo/frutos de cáscara -> FRUTOS SECOS
+calamar/pulpo/mejillón/almeja/molusco -> MOLUSCO
+cacahuete/maní -> CACAHUETES
+atún/salmón/bacalao/pescado -> PESCADO
+sésamo/tahini -> SÉSAMO
+soja/miso/tofu/edamame -> SOJA
+mostaza -> MOSTAZA
+apio -> APIO
+altramuz/lupino -> ALTRAMUZ
+sulfitos/anhídrido sulfuroso/E220-E228 -> SULFITOS (SOLO si la etiqueta menciona explícitamente sulfitos, sulphites, E220-E228 o anhídrido sulfuroso; si no aparece, NO incluyas SULFITOS)
+
+MISMO ALÉRGENO EN VARIOS IDIOMAS: Si ves "apio", "celery", "céleri", "Sellerie" etc., es el mismo alérgeno (APIO). Inclúyelo UNA sola vez en trazas/alergenos. No cuentes cada idioma como alérgeno distinto ni añadas otros (ej. SULFITOS) que no estén escritos.
+
+PASO 3 — VERIFICACIÓN
+Revisa que no hayas omitido ningún alérgeno o traza que SÍ aparezca escrito en el texto. Inclúyelos todos en hallazgos_texto, mapeo, alergenos y/o trazas.
+
+NOMBRE DEL PRODUCTO: Usa el nombre tal como aparece en el envase (título principal en español). Respeta mayúsculas de la primera letra de cada palabra significativa (ej.: "Salteado rústico - Mezcla de verduras"). No inventes ni reordenes.
+
+ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
+- Incluye SOLO lo que esté EXPLÍCITAMENTE escrito (ingredientes, "puede contener", "presencia fortuita", etc.).
+- Si en la etiqueta solo pone "Presencia fortuita de apio" (o apio/celery/céleri en varios idiomas), trazas debe contener SOLO APIO. No añadas SULFITOS, SOJA ni ningún otro alérgeno que no aparezca escrito.
+- Si en la etiqueta pone "trazas de HUEVO y SOJA", debes incluir HUEVO y SOJA en trazas. No dejes fuera lo que sí está escrito.
+- NUNCA inventes: si solo aparece "apio", no añadas "soja" ni "sulfitos". Si no ves claramente un alérgeno, no lo incluyas. En caso de duda, omite en lugar de añadir.
+
+Si el texto está incompleto o no se ve la zona de alérgenos, indica "warning" y lista solo lo que sí puedas leer.
+
+Responde SOLO JSON (sin markdown ni bloques \`\`\`json). No incluyas texto antes o después del objeto.
+{"nombre":"...","hallazgos_texto":["..."],"mapeo":[{"texto":"...","alergeno":"..."}],"alergenos":["..."],"trazas":["..."],"notas":"","warning":""}`;
+
 async function apiCall(content){
   const key=getApiKey();
   
@@ -2224,6 +2306,9 @@ async function analyzePhotos(photoList){
     const compressed=await Promise.all(list.map(du=>compressPhotoForAI(du)));
     if(analysisAborted){aiS.innerHTML='❌ Análisis cancelado';return;}
 
+    const metadata={ dimensions: compressed.map(c=>c&&typeof c==='object'&&c.width!=null?{w:c.width,h:c.height}:null).filter(Boolean) };
+    const { analysisId }=startPhotoAnalysis('vision',list.length,metadata);
+
     aiS.innerHTML='<span class="spinner"></span> Enviando y analizando…';
 
     const images=compressed.map(c=>{
@@ -2256,7 +2341,13 @@ async function analyzePhotos(photoList){
     }
 
     if(!resp.ok){
-      const msg='Error Vision ('+resp.status+')';
+      let msg='Error Vision ('+resp.status+')';
+      try{
+        const errBody=await resp.json();
+        if(errBody&&errBody.error&&errBody.error.message){
+          msg=errBody.error.message;
+        }
+      }catch(_){}
       aiS.innerHTML='Error: '+msg;
       return;
     }
@@ -2268,12 +2359,37 @@ async function analyzePhotos(photoList){
       return;
     }
 
-    const rawResult=buildResultFromOcrText(ocrText);
-    const result=normalizeAIPhotoResult(rawResult);
+    addAnalysisSection(analysisId,'C_raw_output',{ raw_text: String(ocrText).slice(0,5000), length: ocrText.length });
+    let result;
+    const openAiKey=getApiKey();
+    if(openAiKey){
+      aiS.innerHTML='<span class="spinner"></span> Interpretando con IA (nombre y alérgenos)…';
+      try{
+        const textPrompt=AI_PROMPT_FROM_OCR+'\n\n--- TEXTO DE LA ETIQUETA ---\n'+String(ocrText).slice(0,12000);
+        const content=[{ type:'text', text: textPrompt }];
+        const iaResp=await apiCall(content);
+        if(iaResp&&iaResp.ok){
+          const iaData=await iaResp.json();
+          const text=iaData.choices?.[0]?.message?.content||'';
+          result=parseAndValidateAI(text,'vision');
+          result=normalizeAIPhotoResult(result);
+        }else{
+          result=normalizeAIPhotoResult(buildResultFromOcrText(ocrText));
+          if(typeof showToast==='function') showToast('La IA no respondió; se usó interpretación local','info');
+        }
+      }catch(e){
+        result=normalizeAIPhotoResult(buildResultFromOcrText(ocrText));
+        if(typeof showToast==='function') showToast('Error al interpretar con IA; se usó interpretación local','info');
+      }
+    }else{
+      result=normalizeAIPhotoResult(buildResultFromOcrText(ocrText));
+    }
+
+    addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, alergenos: result.alergenos||[], trazas: result.trazas||[] });
+    window.__lastAnalysisId=analysisId;
 
     aiS.innerHTML='✓ Análisis completado';
     window.__lastAIPhotoAnalysis=result;
-    window.__lastAnalysisId=null;
 
     const allA=sortAllergens([...new Set([...(result.alergenos||[]),...(result.trazas||[])])].filter(a=>AL.includes(a)));
     document.getElementById('aiName').value=result.nombre||'';
@@ -2662,6 +2778,13 @@ document.getElementById('exportExcelBtn').addEventListener('click',async()=>{
   }catch(err){
     showToast('Error al exportar: '+err.message,'info');
   }
+});
+
+document.getElementById('ocrNameFixBtn').addEventListener('click',()=>{
+  const n=applyOcrNameFix();
+  if(n>0) showToast('Se actualizaron '+n+' nombre(s) desde el OCR guardado','info');
+  else showToast('No había análisis con OCR guardado para reaplicar, o los nombres ya estaban bien.','info');
+  render();
 });
 
 // ─── IMPORT EXCEL ───
