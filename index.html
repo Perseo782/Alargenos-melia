@@ -202,7 +202,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v1.0 · Pruebas</div>
+    <div class="login-version">V27.02.26h10:15</div>
   </div>
 </div>
 
@@ -503,10 +503,15 @@ function navReplace(stack){
 function ensureAppHistory(){
   if(!appEl.classList.contains('show')) return;
   APP_ENTRY_URL=window.location.href.replace(/#.*$/,'');
-  const stack=getNavStack();
-  if(!history.state||!history.state.app){
-    history.replaceState({app:true,stack:['main']},'',APP_ENTRY_URL);
+  const state=history.state;
+  // Queremos siempre dos pasos internos: uno de protección de salida y otro normal
+  if(!state||!state.app){
+    history.replaceState({app:true,stack:['main'],exitGuard:true},'',APP_ENTRY_URL);
     history.pushState({app:true,stack:['main']},'',APP_ENTRY_URL);
+  }else if(state.app&&!state.exitGuard){
+    const stack=Array.isArray(state.stack)&&state.stack.length?state.stack:['main'];
+    history.replaceState({app:true,stack,exitGuard:true},'',APP_ENTRY_URL);
+    history.pushState({app:true,stack},'',APP_ENTRY_URL);
   }
 }
 const settingsBg=document.getElementById('settingsBg');
@@ -553,17 +558,29 @@ document.getElementById('syncBtn').addEventListener('click',async()=>{
 settingsBg.addEventListener('click',e=>{if(e.target===settingsBg)closeSettings()});
 window.addEventListener('popstate',()=>{
   const state=history.state;
-  if(!state||!state.app){
-    if(!confirm('¿Desea salir?')){
+  // Estado especial de protección de salida (primer paso Atrás desde la app)
+  if(state&&state.app&&state.exitGuard){
+    if(!confirm('¿Desea salir de la aplicación?')){
       history.pushState({app:true,stack:['main']},'',APP_ENTRY_URL||window.location.href.replace(/#.*$/,''));
       applyNavStack(['main']);
       return;
     }
-    window.close();
-    if(APP_ENTRY_URL) window.location.href=APP_ENTRY_URL;
+    // Confirmado: permitir salir a la página anterior real
+    history.go(-1);
     return;
   }
-  applyNavStack(state.stack);
+  // Estados internos normales de la app
+  if(state&&state.app){
+    applyNavStack(state.stack);
+    return;
+  }
+  // Cualquier otro caso: también preguntar antes de salir
+  if(!confirm('¿Desea salir de la aplicación?')){
+    history.pushState({app:true,stack:['main']},'',APP_ENTRY_URL||window.location.href.replace(/#.*$/,''));
+    applyNavStack(['main']);
+    return;
+  }
+  history.go(-1);
 });
 document.getElementById('apiKeySave').addEventListener('click',()=>{
   const key=document.getElementById('apiKeyInput').value.trim();
