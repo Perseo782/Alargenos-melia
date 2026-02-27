@@ -204,7 +204,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v 27 02 2026 14:28</div>
+    <div class="login-version">v 27 02 2026 14:51</div>
   </div>
 </div>
 
@@ -1426,6 +1426,7 @@ function cleanNameCandidateText(text){
   if(!s) return '';
   s=s.replace(/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ\s]{2,30}:\s*/,'');
   s=s.replace(/^[\-\u2022*•·]+/,'').trim();
+  s=s.replace(/[.,;:]+$/,'').trim();
   s=s.replace(/\s{2,}/g,' ');
   return canonicalizeProductName(s);
 }
@@ -1456,6 +1457,7 @@ function extractNameCandidates(result){
     out.push({text:cleaned,source});
   };
   push(result&&result.nombre,'primary');
+  push(result&&result.notas,'notas');
   (Array.isArray(result&&result.hallazgos_texto)?result.hallazgos_texto:[]).forEach(txt=>{
     String(txt||'').split(/[;|]/).forEach(seg=>push(seg,'hallazgo'));
   });
@@ -1471,8 +1473,10 @@ function evaluateNameCandidate(candidate,commonDbTokens){
   const hasNonFood=tokens.some(t=>NAME_NONFOOD_TOKENS.has(t));
   const allergenOnly=tokens.every(t=>NAME_ALLERGEN_TOKENS.has(t));
   const patternPenalty=NAME_NONFOOD_PATTERNS.some(rx=>rx.test(candidate.text));
+  const isVeryShortGeneric=tokens.length<=2&&foodHits.length>=1&&dbHits.length===0;
   let score=0;
   if(candidate.source==='primary') score+=1;
+  if(candidate.source==='hallazgo'||candidate.source==='notas') score+=0.5;
   if(foodHits.length) score+=3;
   if(dbHits.length) score+=Math.min(2,dbHits.length);
   if(tokens.length>=2&&tokens.length<=8) score+=1;
@@ -1482,9 +1486,31 @@ function evaluateNameCandidate(candidate,commonDbTokens){
   if(hasNonFood) score-=2;
   if(allergenOnly) score-=4;
   if(patternPenalty&&!foodHits.length) score-=3;
+  if(isVeryShortGeneric) score-=1;
   if(/[0-9]/.test(candidate.text)) score-=1;
   const foodSignal=(foodHits.length>0||dbHits.length>0)&&!allergenOnly&&!(hasPerson&&!foodHits.length&&!dbHits.length);
-  return {...candidate,score,foodSignal,tokens,foodHits:foodHits.length,dbHits:dbHits.length};
+  return {...candidate,score,foodSignal,tokens,foodHits:foodHits.length,dbHits:dbHits.length,isVeryShortGeneric};
+}
+function chooseSpecificVariant(best,ranked){
+  if(!best) return best;
+  let chosen=best;
+  const baseTokens=new Set(best.tokens||[]);
+  const bestNorm=norm(best.text||'');
+  const descriptorRx=/\b(con|sin|partid|aliñ|rellen|salmuera|sabor|estilo|marinad|trocead|entera|enteras)\b/i;
+  ranked.forEach(c=>{
+    if(!c||c===best) return;
+    if(!c.foodSignal) return;
+    if(c.score < (best.score-1)) return;
+    if((c.tokens||[]).length <= (best.tokens||[]).length) return;
+    const cNorm=norm(c.text||'');
+    const baseIsPrefix=bestNorm&&cNorm.startsWith(bestNorm+' ');
+    const isSuperset=[...baseTokens].every(t=>c.tokens.includes(t));
+    const hasDescriptor=descriptorRx.test(cNorm);
+    if((baseIsPrefix || (isSuperset&&hasDescriptor)) && c.text.length>chosen.text.length){
+      chosen=c;
+    }
+  });
+  return chosen;
 }
 function resolveProductNameForFood(result){
   const candidates=extractNameCandidates(result);
@@ -1496,7 +1522,7 @@ function resolveProductNameForFood(result){
     if((b.source==='primary'?1:0)!==(a.source==='primary'?1:0)) return (b.source==='primary'?1:0)-(a.source==='primary'?1:0);
     return b.text.length-a.text.length;
   });
-  const best=ranked[0];
+  const best=chooseSpecificVariant(ranked[0],ranked);
   if(best&&best.foodSignal&&best.score>=3) return {name:best.text,reason:'ok',best};
   return {name:'',reason:'sin_nombre_comida',best};
 }
@@ -2111,6 +2137,8 @@ PASO 3 — VERIFICACIÓN
 Revisa que no hayas omitido ningún alérgeno o traza que SÍ aparezca escrito en la imagen. Inclúyelos todos en hallazgos_texto, mapeo, alergenos y/o trazas.
 
 NOMBRE DEL PRODUCTO: Usa el nombre tal como aparece en el envase (título principal en español). Respeta mayúsculas de la primera letra de cada palabra significativa (ej.: "Salteado rústico - Mezcla de verduras"). No inventes ni reordenes.
+- Devuelve la denominación MÁS ESPECÍFICA visible para diferenciar variantes (ej.: "con hueso", "partidas", "aliñadas", "rellenas", "en salmuera", etc.) cuando aparezcan en la etiqueta.
+- No devuelvas una versión recortada/generica si se ve una denominación más completa (ej.: si aparece "Aceitunas verdes con hueso partidas aliñadas", NO devolver solo "Aceitunas verdes").
 
 ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
 - Incluye SOLO lo que esté EXPLÍCITAMENTE escrito (ingredientes, "puede contener", "presencia fortuita", etc.).
