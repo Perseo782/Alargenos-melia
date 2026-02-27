@@ -1527,6 +1527,9 @@ function normalizeAIPhotoResult(obj){
 function extractJsonFromAIResponse(rawText){
   let s=String(rawText||'').trim();
   s=s.replace(/^\s*```(?:json)?\s*\n?/i,'').replace(/\n?```\s*$/,'').trim();
+  // Quitar frases típicas de Gemini/IA antes del JSON (solo al inicio)
+  const intro=/^(?:Aquí tienes el (?:JSON|resultado)[.:]?|Here is the (?:JSON|result)[.:]?|Aquí está[.:]?|El JSON es[.:]?)\s*/i;
+  s=s.replace(intro,'').trim();
   s=s.replace(/,(\s*[}\]])/g,'$1');
   try{
     return JSON.parse(s);
@@ -2162,11 +2165,11 @@ async function apiCall(content){
   if(!key){
     return new Response(JSON.stringify({error:{message:'Clave API no configurada'}}),{status:401,statusText:'Unauthorized'});
   }
-  const parts=[];
+  const imageParts=[];
   let textPrompt='';
   content.forEach(item=>{
     if(item.type==='image'&&item.source){
-      parts.push({
+      imageParts.push({
         inline_data:{
           mime_type:item.source.media_type||'image/jpeg',
           data:item.source.data
@@ -2176,10 +2179,12 @@ async function apiCall(content){
       textPrompt=item.text||'';
     }
   });
-  if(textPrompt) parts.push({text:textPrompt});
+  // Instrucciones primero, luego imágenes (Gemini sigue mejor el formato así)
+  const parts=textPrompt?[{text:textPrompt},...imageParts]:imageParts;
 
   const url='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key='+encodeURIComponent(key);
   const body=JSON.stringify({
+    systemInstruction:{ parts:[{ text:'Responde ÚNICAMENTE con un objeto JSON válido en el formato exacto que te pida el usuario. No incluyas texto antes ni después del JSON, ni bloques de markdown (```). Sin explicaciones.' }] },
     contents:[{role:'user',parts}],
     generationConfig:{maxOutputTokens:3000,temperature:0}
   });
