@@ -204,7 +204,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v 27 02 2026 15:50</div>
+    <div class="login-version">v 27 02 2026 17:09</div>
   </div>
 </div>
 
@@ -696,7 +696,7 @@ function startPhotoAnalysis(origin, nPhotos, imageMeta){
       n_photos: nPhotos,
       image_meta: imageMeta || null,
       prompt_id: 'AI_PROMPT',
-      model: 'gpt-4o',
+      model: 'ai_cascade_gpt4o_mini_gpt4o',
       provider: 'openai',
       network_online: navigator.onLine
     },
@@ -2270,44 +2270,53 @@ Si la zona de alérgenos está cortada o la imagen está muy borrosa y no puedes
 
 Responde SOLO JSON (sin markdown ni bloques \`\`\`json). No incluyas texto antes o después del objeto.
 {"nombre":"...","hallazgos_texto":["..."],"mapeo":[{"texto":"...","alergeno":"..."}],"alergenos":["..."],"trazas":["..."],"notas":"","warning":""}`;
+const AI_PROMPT_FAST=`Eres un sistema de lectura rápida de etiquetas alimentarias.
+Extrae SOLO lo que esté explícitamente escrito en la etiqueta. No inventes.
 
-async function apiCall(content){
-  const key=getApiKey();
-  
-  // Convertir formato de Anthropic a formato OpenAI
-  const messages=[];
+Devuelve SIEMPRE JSON válido con esta forma:
+{"nombre":"...","hallazgos_texto":["..."],"mapeo":[{"texto":"...","alergeno":"..."}],"alergenos":["..."],"trazas":["..."],"notas":"","warning":""}
+
+Reglas críticas:
+- Alérgenos oficiales: ALTRAMUZ, APIO, CACAHUETES, CEREALES, CRUSTÁCEOS, FRUTOS SECOS, HUEVO, LÁCTEO, MOLUSCO, MOSTAZA, PESCADO, SÉSAMO, SOJA, SULFITOS.
+- SULFITOS SOLO si aparece: "sulfitos/sulphites", "dióxido de azufre", "anhídrido sulfuroso" o E220-E228.
+- E301, E330, E331 u otros E-códigos fuera de E220-E228 NO justifican SULFITOS.
+- No añadas alérgenos por suposición.
+- Si hay duda o texto ilegible, rellena "warning".`;
+
+const AI_CASCADE_CONFIG={
+  enabled:true,
+  fast:{ model:'gpt-4o-mini', max_tokens:1200, image_detail:'auto', timeout_ms:45000 },
+  precise:{ model:'gpt-4o', max_tokens:3000, image_detail:'high', timeout_ms:60000 }
+};
+
+function buildOpenAIMessages(content,promptOverride,imageDetailOverride){
   const imageContent=[];
   let textPrompt='';
-  
-  content.forEach(item=>{
-    if(item.type==='image'){
+  (Array.isArray(content)?content:[]).forEach(item=>{
+    if(item&&item.type==='image'&&item.source&&item.source.data){
       imageContent.push({
         type:'image_url',
         image_url:{
           url:`data:${item.source.media_type};base64,${item.source.data}`,
-          detail:'high'
+          detail:imageDetailOverride||item.detail||'high'
         }
       });
-    }else if(item.type==='text'){
-      textPrompt=item.text;
+    }else if(item&&item.type==='text'){
+      textPrompt=item.text||'';
     }
   });
-  
-  // Construir mensaje con imágenes + texto
-  const userMessage={
-    role:'user',
-    content:[...imageContent,{type:'text',text:textPrompt}]
-  };
-  
-  messages.push(userMessage);
-  
+  const prompt=String(promptOverride||textPrompt||'').trim();
+  return [{ role:'user', content:[...imageContent,{type:'text',text:prompt}] }];
+}
+
+async function runOpenAIRequest(key,{model,messages,maxTokens,timeoutMs}){
   const url='https://api.openai.com/v1/chat/completions';
-  const body=JSON.stringify({ model:'gpt-4o', messages:messages, max_tokens:3000, temperature:0 });
+  const body=JSON.stringify({ model, messages, max_tokens:maxTokens, temperature:0 });
   const headers={ 'Content-Type':'application/json', 'Authorization':`Bearer ${key}` };
   let lastResp=null;
   for(let attempt=0;attempt<=2;attempt++){
     const ac=new AbortController();
-    const t=setTimeout(()=>ac.abort(),60000);
+    const t=setTimeout(()=>ac.abort(),timeoutMs||60000);
     try{
       lastResp=await fetch(url,{ method:'POST', headers, body, signal:ac.signal });
       clearTimeout(t);
@@ -2325,6 +2334,91 @@ async function apiCall(content){
     }
   }
   return lastResp;
+}
+
+async function extractAiTextFromResponse(resp){
+  const data=await resp.json();
+  const rawContent=data&&data.choices&&data.choices[0]&&data.choices[0].message?data.choices[0].message.content:'';
+  return Array.isArray(rawContent)
+    ? rawContent.map(p=>p&&p.type==='text'?p.text:'').join('').trim()
+    : String(rawContent||'').trim();
+}
+
+function shouldEscalateFastResponse(rawText){
+  const text=String(rawText||'').trim();
+  if(!text) return {escalate:true,reason:'salida_vacia'};
+  if(/```/.test(text)) return {escalate:true,reason:'salida_markdown'};
+  let parsed;
+  try{
+    parsed=extractJsonFromAIResponse(text);
+  }catch(_){
+    return {escalate:true,reason:'json_invalido'};
+  }
+  const result=normalizeAIPhotoResult(parsed);
+  if(!result.nombre) return {escalate:true,reason:'sin_nombre'};
+  const hasEvidence=!!(result.hallazgos_texto.length||result.mapeo.length||result.alergenos.length||result.trazas.length);
+  if(!hasEvidence) return {escalate:true,reason:'sin_evidencias'};
+  const evidenceTexts=extractDiagnosticEvidenceTexts(result,text);
+  const evidenceCombined=evidenceTexts.join(' ');
+  const detectedECodes=[...new Set(evidenceTexts.flatMap(extractECodes))];
+  const hasSulfitos=[...(result.alergenos||[]),...(result.trazas||[])].some(a=>normalizeAllergen(a)==='SULFITOS');
+  if(hasSulfitos){
+    const hasSulfiteE=detectedECodes.some(isSulfiteECode);
+    const hasStrongPhrase=/\b(contiene|contains)\s+sulfitos?\b/i.test(evidenceCombined) || /\bdi[oó]xido\s+de\s+azufre\b/i.test(evidenceCombined) || /\banh[ií]drido\s+sulfuroso\b/i.test(evidenceCombined);
+    const hasStandaloneToken=(result.hallazgos_texto||[]).some(t=>['sulfito','sulfitos','sulphite','sulphites'].includes(norm(String(t||''))));
+    if(!hasSulfiteE&&hasStandaloneToken&&!hasStrongPhrase) return {escalate:true,reason:'sulfitos_debil'};
+  }
+  if(String(result.warning||'').trim()) return {escalate:true,reason:'warning'};
+  return {escalate:false,reason:'ok'};
+}
+
+async function apiCall(content,options={}){
+  const key=getApiKey();
+  const useCascade=AI_CASCADE_CONFIG.enabled && options.useCascade!==false;
+  const defaultPrompt=String((Array.isArray(content)?content:[]).find(i=>i&&i.type==='text')?.text||AI_PROMPT).trim();
+
+  if(!useCascade){
+    const messages=buildOpenAIMessages(content,defaultPrompt,AI_CASCADE_CONFIG.precise.image_detail);
+    const resp=await runOpenAIRequest(key,{
+      model:AI_CASCADE_CONFIG.precise.model,
+      messages,
+      maxTokens:AI_CASCADE_CONFIG.precise.max_tokens,
+      timeoutMs:AI_CASCADE_CONFIG.precise.timeout_ms
+    });
+    return {resp,meta:{route:'precise_only',model:AI_CASCADE_CONFIG.precise.model,fallback_reason:''}};
+  }
+
+  const fastMessages=buildOpenAIMessages(content,AI_PROMPT_FAST,AI_CASCADE_CONFIG.fast.image_detail);
+  const fastResp=await runOpenAIRequest(key,{
+    model:AI_CASCADE_CONFIG.fast.model,
+    messages:fastMessages,
+    maxTokens:AI_CASCADE_CONFIG.fast.max_tokens,
+    timeoutMs:AI_CASCADE_CONFIG.fast.timeout_ms
+  });
+  if(!fastResp.ok){
+    return {resp:fastResp,meta:{route:'fast_error',model:AI_CASCADE_CONFIG.fast.model,fallback_reason:'http_'+fastResp.status}};
+  }
+
+  let fastText='';
+  try{
+    fastText=await extractAiTextFromResponse(fastResp.clone());
+  }catch(_){}
+  const gate=shouldEscalateFastResponse(fastText);
+  if(!gate.escalate){
+    return {resp:fastResp,meta:{route:'fast',model:AI_CASCADE_CONFIG.fast.model,fallback_reason:''}};
+  }
+
+  const preciseMessages=buildOpenAIMessages(content,defaultPrompt,AI_CASCADE_CONFIG.precise.image_detail);
+  const preciseResp=await runOpenAIRequest(key,{
+    model:AI_CASCADE_CONFIG.precise.model,
+    messages:preciseMessages,
+    maxTokens:AI_CASCADE_CONFIG.precise.max_tokens,
+    timeoutMs:AI_CASCADE_CONFIG.precise.timeout_ms
+  });
+  if(preciseResp.ok){
+    return {resp:preciseResp,meta:{route:'precise_fallback',model:AI_CASCADE_CONFIG.precise.model,fallback_reason:gate.reason,fast_model:AI_CASCADE_CONFIG.fast.model}};
+  }
+  return {resp:fastResp,meta:{route:'fast_kept_precise_error',model:AI_CASCADE_CONFIG.fast.model,fallback_reason:gate.reason,precise_status:preciseResp.status}};
 }
 
 const PHOTO_MAX_SIZE=1120;
@@ -2385,7 +2479,9 @@ async function analyzePhotos(photoList){
   addAnalysisSection(analysisId,'B_input',{ dimensions: metadata.dimensions });
   aiS.innerHTML='<span class="spinner"></span> Enviando y analizando…';
   try{
-    const resp=await apiCall(content);
+    const {resp,meta}=await apiCall(content,{source:'manual_photo'});
+    addAnalysisSection(analysisId,'B_input',{ ai_route:meta&&meta.route?meta.route:'unknown', ai_model:meta&&meta.model?meta.model:'unknown', ai_fallback_reason:meta&&meta.fallback_reason?meta.fallback_reason:null });
+    addLog(LOG_LEVELS.INFO,'AI_ROUTE_SELECTED','AI_ROUTE_SELECTED',{source:'manual_photo',route:meta&&meta.route?meta.route:'unknown',model:meta&&meta.model?meta.model:'unknown',fallback_reason:meta&&meta.fallback_reason?meta.fallback_reason:''});
 
     if(analysisAborted){
       aiS.innerHTML='❌ Análisis cancelado';
@@ -2533,7 +2629,9 @@ async function processQueue(){
         const { analysisId }=startPhotoAnalysis('automático',pl.length,metadata);
         queueAnalysisId=analysisId;
         addAnalysisSection(analysisId,'B_input',{ dimensions: metadata.dimensions });
-        const resp=await apiCall(content);
+        const {resp,meta}=await apiCall(content,{source:'photo_queue_batch'});
+        addAnalysisSection(analysisId,'B_input',{ ai_route:meta&&meta.route?meta.route:'unknown', ai_model:meta&&meta.model?meta.model:'unknown', ai_fallback_reason:meta&&meta.fallback_reason?meta.fallback_reason:null });
+        addLog(LOG_LEVELS.INFO,'AI_ROUTE_SELECTED','AI_ROUTE_SELECTED',{source:'photo_queue_batch',route:meta&&meta.route?meta.route:'unknown',model:meta&&meta.model?meta.model:'unknown',fallback_reason:meta&&meta.fallback_reason?meta.fallback_reason:''});
         if(!resp.ok){
           let errorCode,errorMsg;
           if(resp.status===401){
@@ -2674,7 +2772,9 @@ async function autoProcessPhoto(dataUrl){
   const { analysisId }=startPhotoAnalysis('automático',1,metadata);
   addAnalysisSection(analysisId,'B_input',{ dimensions: metadata.dimensions });
   try{
-    const resp=await apiCall(content);
+    const {resp,meta}=await apiCall(content,{source:'auto_flow'});
+    addAnalysisSection(analysisId,'B_input',{ ai_route:meta&&meta.route?meta.route:'unknown', ai_model:meta&&meta.model?meta.model:'unknown', ai_fallback_reason:meta&&meta.fallback_reason?meta.fallback_reason:null });
+    addLog(LOG_LEVELS.INFO,'AI_ROUTE_SELECTED','AI_ROUTE_SELECTED',{source:'auto_flow',route:meta&&meta.route?meta.route:'unknown',model:meta&&meta.model?meta.model:'unknown',fallback_reason:meta&&meta.fallback_reason?meta.fallback_reason:''});
     if(!resp.ok){
       let errorCode,errorMsg;
       if(resp.status===401){
@@ -3017,7 +3117,9 @@ async function processBatch(){
     let productName='';
 
     try{
-      const resp=await apiCall(content);
+      const {resp,meta}=await apiCall(content,{source:'lote'});
+      addAnalysisSection(analysisId,'B_input',{ ai_route:meta&&meta.route?meta.route:'unknown', ai_model:meta&&meta.model?meta.model:'unknown', ai_fallback_reason:meta&&meta.fallback_reason?meta.fallback_reason:null });
+      addLog(LOG_LEVELS.INFO,'AI_ROUTE_SELECTED','AI_ROUTE_SELECTED',{source:'lote',route:meta&&meta.route?meta.route:'unknown',model:meta&&meta.model?meta.model:'unknown',fallback_reason:meta&&meta.fallback_reason?meta.fallback_reason:''});
       if(!resp.ok){
         if(resp.status===401){
           errorCode=ERROR_CODES.API_AUTH_FAILED;
