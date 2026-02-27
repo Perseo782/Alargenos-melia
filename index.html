@@ -1046,21 +1046,12 @@ function fixNombreFromOcr(nombre, ocrText){
     if(line.length>=2&&line.length<=120&&!/^\d+$/.test(line)) candidatos.push(line);
   }
   if(candidatos.length===0) return n;
-  let combined=candidatos[0];
-  if(candidatos.length>=2){
-    const needMore=combined.length<25;
-    if(needMore){
-      let i=1;
-      for(;i<Math.min(candidatos.length,6);i++){
-        const next=combined+' '+candidatos[i];
-        if(next.length>75) break;
-        combined=next;
-      }
-    }
-  }
-  combined=combined.replace(/\s+/g,' ').trim();
+  // Unir todas las líneas de título (ej. "Aceitunas" + "verdes" + "con hueso" + "partidas" + "aliñadas." + "Verdiales.")
+  let combined=candidatos.join(' ').replace(/\s+/g,' ').trim();
+  // Cortar en el primer punto si hay frase completa (evitar "Verdiales." como segundo título)
   const atPeriod=combined.indexOf('.');
-  if(atPeriod>20) combined=combined.slice(0,atPeriod).trim();
+  if(atPeriod>15) combined=combined.slice(0,atPeriod).trim();
+  if(combined.length>80) combined=combined.slice(0,80).trim();
   return combined||n;
 }
 const ACCENT_MAP={
@@ -2399,6 +2390,7 @@ async function analyzePhotos(photoList){
       result=normalizeAIPhotoResult(buildResultFromOcrText(ocrText));
     }
 
+    result.nombre=fixNombreFromOcr(result.nombre||'',ocrText);
     addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, alergenos: result.alergenos||[], trazas: result.trazas||[] });
     window.__lastAnalysisId=analysisId;
 
