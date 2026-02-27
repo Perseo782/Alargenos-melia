@@ -100,6 +100,8 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 .bottom-bar{display:flex;gap:8px;padding:10px 16px;flex-shrink:0;background:var(--bg);border-top:1px solid var(--warm8-20)}
 .add-btn{flex:1;height:46px;border-radius:var(--radius);background:var(--warm8);border:none;color:#fff;font-size:13px;font-weight:500;font-family:var(--sans);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:transform .1s;letter-spacing:0.5px}
 .add-btn:active{transform:scale(0.97)}
+.cancel-review-btn{flex:1;height:46px;border-radius:var(--radius);background:var(--warm8-20);border:1px solid var(--warm8-40);color:var(--text);font-size:12px;font-weight:600;font-family:var(--sans);cursor:pointer;display:none;align-items:center;justify-content:center;gap:6px;letter-spacing:0.5px}
+.cancel-review-btn:active{background:var(--warm8-10)}
 .queue-bar{display:none;padding:8px 16px;background:var(--warm8-10);border-top:1px solid var(--warm8-20);flex-shrink:0}
 .queue-bar.show{display:flex;align-items:center;gap:8px}
 .queue-dot{width:7px;height:7px;border-radius:50%;background:var(--warm8);flex-shrink:0}
@@ -202,7 +204,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">V27.02.26h10:15</div>
+    <div class="login-version">V27.02.26h11:05</div>
   </div>
 </div>
 
@@ -229,7 +231,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   </div>
   <div class="list" id="ls"><div class="ptr-indicator" id="ptrIndicator">⟳</div></div>
   <div class="queue-bar" id="queueBar"><div class="queue-dot" id="queueDot"></div><span class="queue-text" id="queueText"></span><button class="queue-action" id="queueAction">Procesar</button></div>
-  <div class="bottom-bar"><button class="add-btn" id="addBtn">+ Añadir producto</button></div>
+  <div class="bottom-bar"><button class="add-btn" id="addBtn">+ Añadir producto</button><button class="cancel-review-btn" id="cancelReviewBtn">Cancelar revisión</button></div>
 </div>
 <div class="toast" id="toast"></div>
 
@@ -1537,6 +1539,21 @@ function mergeProduct(idx,nn,na,opts){
 const toastEl=document.getElementById('toast');let toastTimer;
 function showToast(msg,type){toastEl.textContent=msg;toastEl.className='toast show toast-'+type;clearTimeout(toastTimer);toastTimer=setTimeout(()=>toastEl.classList.remove('show'),3500)}
 
+function getPendingReviewCount(){
+  try{
+    if(!Array.isArray(P)) return 0;
+    let n=0;
+    for(const p of P) if(getFlag(p)) n++;
+    return n;
+  }catch(_){ return 0; }
+}
+function updateCancelReviewUI(){
+  const btn=document.getElementById('cancelReviewBtn');
+  if(!btn) return;
+  const pending=getPendingReviewCount();
+  btn.style.display = pending>0 ? 'flex' : 'none';
+}
+
 (function(){let h='<button class="ftag-sin" id="sinBtn">✓ SIN</button>';AL.forEach(a=>{h+=`<button class="ftag" data-f="${a}" title="${a}"><img src="${IC[a]}" alt="${a}"></button>`});h+='<button class="ftag-clear" id="clearFilters">✕</button>';fl.innerHTML=h;const sinBtn=document.getElementById('sinBtn'),clearBtn=document.getElementById('clearFilters');fl.querySelectorAll('.ftag[data-f]').forEach(b=>{b.addEventListener('click',()=>{const a=b.dataset.f;if(af.has(a)){af.delete(a);b.classList.remove('active')}else{af.add(a);b.classList.add('active')}uc();render()})});sinBtn.addEventListener('click',()=>{sinMode=!sinMode;sinBtn.classList.toggle('active',sinMode);render()});clearBtn.addEventListener('click',()=>{af.clear();sinMode=false;fl.querySelectorAll('.ftag,.ftag-sin').forEach(b=>b.classList.remove('active'));uc();render()});function uc(){clearBtn.classList.toggle('show',af.size>0||sinMode)}})();
 
 let renderLimit=150;
@@ -1578,6 +1595,7 @@ function renderProducts(){
   show.forEach(p=>{const oi=P.indexOf(p);let nm=esc(p.n);const query=norm(q.value.trim());if(query)nm=hi(nm,query);let ic='';if(!p.a.length)ic='<span class="safe">✓ Sin alérgenos</span>';else{ic='<div class="icons-row">';p.a.forEach(a=>{if(IC[a])ic+=`<img class="a-icon" src="${IC[a]}" alt="${a}" title="${a}">`});ic+='</div>'}const isHL=lastSavedName&&norm(p.n)===norm(lastSavedName);const count=p.a.length?`<div class="a-count">${p.a.length} alérgeno${p.a.length>1?'s':''}</div>`:'';const reviewBadge=p.requires_review?'<span class="audit-badge medium">Revisar IA</span>':'';h+=`<div class="card${isHL?' highlight':''}" data-idx="${oi}"><div class="card-name">${nm}${reviewBadge}</div>${ic}${count}</div>`});
   if(normal.length>renderLimit)h+=`<div class="empty" id="loadMore">Mostrando ${renderLimit} de ${normal.length} — Baja para cargar más</div>`;
   ls.innerHTML=h;
+  updateCancelReviewUI();
   if(lastSavedName){const el=ls.querySelector('.card.highlight');if(el){el.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>el.classList.remove('highlight'),2500)}lastSavedName=null}else if(renderLimit===150)ls.scrollTop=0;
   ls.querySelectorAll('.card[data-idx]').forEach(c=>c.addEventListener('click',()=>openEdit(parseInt(c.dataset.idx))))
 }
@@ -1684,6 +1702,12 @@ let dt;q.addEventListener('input',()=>{clearTimeout(dt);dt=setTimeout(render,100
 let analysisAborted=false;
 const modalBg=document.getElementById('modalBg');let editMode=false,editIdx=-1;
 document.getElementById('addBtn').addEventListener('click',()=>{editMode=false;editIdx=-1;openModal()});
+document.getElementById('cancelReviewBtn').addEventListener('click',()=>{
+  auditFlags = {};
+  saveAuditFlags();
+  render();
+  showToast('Revisión cancelada','info');
+});
 document.getElementById('modalClose').addEventListener('click',closeModal);
 modalBg.addEventListener('click',e=>{if(e.target===modalBg)closeModal()});
 function closeModal(){
