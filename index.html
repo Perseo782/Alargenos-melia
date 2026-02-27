@@ -204,7 +204,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v 27 02 2026 13:02</div>
+    <div class="login-version">v 27 02 2026 13:14</div>
   </div>
 </div>
 
@@ -1596,7 +1596,7 @@ const PHOTO_KEYWORD_RULES=[
   {rx:[/sesam/i,/tahini/i,/tahina/i], allergen:'SÉSAMO', level:'high'},
   {rx:[/soja/i,/edamame/i,/miso/i,/tofu/i], allergen:'SOJA', level:'high'},
   {rx:[/mostaz/i], allergen:'MOSTAZA', level:'high'},
-  {rx:[/sulfit/i,/anhidrido\s+sulfuroso/i,/e22[0-8]/i], allergen:'SULFITOS', level:'high'},
+  {rx:[/sulfit/i,/sulphit/i,/anh[ií]drido\s+sulfuroso/i,/d[ií]oxido\s+de\s+azufre/i,/e[\s-]?22[0-8]/i], allergen:'SULFITOS', level:'high'},
   {rx:[/apio/i], allergen:'APIO', level:'high'},
   {rx:[/cacahuet/i,/mani/i], allergen:'CACAHUETES', level:'high'},
   {rx:[/pescad/i,/atun/i,/salmon/i,/bacalao/i,/merluza/i], allergen:'PESCADO', level:'high'},
@@ -1672,7 +1672,26 @@ function parseAndValidateAI(rawText,source='photo'){
   const result=normalizeAIPhotoResult(parsed);
   if(result.nombre) result.nombre=canonicalizeProductName(result.nombre);
   addLog('INFO','PHOTO_PARSED_RESULT','PHOTO_PARSED_RESULT',{source,parsed:{nombre:result.nombre,nombres_detectados:result.nombres_detectados,hallazgos_texto:result.hallazgos_texto,mapeo:result.mapeo,alergenos:result.alergenos,trazas:result.trazas,warning:result.warning||''}});
+  const textForCheck=[
+    result.hallazgos_texto.join(' '),
+    (result.mapeo||[]).map(m=>m&&m.texto?m.texto:'').join(' '),
+    result.notas||'',
+    String(rawText||'')
+  ].filter(Boolean).join(' ');
   const alergSet=new Set([...(result.alergenos||[]),...(result.trazas||[])].map(normalizeAllergen));
+  const sulfiteEvidence=/sulfit|sulphit|anh[ií]drido\s+sulfuroso|d[ií]oxido\s+de\s+azufre|e[\s-]?22[0-8]/i.test(textForCheck);
+  if(sulfiteEvidence && !alergSet.has('SULFITOS')){
+    result.trazas=[...new Set([...(result.trazas||[]),'SULFITOS'])];
+    alergSet.add('SULFITOS');
+    addLog(LOG_LEVELS.INFO,'PHOTO_SULFITES_RECOVERED','SULFITOS añadido por evidencia textual',{source});
+  }
+  const lupinEvidence=/altramu|lupin|lupino/i.test(textForCheck);
+  if(alergSet.has('ALTRAMUZ') && !lupinEvidence){
+    result.alergenos=(result.alergenos||[]).filter(a=>a!=='ALTRAMUZ');
+    result.trazas=(result.trazas||[]).filter(a=>a!=='ALTRAMUZ');
+    alergSet.delete('ALTRAMUZ');
+    addLog(LOG_LEVELS.WARN,'PHOTO_ALTRAMUZ_REMOVED','ALTRAMUZ eliminado por falta de evidencia textual',{source});
+  }
   const mapeoDiff=[];
   result.hallazgos_texto.forEach(txt=>{
     const key=norm(txt);
@@ -1684,7 +1703,6 @@ function parseAndValidateAI(rawText,source='photo'){
     if(miss.length)mapeoDiff.push({texto:txt,mapeado:mapped,faltan_en_resultado:miss});
   });
   if(mapeoDiff.length) addLog('WARN','PHOTO_MAPEO_DIFF','PHOTO_MAPEO_DIFF',{source,diff:mapeoDiff});
-  const textForCheck=(result.hallazgos_texto.join(' ')||String(rawText||''));
   const keywordAlerts=[];
   PHOTO_KEYWORD_RULES.forEach(rule=>{
     const hit=rule.rx.find(rx=>rx.test(textForCheck));
@@ -2241,13 +2259,9 @@ MISMO ALÉRGENO EN VARIOS IDIOMAS: Si ves "apio", "celery", "céleri", "Sellerie
 PASO 3 — VERIFICACIÓN
 Revisa que no hayas omitido ningún alérgeno o traza que SÍ aparezca escrito en la imagen. Inclúyelos todos en hallazgos_texto, mapeo, alergenos y/o trazas.
 
-PASO 4 — NOMBRE DEL PRODUCTO (SEMÁNTICA DE COMIDA)
-- Identifica hasta 5 candidatos de texto para nombre y clasifícalos: alimento, marca, eslogan, persona u otro.
-- Marca si cada candidato es comida o no comida.
-- El campo "nombre" DEBE ser exclusivamente el candidato de tipo alimento con mayor confianza.
+NOMBRE DEL PRODUCTO: Usa el nombre del alimento/comida tal como aparece en el envase (título principal en español). Respeta mayúsculas de la primera letra de cada palabra significativa (ej.: "Salteado rústico - Mezcla de verduras"). No inventes ni reordenes.
 - No uses marca, nombre de persona ni eslogan/publicidad como nombre de producto (ej.: "Rafael", "El secreto de ...").
 - Si no puedes identificar con claridad un nombre de comida, devuelve "nombre":"" y en warning: "No se reconoce el nombre del producto".
-- Incluye siempre el array "nombres_detectados" aunque esté vacío.
 
 ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
 - Incluye SOLO lo que esté EXPLÍCITAMENTE escrito (ingredientes, "puede contener", "presencia fortuita", etc.).
@@ -2258,7 +2272,7 @@ ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
 Si la zona de alérgenos está cortada o la imagen está muy borrosa y no puedes leer el texto pequeño, indica "warning" y lista solo lo que sí puedas leer.
 
 Responde SOLO JSON (sin markdown ni bloques \`\`\`json). No incluyas texto antes o después del objeto.
-{"nombre":"...","nombres_detectados":[{"texto":"...","tipo":"alimento|marca|eslogan|persona|otro","es_comida":true,"confianza":"alta|media|baja","motivo":"..."}],"hallazgos_texto":["..."],"mapeo":[{"texto":"...","alergeno":"..."}],"alergenos":["..."],"trazas":["..."],"notas":"","warning":""}`;
+{"nombre":"...","hallazgos_texto":["..."],"mapeo":[{"texto":"...","alergeno":"..."}],"alergenos":["..."],"trazas":["..."],"notas":"","warning":""}`;
 const NAME_RECOVERY_PROMPT=`Eres un extractor de nombre de producto alimentario desde foto(s) de etiqueta.
 
 OBJETIVO ÚNICO:
