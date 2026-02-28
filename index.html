@@ -204,7 +204,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v2802202618:00h</div>
+    <div class="login-version">v2802202618:30h</div>
   </div>
 </div>
 
@@ -701,7 +701,7 @@ function startPhotoAnalysis(origin, nPhotos, imageMeta){
       n_photos: nPhotos,
       image_meta: imageMeta || null,
       prompt_id: 'AI_PROMPT',
-      model: 'gemini-2.0-flash',
+      model: 'gemini-1.5-flash',
       provider: 'google',
       network_online: navigator.onLine
     },
@@ -1552,7 +1552,7 @@ Si no detectas nada, responde: []
 Productos a analizar:
 ${lines}`;
 
-  const response = await fetchWithDiagnostics(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
+  const response = await fetchWithDiagnostics(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
     body: JSON.stringify({
@@ -2407,7 +2407,7 @@ async function apiCall(content, options){
     ?options.systemInstruction
     :'Responde ÚNICAMENTE con un objeto JSON válido en el formato exacto que te pida el usuario. No incluyas texto antes ni después del JSON, ni bloques de markdown (```). Sin explicaciones. En ese JSON, el campo "nombre" es SIEMPRE el título del producto (el que aparece al inicio de la etiqueta o del texto), nunca un fragmento de la lista de ingredientes.';
 
-  const url='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key='+encodeURIComponent(key);
+  const url='https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key='+encodeURIComponent(key);
   const body=JSON.stringify({
     systemInstruction:{ parts:[{ text: systemText }] },
     contents:[{role:'user',parts}],
