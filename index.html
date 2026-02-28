@@ -602,13 +602,21 @@ document.getElementById('logoutBtn').addEventListener('click',()=>{sessionStorag
 // ─── LOGGING SYSTEM ───
 const LOG_LEVELS={ERROR:'ERROR',WARN:'WARN',INFO:'INFO'};
 const ERROR_CODES={
+  API_BAD_REQUEST:'API_BAD_REQUEST',
   API_AUTH_FAILED:'API_AUTH_FAILED',
+  API_FORBIDDEN:'API_FORBIDDEN',
+  API_NOT_FOUND:'API_NOT_FOUND',
+  API_DISABLED:'API_DISABLED',
+  API_REFERRER_BLOCKED:'API_REFERRER_BLOCKED',
+  API_BILLING_REQUIRED:'API_BILLING_REQUIRED',
   API_RATE_LIMIT:'API_RATE_LIMIT',
   API_TIMEOUT:'API_TIMEOUT',
   API_SERVER_ERROR:'API_SERVER_ERROR',
   API_INVALID_RESPONSE:'API_INVALID_RESPONSE',
+  CONFIG_MISSING:'CONFIG_MISSING',
   NETWORK_OFFLINE:'NETWORK_OFFLINE',
   NETWORK_TIMEOUT:'NETWORK_TIMEOUT',
+  NETWORK_REQUEST_FAILED:'NETWORK_REQUEST_FAILED',
   PHOTO_UNREADABLE:'PHOTO_UNREADABLE',
   PHOTO_NO_NAME:'PHOTO_NO_NAME',
   PHOTO_QUALITY:'PHOTO_QUALITY',
@@ -818,6 +826,15 @@ function updateLogDisplay(){
         if(d.error_detail||d.error) parts.push('Error: '+esc(d.error_detail||d.error));
         if(parts.length) extra=`<div style="color:var(--text2);font-size:11px">${parts.join(' · ')}</div>`;
       }
+      if(!extra&&details&&typeof details==='object'){
+        const d=details;
+        const parts=[];
+        if(d.status!=null) parts.push(`HTTP ${esc(d.status)}${d.status_text ? ' '+esc(d.status_text) : ''}`);
+        if(d.probable_cause) parts.push(`Causa: ${esc(d.probable_cause)}`);
+        if(d.provider_message) parts.push(`Proveedor: ${esc(d.provider_message)}`);
+        if(d.error) parts.push(`Error: ${esc(d.error)}`);
+        if(parts.length) extra=`<div style="color:var(--text2);font-size:11px">${parts.join(' · ')}</div>`;
+      }
       const body=extra ? `<div style="color:var(--text);font-size:12px">${esc(msg)}</div>${extra}` : `<div style="color:var(--text);font-size:12px">${esc(msg)}</div>`;
       return `<div style="margin-bottom:8px;border-left:3px solid ${color};padding-left:8px">
         <div style="color:${color}">${icon} ${title}</div>
@@ -946,6 +963,169 @@ document.addEventListener('DOMContentLoaded',()=>{
 
 function getApiKey(){return localStorage.getItem('alerg_apikey')||''}
 function getVisionApiKey(){return localStorage.getItem('gdrive_api_key')||''}
+
+function sanitizeUrlForDiagnostics(rawUrl){
+  const input=String(rawUrl||'');
+  if(!input) return '';
+  try{
+    const u=new URL(input, window.location.origin);
+    ['key','api_key','access_token','token','oauth_token'].forEach(param=>{
+      if(u.searchParams.has(param)) u.searchParams.set(param,'[REDACTED]');
+    });
+    return u.toString();
+  }catch(_){
+    return input.replace(/([?&](?:key|api_key|access_token|token|oauth_token)=)[^&]*/gi,'$1[REDACTED]');
+  }
+}
+function trimDiagnostic(value,maxLen=2200){
+  if(value==null) return null;
+  let text='';
+  if(typeof value==='string') text=value;
+  else{
+    try{text=JSON.stringify(value)}catch(_){text=String(value)}
+  }
+  return text.length>maxLen ? text.slice(0,maxLen)+'...[truncado]' : text;
+}
+function extractProviderErrorMessage(payload){
+  if(payload==null) return '';
+  if(typeof payload==='string') return payload;
+  if(typeof payload==='object'){
+    if(payload.error){
+      if(typeof payload.error==='string') return payload.error;
+      if(payload.error.message) return payload.error.message;
+      if(payload.error.status) return payload.error.status;
+    }
+    if(payload.message) return payload.message;
+    if(payload.error_description) return payload.error_description;
+  }
+  return trimDiagnostic(payload,1000)||'';
+}
+async function parseHttpErrorPayload(response){
+  try{
+    const clone=response.clone();
+    const ct=(clone.headers.get('content-type')||'').toLowerCase();
+    if(ct.includes('application/json')) return await clone.json();
+    const t=await clone.text();
+    return t||null;
+  }catch(_){
+    return null;
+  }
+}
+function classifyHttpFailure(status, providerMessage){
+  const msg=String(providerMessage||'').toLowerCase();
+  if(status===0){
+    if(/cors|origin|access-control/.test(msg)) return 'Bloqueo CORS u origen no permitido.';
+    if(/failed to fetch|networkerror|load failed/.test(msg)) return 'No se pudo contactar con el servidor (DNS, red, firewall o adblock).';
+    return 'Fallo de red del navegador o corte de conexion.';
+  }
+  if(status===400) return 'Peticion mal formada (JSON/campos obligatorios incorrectos).';
+  if(status===401) return 'Credenciales invalidas o caducadas.';
+  if(status===403){
+    if(/referer|referrer|origin|not authorized for this referrer/.test(msg)) return 'La clave API esta restringida y este dominio no esta autorizado.';
+    if(/disabled|has not been used|not enabled|service disabled/.test(msg)) return 'La API esta deshabilitada en Google Cloud.';
+    if(/billing|payment|cloud billing|financial/.test(msg)) return 'Falta facturacion activa o saldo/cuota del proyecto.';
+    return 'Acceso prohibido: permisos insuficientes o politica de seguridad.';
+  }
+  if(status===404) return 'Endpoint/modelo/recurso no encontrado.';
+  if(status===408) return 'Timeout del servidor o de pasarela.';
+  if(status===409) return 'Conflicto de version/estado del recurso.';
+  if(status===429 || /quota|rate limit|resource exhausted|insufficient/.test(msg)) return 'Limite de cuota o peticiones superado.';
+  if(status>=500) return 'Fallo interno temporal en servidores de Google.';
+  return 'Error HTTP no clasificado; revisar detalle del proveedor.';
+}
+function mapHttpStatusToErrorCode(status, providerMessage){
+  const msg=String(providerMessage||'').toLowerCase();
+  if(status===400) return ERROR_CODES.API_BAD_REQUEST;
+  if(status===401) return ERROR_CODES.API_AUTH_FAILED;
+  if(status===403){
+    if(/referer|referrer|origin|not authorized for this referrer/.test(msg)) return ERROR_CODES.API_REFERRER_BLOCKED;
+    if(/disabled|has not been used|not enabled|service disabled/.test(msg)) return ERROR_CODES.API_DISABLED;
+    if(/billing|payment|cloud billing|financial/.test(msg)) return ERROR_CODES.API_BILLING_REQUIRED;
+    return ERROR_CODES.API_FORBIDDEN;
+  }
+  if(status===404) return ERROR_CODES.API_NOT_FOUND;
+  if(status===408) return ERROR_CODES.API_TIMEOUT;
+  if(status===429 || /quota|rate limit|resource exhausted|insufficient/.test(msg)) return ERROR_CODES.API_RATE_LIMIT;
+  if(status>=500) return ERROR_CODES.API_SERVER_ERROR;
+  return ERROR_CODES.API_INVALID_RESPONSE;
+}
+async function fetchWithDiagnostics(url, options={}, meta={}){
+  const service=meta.service||'Servicio HTTP';
+  const operation=meta.operation||'solicitud';
+  const method=(options&&options.method)||'GET';
+  const safeUrl=sanitizeUrlForDiagnostics(url);
+  const startTs=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+  const requestTag=meta.requestTag||null;
+  if(meta.requireOnline && !navigator.onLine){
+    const err=new Error('Sin conexion a internet');
+    err.code=ERROR_CODES.NETWORK_OFFLINE;
+    addLog(LOG_LEVELS.ERROR, ERROR_CODES.NETWORK_OFFLINE, `${service} (${operation}) sin conexion`, {
+      service, operation, method, url:safeUrl, online:false, request_tag:requestTag
+    });
+    throw err;
+  }
+  try{
+    const response=await fetch(url,options);
+    const endTs=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+    const durationMs=Math.max(0,Math.round(endTs-startTs));
+    if(!response.ok){
+      const payload=await parseHttpErrorPayload(response);
+      const providerMessage=extractProviderErrorMessage(payload);
+      const probableCause=classifyHttpFailure(response.status,providerMessage);
+      const errorCode=mapHttpStatusToErrorCode(response.status,providerMessage);
+      addLog(LOG_LEVELS.ERROR,errorCode,`${service} (${operation}) devolvio HTTP ${response.status}`,{
+        service,
+        operation,
+        method,
+        url:safeUrl,
+        status:response.status,
+        status_text:response.statusText||'',
+        online:navigator.onLine,
+        duration_ms:durationMs,
+        probable_cause:probableCause,
+        provider_message:trimDiagnostic(providerMessage,900),
+        provider_payload:trimDiagnostic(payload,2500),
+        request_tag:requestTag
+      });
+    }else if(meta.logSuccess){
+      addLog(LOG_LEVELS.INFO,meta.successCode||'CONNECTION_OK',`${service} (${operation}) OK`,{
+        service,
+        operation,
+        method,
+        url:safeUrl,
+        status:response.status,
+        duration_ms:durationMs,
+        request_tag:requestTag
+      });
+    }
+    return response;
+  }catch(err){
+    const endTs=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+    const durationMs=Math.max(0,Math.round(endTs-startTs));
+    const isAbort=!!(err&&err.name==='AbortError');
+    const offline=!navigator.onLine;
+    const errMsg=(err&&err.message)?err.message:String(err||'Error de red');
+    const errorCode=offline ? ERROR_CODES.NETWORK_OFFLINE : (isAbort ? ERROR_CODES.NETWORK_TIMEOUT : ERROR_CODES.NETWORK_REQUEST_FAILED);
+    const probableCause=offline ? 'Sin conexion local o red inestable.' : (isAbort ? 'Timeout de solicitud.' : classifyHttpFailure(0, errMsg));
+    addLog(LOG_LEVELS.ERROR,errorCode,`${service} (${operation}) sin respuesta`,{
+      service,
+      operation,
+      method,
+      url:safeUrl,
+      online:navigator.onLine,
+      duration_ms:durationMs,
+      error:trimDiagnostic(errMsg,1200),
+      probable_cause:probableCause,
+      request_tag:requestTag
+    });
+    const wrapped=new Error(errMsg);
+    wrapped.name=(err&&err.name)||'NetworkError';
+    wrapped.code=errorCode;
+    wrapped.status=(err&&err.status)||0;
+    wrapped.cause=err;
+    throw wrapped;
+  }
+}
 
 function extractTextFromVisionResponse(data){
   try{
@@ -1372,16 +1552,25 @@ Si no detectas nada, responde: []
 Productos a analizar:
 ${lines}`;
 
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
+  const response = await fetchWithDiagnostics(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
     body: JSON.stringify({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: { maxOutputTokens: 2000, temperature: 0 }
     })
+  }, {
+    service:'Gemini',
+    operation:'revision de incoherencias',
+    requestTag:'runAIAudit',
+    requireOnline:true
   });
 
-  if(!response.ok) throw new Error(`Gemini error: ${response.status}`);
+  if(!response.ok){
+    const errPayload=await parseHttpErrorPayload(response);
+    const errMsg=extractProviderErrorMessage(errPayload) || `Gemini error: ${response.status}`;
+    throw new Error(errMsg);
+  }
   const data = await response.json();
   const text = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0])
     ? (data.candidates[0].content.parts[0].text || '').trim()
@@ -1398,7 +1587,11 @@ ${lines}`;
 async function runAuditReview(){
   const apiKey = getApiKey();
   const auditSessionId = 'aud_'+Date.now()+'_'+Math.random().toString(36).slice(2,5);
-  if(!apiKey){ showToast('Configura la clave API en Ajustes (⚙)','info'); return; }
+  if(!apiKey){
+    addLog(LOG_LEVELS.ERROR,ERROR_CODES.CONFIG_MISSING,'Revision IA sin clave API configurada',{service:'Gemini',operation:'runAuditReview'});
+    showToast('Configura la clave API en Ajustes (⚙)','info');
+    return;
+  }
 
   // Show loading overlay
   const overlay = document.createElement('div');
@@ -2068,6 +2261,7 @@ function handleImg(e){
 analyzeBtn.addEventListener('click',()=>{
   const vKey=getVisionApiKey();
   if(!vKey){
+    addLog(LOG_LEVELS.ERROR,ERROR_CODES.CONFIG_MISSING,'Vision no configurada: falta API Key en ajustes',{service:'Cloud Vision',operation:'analyzeBtn'});
     showToast('Configura la API Key de Google (campo de Drive) en Ajustes (⚙)','info');
     return;
   }
@@ -2078,6 +2272,7 @@ analyzeBtn.addEventListener('click',()=>{
   }
   if(!navigator.onLine){
     const aiS=document.getElementById('aiStatus');
+    addLog(LOG_LEVELS.ERROR,ERROR_CODES.NETWORK_OFFLINE,'Sin conexion al iniciar analisis de foto',{service:'Cloud Vision',operation:'analyzeBtn'});
     aiS.innerHTML='Sin conexión — la lectura de foto con Google Vision necesita internet.';
     aiS.classList.add('show');
     showToast('Sin conexión — no se puede analizar la foto ahora','info');
@@ -2186,6 +2381,7 @@ Responde SOLO JSON (sin markdown ni bloques \`\`\`json). No incluyas texto antes
 async function apiCall(content, options){
   const key=getApiKey();
   if(!key){
+    addLog(LOG_LEVELS.ERROR,ERROR_CODES.CONFIG_MISSING,'Gemini no configurada: falta API Key',{service:'Gemini',operation:'apiCall'});
     return new Response(JSON.stringify({error:{message:'Clave API no configurada'}}),{status:401,statusText:'Unauthorized'});
   }
   const imageParts=[];
@@ -2222,7 +2418,12 @@ async function apiCall(content, options){
     const ac=new AbortController();
     const t=setTimeout(()=>ac.abort(),60000);
     try{
-      lastResp=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body,signal:ac.signal});
+      lastResp=await fetchWithDiagnostics(url,{method:'POST',headers:{'Content-Type':'application/json'},body,signal:ac.signal},{
+        service:'Gemini',
+        operation:'analisis de etiqueta',
+        requestTag:'apiCall_attempt_'+(attempt+1),
+        requireOnline:true
+      });
       clearTimeout(t);
       const json=await lastResp.json().catch(()=>({}));
       const text=(json.candidates&&json.candidates[0]&&json.candidates[0].content&&json.candidates[0].content.parts&&json.candidates[0].content.parts[0])?json.candidates[0].content.parts[0].text||'':'';
@@ -2237,6 +2438,9 @@ async function apiCall(content, options){
       return new Response(JSON.stringify({error:{message:errMsg}}),{status:lastResp.status,statusText:lastResp.statusText,headers:{'Content-Type':'application/json'}});
     }catch(err){
       clearTimeout(t);
+      if(err.code===ERROR_CODES.NETWORK_OFFLINE){
+        return new Response(JSON.stringify({error:{message:'Sin conexion a internet'}}),{status:503,headers:{'Content-Type':'application/json'}});
+      }
       if(err.name==='AbortError'){
         return new Response(JSON.stringify({error:{message:'Timeout'}}),{status:408,headers:{'Content-Type':'application/json'}});
       }
@@ -2295,12 +2499,14 @@ async function analyzePhotos(photoList){
   analysisAborted=false;
   const aiS=document.getElementById('aiStatus'),aiR=document.getElementById('aiResult');
   aiS.innerHTML='<span class="spinner"></span> Preparando imagen…';aiS.classList.add('show');aiR.classList.remove('show');hideMatch('aiMatch');aiCurrentMatch=null;
+  let analysisId=null;
 
   const list=Array.isArray(photoList)?photoList.filter(Boolean):[photoList].filter(Boolean);
   if(!list.length){aiS.innerHTML='No hay fotos para analizar';return;}
 
   const visionKey=getVisionApiKey();
   if(!visionKey){
+    addLog(LOG_LEVELS.ERROR,ERROR_CODES.CONFIG_MISSING,'Vision sin API Key configurada',{service:'Cloud Vision',operation:'analyzePhotos'});
     aiS.innerHTML='Configura la API Key de Google (campo de Drive) en Ajustes.';
     return;
   }
@@ -2310,7 +2516,8 @@ async function analyzePhotos(photoList){
     if(analysisAborted){aiS.innerHTML='❌ Análisis cancelado';return;}
 
     const metadata={ dimensions: compressed.map(c=>c&&typeof c==='object'&&c.width!=null?{w:c.width,h:c.height}:null).filter(Boolean) };
-    const { analysisId }=startPhotoAnalysis('vision',list.length,metadata);
+    const started=startPhotoAnalysis('vision',list.length,metadata);
+    analysisId=started.analysisId;
 
     aiS.innerHTML='<span class="spinner"></span> Enviando y analizando…';
 
@@ -2320,6 +2527,9 @@ async function analyzePhotos(photoList){
     }).filter(Boolean);
 
     if(!images.length){
+      addAnalysisSection(analysisId,'F_decision',{decision:'error',error:'No se pudo preparar la imagen'});
+      finishPhotoAnalysis(analysisId,new Error('No se pudo preparar la imagen'));
+      addLog(LOG_LEVELS.ERROR,ERROR_CODES.PHOTO_UNREADABLE,'No se pudo codificar la imagen para Vision',{service:'Cloud Vision',operation:'analyzePhotos',analysis_id:analysisId});
       aiS.innerHTML='No se pudo preparar la imagen para analizar';
       return;
     }
@@ -2332,13 +2542,22 @@ async function analyzePhotos(photoList){
       }))
     };
 
-    const resp=await fetch('https://vision.googleapis.com/v1/images:annotate?key='+encodeURIComponent(visionKey),{
+    const resp=await fetchWithDiagnostics('https://vision.googleapis.com/v1/images:annotate?key='+encodeURIComponent(visionKey),{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(body)
+    },{
+      service:'Cloud Vision',
+      operation:'ocr de etiqueta',
+      requestTag:'analyzePhotos',
+      requireOnline:true
     });
 
     if(analysisAborted){
+      if(analysisId){
+        addAnalysisSection(analysisId,'F_decision',{decision:'cancelado',motivo:'usuario'});
+        finishPhotoAnalysis(analysisId);
+      }
       aiS.innerHTML='❌ Análisis cancelado';
       return;
     }
@@ -2351,6 +2570,8 @@ async function analyzePhotos(photoList){
           msg=errBody.error.message;
         }
       }catch(_){}
+      addAnalysisSection(analysisId,'F_decision',{decision:'error',error:msg});
+      finishPhotoAnalysis(analysisId,new Error(msg));
       aiS.innerHTML='Error: '+msg;
       return;
     }
@@ -2358,6 +2579,9 @@ async function analyzePhotos(photoList){
     const data=await resp.json();
     const ocrText=extractTextFromVisionResponse(data);
     if(!ocrText){
+      addLog(LOG_LEVELS.WARN,ERROR_CODES.PHOTO_UNREADABLE,'Vision no detecto texto en la etiqueta',{service:'Cloud Vision',operation:'ocr de etiqueta',analysis_id:analysisId});
+      addAnalysisSection(analysisId,'F_decision',{decision:'no_guardar',motivo:'ocr_sin_texto'});
+      finishPhotoAnalysis(analysisId);
       aiS.innerHTML='No se pudo leer texto en la etiqueta';
       return;
     }
@@ -2427,8 +2651,22 @@ async function analyzePhotos(photoList){
     updateSave('aiAllergens');
   }catch(err){
     if(analysisAborted){
+      if(analysisId){
+        addAnalysisSection(analysisId,'F_decision',{decision:'cancelado',motivo:'usuario'});
+        finishPhotoAnalysis(analysisId);
+      }
       return;
     }
+    if(analysisId){
+      addAnalysisSection(analysisId,'F_decision',{decision:'error',error:err.message||'Error desconocido'});
+      finishPhotoAnalysis(analysisId,err);
+    }
+    addLog(LOG_LEVELS.ERROR,ERROR_CODES.API_INVALID_RESPONSE,'Error en flujo de analisis de foto',{
+      service:'Vision+Gemini',
+      operation:'analyzePhotos',
+      error:err&&err.message?err.message:String(err),
+      probable_cause: classifyHttpFailure((err&&err.status)||0, (err&&err.message)||'')
+    });
     aiS.innerHTML='Error: '+err.message;
   }
 }
@@ -2487,7 +2725,16 @@ document.getElementById('aiSave').addEventListener('click',()=>{
 const queueBar=document.getElementById('queueBar'),queueText=document.getElementById('queueText'),queueDot=document.getElementById('queueDot');
 function updateQueueBar(){if(!photoQueue.length){queueBar.classList.remove('show');return}queueBar.classList.add('show');queueText.textContent=isProcessing?`Procesando… ${photoQueue.length} restante${photoQueue.length>1?'s':''}`:`${photoQueue.length} foto${photoQueue.length>1?'s':''} en cola`;queueDot.classList.toggle('pulse',isProcessing)}
 async function processQueue(){
-  if(isProcessing||!photoQueue.length||!navigator.onLine||!getApiKey())return;isProcessing=true;updateQueueBar();
+  if(isProcessing||!photoQueue.length)return;
+  if(!navigator.onLine){
+    addLog(LOG_LEVELS.ERROR,ERROR_CODES.NETWORK_OFFLINE,'Cola IA detenida: sin conexion',{service:'Gemini',operation:'processQueue'});
+    return;
+  }
+  if(!getApiKey()){
+    addLog(LOG_LEVELS.ERROR,ERROR_CODES.CONFIG_MISSING,'Cola IA detenida: falta API Key Gemini',{service:'Gemini',operation:'processQueue'});
+    return;
+  }
+  isProcessing=true;updateQueueBar();
   while(photoQueue.length>0&&navigator.onLine){
     const item=photoQueue[0];const pl=item.photos||[item.dataUrl].filter(Boolean);
     let queueAnalysisId=null;
@@ -2624,7 +2871,11 @@ btnAutoFlow.style.color='#fff';
 document.querySelector('.cam-btns').after(btnAutoFlow);
 
 btnAutoFlow.addEventListener('click',async()=>{
-  if(!getApiKey()){showToast('Configura la clave API en Ajustes (⚙)','info');return}
+  if(!getApiKey()){
+    addLog(LOG_LEVELS.ERROR,ERROR_CODES.CONFIG_MISSING,'Modo automatico no disponible: falta API Key Gemini',{service:'Gemini',operation:'autoModeStart'});
+    showToast('Configura la clave API en Ajustes (⚙)','info');
+    return;
+  }
   autoMode=true;btnAutoFlow.style.display='none';
   document.getElementById('aiStatus').innerHTML='<span class="spinner"></span> Modo automático activo — Haz una foto';
   document.getElementById('aiStatus').classList.add('show');
@@ -2966,7 +3217,11 @@ function updateBatchUIAfterChange(){
 }
 
 async function processBatch(){
-  if(!getApiKey()){showToast('Configura la clave API en Ajustes (⚙)','info');return}
+  if(!getApiKey()){
+    addLog(LOG_LEVELS.ERROR,ERROR_CODES.CONFIG_MISSING,'Lote no iniciado: falta API Key Gemini',{service:'Gemini',operation:'processBatch'});
+    showToast('Configura la clave API en Ajustes (⚙)','info');
+    return;
+  }
   batchStatus.innerHTML=`<span class="spinner"></span> Procesando 0/${batchPhotos.length}…`;
   let processed=0,successes=[],failures=[],pendingReview=[];
   const photoResults=[];
@@ -3138,7 +3393,7 @@ let tokenClient;
 // Cargar Google APIs
 function loadGoogleAPIs(){
   if(gapiLoaded&&gisLoaded)return Promise.resolve();
-  return new Promise((resolve)=>{
+  return new Promise((resolve,reject)=>{
     const script1=document.createElement('script');
     script1.src='https://apis.google.com/js/api.js';
     script1.onload=()=>{
@@ -3152,9 +3407,25 @@ function loadGoogleAPIs(){
           if(gisLoaded)resolve();
         }).catch((err)=>{
           console.error('Error loading Drive API:',err);
+          addLog(LOG_LEVELS.ERROR,'GDRIVE_API_LOAD_FAILED','Error cargando SDK de Google Drive',{
+            service:'Google Drive',
+            operation:'loadGoogleAPIs',
+            error:err&&err.message?err.message:String(err),
+            probable_cause:'Client ID/API Key invalidos, API de Drive deshabilitada o bloqueo de red.'
+          });
           showToast('Error cargando Google Drive API','info');
+          reject(err);
         });
       });
+    };
+    script1.onerror=(e)=>{
+      addLog(LOG_LEVELS.ERROR,'GDRIVE_SCRIPT_LOAD_FAILED','No se pudo cargar https://apis.google.com/js/api.js',{
+        service:'Google Drive',
+        operation:'loadGoogleAPIs',
+        error:e&&e.message?e.message:'script_onerror',
+        probable_cause:'Bloqueo de red, adblock, CSP o fallo temporal de Google.'
+      });
+      reject(new Error('No se pudo cargar api.js'));
     };
     document.head.appendChild(script1);
     
@@ -3172,11 +3443,27 @@ function loadGoogleAPIs(){
             showToast('Google Drive conectado','info');
             updateGDriveUI();
             setTimeout(()=>gdriveSmartSync('startup'),1000);
+          }else if(response && (response.error || response.error_description)){
+            addLog(LOG_LEVELS.ERROR,ERROR_CODES.GDRIVE_AUTH_FAILED,'OAuth de Google Drive rechazado',{
+              service:'Google Drive',
+              operation:'oauth_token_callback',
+              error:response.error||'oauth_error',
+              provider_message:response.error_description||null
+            });
           }
         }
       });
       gisLoaded=true;
       if(gapiLoaded)resolve();
+    };
+    script2.onerror=(e)=>{
+      addLog(LOG_LEVELS.ERROR,'GDRIVE_GIS_LOAD_FAILED','No se pudo cargar https://accounts.google.com/gsi/client',{
+        service:'Google Drive',
+        operation:'loadGoogleAPIs',
+        error:e&&e.message?e.message:'script_onerror',
+        probable_cause:'Bloqueo de red, adblock, CSP o fallo temporal de Google.'
+      });
+      reject(new Error('No se pudo cargar gsi/client'));
     };
     document.head.appendChild(script2);
   });
@@ -3218,8 +3505,27 @@ function updateGDriveUI(){
 
 document.getElementById('gdriveConnectBtn').addEventListener('click',async()=>{
   const cfg=getGdriveConfig();
-  if(!cfg.clientId||!cfg.apiKey){ showToast('Configura Client ID y API Key de Google en Ajustes','info'); return; }
-  await loadGoogleAPIs();
+  if(!cfg.clientId||!cfg.apiKey){
+    addLog(LOG_LEVELS.ERROR,ERROR_CODES.CONFIG_MISSING,'Google Drive sin configurar (Client ID/API Key)',{
+      service:'Google Drive',
+      operation:'connect',
+      client_id_configured:!!cfg.clientId,
+      api_key_configured:!!cfg.apiKey
+    });
+    showToast('Configura Client ID y API Key de Google en Ajustes','info');
+    return;
+  }
+  try{
+    await loadGoogleAPIs();
+  }catch(err){
+    addLog(LOG_LEVELS.ERROR,'GDRIVE_CONNECT_PRECHECK_FAILED','No se pudo inicializar Google Drive antes de conectar',{
+      service:'Google Drive',
+      operation:'connect',
+      error:err&&err.message?err.message:String(err)
+    });
+    showToast('Error cargando servicios de Google. Revisa red/configuración.','info');
+    return;
+  }
   tokenClient=google.accounts.oauth2.initTokenClient({
     client_id:cfg.clientId,
     scope:cfg.scopes,
@@ -3231,6 +3537,14 @@ document.getElementById('gdriveConnectBtn').addEventListener('click',async()=>{
         showToast('Google Drive conectado','info');
         updateGDriveUI();
         setTimeout(()=>gdriveSmartSync('startup'),1000);
+      }else if(response && (response.error || response.error_description)){
+        addLog(LOG_LEVELS.ERROR,ERROR_CODES.GDRIVE_AUTH_FAILED,'No se pudo autorizar Google Drive',{
+          service:'Google Drive',
+          operation:'connect_oauth',
+          error:response.error||'oauth_error',
+          provider_message:response.error_description||null
+        });
+        showToast('Autorización de Google Drive cancelada o rechazada','info');
       }
     }
   });
@@ -3289,7 +3603,12 @@ document.getElementById('gdriveSyncManualBtn').addEventListener('click',async()=
     if(status) { status.innerHTML='❌ Error: '+err.message; status.style.background='rgba(180,0,0,0.1)'; status.style.color='red'; }
     btn.disabled=false;
     btn.innerHTML='🔄 Reintentar';
-    addLog('SYNC_ERROR',{trigger:'manual',error:err.message});
+    addLog('SYNC_ERROR',{
+      trigger:'manual',
+      error:err.message,
+      status: err && err.status ? err.status : null,
+      probable_cause: classifyHttpFailure((err&&err.status)||0, (err&&err.message)||'')
+    });
   }
 });
 
@@ -3442,7 +3761,14 @@ async function gdriveSmartSync(trigger = 'manual') {
     try {
       remoteState = await gdriveReadRemoteState();
     } catch(err) {
-      addLog('SYNC_ERROR', { sync_session_id: session.sync_session_id, trigger, reason: 'Error leyendo remoto', error: err.message });
+      addLog('SYNC_ERROR', {
+        sync_session_id: session.sync_session_id,
+        trigger,
+        reason: 'Error leyendo remoto',
+        error: err.message,
+        status: err && err.status ? err.status : null,
+        probable_cause: classifyHttpFailure((err&&err.status)||0, (err&&err.message)||'')
+      });
       finishSyncSession(session, 'error', 'error', 'Error leyendo estado remoto: ' + err.message, err.message);
       showToast('Error al leer Google Drive', 'info');
       return;
@@ -3595,7 +3921,13 @@ async function gdriveSmartSync(trigger = 'manual') {
 
   } catch(err) {
     console.error('Error sync:', err);
-    addLog('SYNC_ERROR', { sync_session_id: session.sync_session_id, trigger, error: err.message });
+    addLog('SYNC_ERROR', {
+      sync_session_id: session.sync_session_id,
+      trigger,
+      error: err.message,
+      status: err && err.status ? err.status : null,
+      probable_cause: classifyHttpFailure((err&&err.status)||0, (err&&err.message)||'')
+    });
     finishSyncSession(session, 'error', 'error', 'Error: ' + err.message, err.message);
     if(err.status === 401 || err.status === 403) {
       localStorage.removeItem('gdrive_token');
@@ -3689,13 +4021,18 @@ async function gdriveUpload(){
     close_delim;
 
   async function patchFile(targetFileId){
-    const upResp = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${targetFileId}?uploadType=multipart`,{
+    const upResp = await fetchWithDiagnostics(`https://www.googleapis.com/upload/drive/v3/files/${targetFileId}?uploadType=multipart`,{
       method:'PATCH',
       headers:{
         'Authorization':`Bearer ${gdriveToken}`,
         'Content-Type':`multipart/related; boundary="${boundary}"`
       },
       body:multipartRequestBody
+    },{
+      service:'Google Drive',
+      operation:'subida PATCH productos.json',
+      requestTag:'gdriveUpload_patch',
+      requireOnline:true
     });
     if(!upResp.ok){
       const bodyText = await upResp.text().catch(()=> '');
@@ -3708,13 +4045,18 @@ async function gdriveUpload(){
   }
 
   async function createFile(){
-    const resp=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',{
+    const resp=await fetchWithDiagnostics('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',{
       method:'POST',
       headers:{
         'Authorization':`Bearer ${gdriveToken}`,
         'Content-Type':`multipart/related; boundary="${boundary}"`
       },
       body:multipartRequestBody
+    },{
+      service:'Google Drive',
+      operation:'creacion archivo productos.json',
+      requestTag:'gdriveUpload_create',
+      requireOnline:true
     });
     if(!resp.ok){
       const bodyText = await resp.text().catch(()=> '');
@@ -3822,6 +4164,12 @@ if(gdriveToken&&checkSession()){
       gapi.client.setToken({access_token:gdriveToken});
       setTimeout(()=>gdriveSmartSync('startup'),2000);
     }
+  }).catch(err=>{
+    addLog(LOG_LEVELS.ERROR,'GDRIVE_AUTOSTART_FAILED','No se pudo iniciar Google Drive al cargar la app',{
+      service:'Google Drive',
+      operation:'autostart',
+      error:err&&err.message?err.message:String(err)
+    });
   });
 }
 
