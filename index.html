@@ -204,7 +204,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v2802202613:26h</div>
+    <div class="login-version">v2802202618:00h</div>
   </div>
 </div>
 
@@ -431,7 +431,7 @@ const AL=Object.keys(IC);
 const OFFICIAL_ALLERGENS=AL;
 
 // ─── LOGIN ───
-const USERS={administrador:'administrador'};
+const USERS={administrador:'fca?cG4F+[DMY1:P6_Q\\._5'};
 const loginScreen=document.getElementById('loginScreen');
 const appEl=document.getElementById('app');
 
@@ -3370,10 +3370,10 @@ document.querySelectorAll('.method-btn').forEach(b=>b.addEventListener('click',(
 }));
 
 // ─── GOOGLE DRIVE SYNC ───
-// Claves ya no van en el código; se configuran en Ajustes y se guardan en el navegador (sin subir a GitHub).
+// Claves: Client ID por defecto = OAuth del proyecto APP ALERGENOS (fenixsn369). API Key se introduce en Ajustes.
 function getGdriveConfig(){
   return {
-    clientId: (localStorage.getItem('gdrive_client_id')||'').trim(),
+    clientId: (localStorage.getItem('gdrive_client_id')||'929480709549-uqrrp0qb3l12tkp3j5eodkfnnfb1jjv5.apps.googleusercontent.com').trim(),
     apiKey: (localStorage.getItem('gdrive_api_key')||'').trim(),
     scopes:'https://www.googleapis.com/auth/drive.file',
     folderName:'BaseDatos_Israel_NoEliminar_Sincronizacion',
