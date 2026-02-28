@@ -204,7 +204,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v2802202618:30h</div>
+    <div class="login-version">v2802202623:45h</div>
   </div>
 </div>
 
@@ -961,8 +961,9 @@ document.addEventListener('DOMContentLoaded',()=>{
   addLog(LOG_LEVELS.INFO,'APP_STARTED','Aplicación iniciada',{});
 });
 
-function getApiKey(){return localStorage.getItem('alerg_apikey')||''}
-function getVisionApiKey(){return localStorage.getItem('gdrive_api_key')||''}
+// Clave Gemini: si no hay "Clave Gemini" guardada, usar la de Drive (misma key suele servir para Vision+Gemini+Drive).
+function getApiKey(){return (localStorage.getItem('alerg_apikey')||localStorage.getItem('gdrive_api_key')||'').trim()}
+function getVisionApiKey(){return (localStorage.getItem('gdrive_api_key')||'').trim()}
 
 function sanitizeUrlForDiagnostics(rawUrl){
   const input=String(rawUrl||'');
@@ -3792,8 +3793,14 @@ async function gdriveSmartSync(trigger = 'manual') {
       decision = 'upload';
       reason = 'No existe archivo remoto';
     } else if(remoteState.remoteLastUpdate > localLastUpdate) {
-      decision = 'download';
-      reason = `Remoto más nuevo: ${new Date(remoteState.remoteLastUpdate).toLocaleString('es-ES')} vs local: ${new Date(localLastUpdate).toLocaleString('es-ES')}`;
+      // Protección: no sobrescribir más datos locales con menos datos remotos (evitar pérdida de registros)
+      if(remoteState.remoteCount < localCount) {
+        decision = 'upload';
+        reason = `Remoto más nuevo pero tiene menos productos (${remoteState.remoteCount}) que local (${localCount}). Se sube local para no perder registros.`;
+      } else {
+        decision = 'download';
+        reason = `Remoto más nuevo: ${new Date(remoteState.remoteLastUpdate).toLocaleString('es-ES')} vs local: ${new Date(localLastUpdate).toLocaleString('es-ES')}`;
+      }
     } else if(localLastUpdate > remoteState.remoteLastUpdate) {
       decision = 'upload';
       reason = `Local más nuevo: ${new Date(localLastUpdate).toLocaleString('es-ES')} vs remoto: ${new Date(remoteState.remoteLastUpdate).toLocaleString('es-ES')}`;
