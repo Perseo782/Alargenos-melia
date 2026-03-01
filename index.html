@@ -1325,7 +1325,7 @@ function buildResultFromOcrText(rawText){
     {allergen:'SÉSAMO',rx:[/sésam/i,/sesam/i,/tahin[ií]/i]},
     {allergen:'APIO',rx:[/apio/i,/celery/i,/céleri/i]},
     {allergen:'MOSTAZA',rx:[/mostaz/i,/mustard/i]},
-    {allergen:'SULFITOS',rx:[/sulfit/i,/anhídrido\s+sulfuroso/i,/anhidrido\s+sulfuroso/i,/e22[0-8]/i]},
+    {allergen:'SULFITOS',rx:[/sulfit/i,/sulphit/i,/anhídrido\s+sulfuroso/i,/anhidrido\s+sulfuroso/i,/di[oó]xido\s+de\s+azufre/i,/sulfur\s+dioxide/i,/sulphur\s+dioxide/i,/e22[0-8]/i]},
     {allergen:'PESCADO',rx:[/pescad/i,/atun/i,/atún/i,/salmon/i,/salmón/i,/bacalao/i,/merluza/i]},
     {allergen:'CRUSTÁCEOS',rx:[/crustac[eé]o/i,/gamb[ao]/i,/langost/i,/marisc/i]},
     {allergen:'MOLUSCO',rx:[/mejillon/i,/mejillón/i,/almej/i,/pulpo/i,/calamar/i,/molusc/i]},
@@ -1860,7 +1860,7 @@ const PHOTO_KEYWORD_RULES=[
   {rx:[/sesam/i,/tahini/i,/tahina/i], allergen:'SÉSAMO', level:'high'},
   {rx:[/soja/i,/edamame/i,/miso/i,/tofu/i], allergen:'SOJA', level:'high'},
   {rx:[/mostaz/i], allergen:'MOSTAZA', level:'high'},
-  {rx:[/sulfit/i,/anhidrido\s+sulfuroso/i,/e22[0-8]/i], allergen:'SULFITOS', level:'high'},
+  {rx:[/sulfit/i,/sulphit/i,/anhidrido\s+sulfuroso/i,/di[oó]xido\s+de\s+azufre/i,/sulfur\s+dioxide/i,/sulphur\s+dioxide/i,/e22[0-8]/i], allergen:'SULFITOS', level:'high'},
   {rx:[/apio/i], allergen:'APIO', level:'high'},
   {rx:[/cacahuet/i,/mani/i], allergen:'CACAHUETES', level:'high'},
   {rx:[/pescad/i,/atun/i,/salmon/i,/bacalao/i,/merluza/i], allergen:'PESCADO', level:'high'},
@@ -1869,13 +1869,52 @@ const PHOTO_KEYWORD_RULES=[
   {rx:[/e322/i], allergen:'SOJA', level:'info'}
 ];
 
+const ALLERGEN_SYNONYMS={
+  'ALTRAMUZ':['altramuz','altramuces','lupino','lupinos','lupin','lupins'],
+  'APIO':['apio','celery','céleri','celeri','sellerie'],
+  'CACAHUETES':['cacahuete','cacahuetes','mani','maní','peanut','peanuts'],
+  'CEREALES':['cereal','cereales','gluten','trigo','wheat','cebada','barley','avena','oat','oats','centeno','rye'],
+  'CRUSTÁCEOS':['crustaceo','crustaceos','crustáceo','crustáceos','crustacean','crustaceans','shellfish'],
+  'FRUTOS SECOS':['fruto seco','frutos secos','frutos de cascara','frutos de cáscara','tree nut','tree nuts','nuts'],
+  'HUEVO':['huevo','huevos','egg','eggs'],
+  'LÁCTEO':['lacteo','lacteos','lácteo','lácteos','leche','milk','dairy','lactose'],
+  'MOLUSCO':['molusco','moluscos','mollusc','molluscs','mollusk','mollusks'],
+  'MOSTAZA':['mostaza','mustard'],
+  'PESCADO':['pescado','fish','fishes'],
+  'SÉSAMO':['sesamo','sésamo','sesame','sesam'],
+  'SOJA':['soja','soy','soya'],
+  'SULFITOS':['sulfito','sulfitos','sulfite','sulfites','sulphite','sulphites','anhidrido sulfuroso','anhídrido sulfuroso','dioxido de azufre','dióxido de azufre','sulfur dioxide','sulphur dioxide','e220','e221','e222','e223','e224','e226','e227','e228']
+};
+const ALLERGEN_ALIAS_MAP=(()=>{
+  const out={};
+  AL.forEach(a=>{out[norm(a)]=a});
+  Object.entries(ALLERGEN_SYNONYMS).forEach(([official,aliases])=>{
+    aliases.forEach(alias=>{
+      const k=norm(alias);
+      if(k) out[k]=official;
+    });
+  });
+  return out;
+})();
+function inferAllergensFromText(text){
+  const src=String(text||'');
+  if(!src.trim()) return [];
+  const found=[];
+  PHOTO_KEYWORD_RULES.forEach(rule=>{
+    const hit=rule.rx.find(rx=>rx.test(src));
+    if(hit) found.push(rule.allergen);
+  });
+  return [...new Set(found)];
+}
 function normalizeAllergen(s){
   const t=String(s||'').trim();
   if(!t) return '';
   if(AL.includes(t)) return t;
   const n=norm(t);
-  const found=AL.find(a=>norm(a)===n);
-  return found||'';
+  if(!n) return '';
+  if(ALLERGEN_ALIAS_MAP[n]) return ALLERGEN_ALIAS_MAP[n];
+  const inferred=inferAllergensFromText(t);
+  return inferred.length===1?inferred[0]:'';
 }
 
 function normalizeAIPhotoResult(obj){
@@ -1888,6 +1927,54 @@ function normalizeAIPhotoResult(obj){
   out.notas=String(out.notas||'').trim();
   out.warning=String(out.warning||'').trim();
   return out;
+}
+function applyPhotoReviewValidation(result,rawText,source='photo'){
+  const alergSet=new Set([...(result.alergenos||[]),...(result.trazas||[])].map(normalizeAllergen));
+  const mapeoDiff=[];
+  result.hallazgos_texto.forEach(txt=>{
+    const key=norm(txt);
+    const exact=result.mapeo.filter(m=>norm(m.texto)===key).map(m=>m.alergeno).filter(Boolean);
+    const byContains=result.mapeo.filter(m=>key.includes(norm(m.texto))||norm(m.texto).includes(key)).map(m=>m.alergeno).filter(Boolean);
+    const mapped=[...new Set([...exact,...byContains])].filter(a=>OFFICIAL_ALLERGENS.includes(a));
+    if(!mapped.length){mapeoDiff.push({texto:txt,motivo:'sin_mapeo'});return;}
+    const miss=mapped.filter(a=>!alergSet.has(a));
+    if(miss.length)mapeoDiff.push({texto:txt,mapeado:mapped,faltan_en_resultado:miss});
+  });
+  if(mapeoDiff.length) addLog('WARN','PHOTO_MAPEO_DIFF','PHOTO_MAPEO_DIFF',{source,diff:mapeoDiff});
+  const textForCheck=(result.hallazgos_texto.join(' ')||String(rawText||''));
+  const keywordAlerts=[];
+  PHOTO_KEYWORD_RULES.forEach(rule=>{
+    const hit=rule.rx.find(rx=>rx.test(textForCheck));
+    if(hit && !alergSet.has(rule.allergen)) keywordAlerts.push({allergen:rule.allergen,level:rule.level,pattern:hit.toString()});
+  });
+  if(keywordAlerts.length) addLog('WARN','PHOTO_KEYWORD_ALERT','PHOTO_KEYWORD_ALERT',{source,alerts:keywordAlerts});
+  result.review_alerts={mapeo:mapeoDiff,keywords:keywordAlerts};
+  result.requires_review=!!(mapeoDiff.length || keywordAlerts.some(a=>a.level==='high'));
+  return result;
+}
+function mergeAIWithOcrFallback(aiResult,ocrResult){
+  const ai=normalizeAIPhotoResult(aiResult||{});
+  const ocr=normalizeAIPhotoResult(ocrResult||{});
+  const merged={...ocr,...ai};
+  merged.nombre=ai.nombre||ocr.nombre;
+  merged.hallazgos_texto=[...new Set([...(ocr.hallazgos_texto||[]),...(ai.hallazgos_texto||[])].map(x=>String(x||'').trim()).filter(Boolean))];
+  const map=new Map();
+  [...(ocr.mapeo||[]),...(ai.mapeo||[])].forEach(entry=>{
+    const texto=String((entry&&entry.texto)||'').trim();
+    const alergeno=normalizeAllergen((entry&&entry.alergeno)||'');
+    if(!texto&&!alergeno) return;
+    const key=`${norm(texto)}|${alergeno}`;
+    if(!map.has(key)) map.set(key,{texto,alergeno});
+  });
+  merged.mapeo=[...map.values()];
+  const aiAll=new Set([...(ai.alergenos||[]),...(ai.trazas||[])].map(normalizeAllergen).filter(Boolean));
+  const mergedAlergenos=new Set([...(ai.alergenos||[]),...(ocr.alergenos||[])].map(normalizeAllergen).filter(Boolean));
+  const mergedTrazas=new Set([...(ai.trazas||[]),...(ocr.trazas||[])].map(normalizeAllergen).filter(Boolean));
+  mergedAlergenos.forEach(a=>mergedTrazas.delete(a));
+  merged.alergenos=sortAllergens([...mergedAlergenos].filter(a=>AL.includes(a)));
+  merged.trazas=sortAllergens([...mergedTrazas].filter(a=>AL.includes(a)));
+  const recovered=[...new Set([...(merged.alergenos||[]),...(merged.trazas||[])])].filter(a=>!aiAll.has(a));
+  return {result:normalizeAIPhotoResult(merged),recovered};
 }
 function extractJsonFromAIResponse(rawText){
   let s=String(rawText||'').trim();
@@ -1924,28 +2011,7 @@ function parseAndValidateAI(rawText,source='photo'){
   }
   const result=normalizeAIPhotoResult(parsed);
   addLog('INFO','PHOTO_PARSED_RESULT','PHOTO_PARSED_RESULT',{source,parsed:{nombre:result.nombre,hallazgos_texto:result.hallazgos_texto,mapeo:result.mapeo,alergenos:result.alergenos,trazas:result.trazas,warning:result.warning||''}});
-  const alergSet=new Set([...(result.alergenos||[]),...(result.trazas||[])].map(normalizeAllergen));
-  const mapeoDiff=[];
-  result.hallazgos_texto.forEach(txt=>{
-    const key=norm(txt);
-    const exact=result.mapeo.filter(m=>norm(m.texto)===key).map(m=>m.alergeno).filter(Boolean);
-    const byContains=result.mapeo.filter(m=>key.includes(norm(m.texto))||norm(m.texto).includes(key)).map(m=>m.alergeno).filter(Boolean);
-    const mapped=[...new Set([...exact,...byContains])].filter(a=>OFFICIAL_ALLERGENS.includes(a));
-    if(!mapped.length){mapeoDiff.push({texto:txt,motivo:'sin_mapeo'});return;}
-    const miss=mapped.filter(a=>!alergSet.has(a));
-    if(miss.length)mapeoDiff.push({texto:txt,mapeado:mapped,faltan_en_resultado:miss});
-  });
-  if(mapeoDiff.length) addLog('WARN','PHOTO_MAPEO_DIFF','PHOTO_MAPEO_DIFF',{source,diff:mapeoDiff});
-  const textForCheck=(result.hallazgos_texto.join(' ')||String(rawText||''));
-  const keywordAlerts=[];
-  PHOTO_KEYWORD_RULES.forEach(rule=>{
-    const hit=rule.rx.find(rx=>rx.test(textForCheck));
-    if(hit && !alergSet.has(rule.allergen)) keywordAlerts.push({allergen:rule.allergen,level:rule.level,pattern:hit.toString()});
-  });
-  if(keywordAlerts.length) addLog('WARN','PHOTO_KEYWORD_ALERT','PHOTO_KEYWORD_ALERT',{source,alerts:keywordAlerts});
-  result.review_alerts={mapeo:mapeoDiff,keywords:keywordAlerts};
-  result.requires_review=!!(mapeoDiff.length || keywordAlerts.some(a=>a.level==='high'));
-  return result;
+  return applyPhotoReviewValidation(result,rawText,source);
 }
 function isAutoOk(result){
   if(!result)return false;
@@ -2445,6 +2511,7 @@ Lee la etiqueta completa, incluido el texto pequeño. Busca en:
 PASO 2 — HALLAZGOS Y MAPEO
 Extrae TODOS los términos detectados y mapea SIEMPRE a los 14 nombres oficiales:
 ALTRAMUZ, APIO, CACAHUETES, CEREALES, CRUSTÁCEOS, FRUTOS SECOS, HUEVO, LÁCTEO, MOLUSCO, MOSTAZA, PESCADO, SÉSAMO, SOJA, SULFITOS
+FORMATO OBLIGATORIO: en "mapeo[].alergeno", "alergenos[]" y "trazas[]" usa SOLO uno de esos 14 nombres exactos (en mayúsculas). Nunca pongas texto libre como "contiene ..." o palabras sueltas.
 
 Conversión obligatoria (ejemplos):
 gluten/trigo/cebada/avena/centeno/sémola de trigo -> CEREALES
@@ -2492,6 +2559,7 @@ Lee el texto completo. Busca en:
 PASO 2 — HALLAZGOS Y MAPEO
 Extrae TODOS los términos detectados y mapea SIEMPRE a los 14 nombres oficiales:
 ALTRAMUZ, APIO, CACAHUETES, CEREALES, CRUSTÁCEOS, FRUTOS SECOS, HUEVO, LÁCTEO, MOLUSCO, MOSTAZA, PESCADO, SÉSAMO, SOJA, SULFITOS
+FORMATO OBLIGATORIO: en "mapeo[].alergeno", "alergenos[]" y "trazas[]" usa SOLO uno de esos 14 nombres exactos (en mayúsculas). Nunca pongas texto libre como "contiene ..." o palabras sueltas.
 
 Conversión obligatoria (ejemplos):
 gluten/trigo/cebada/avena/centeno/sémola de trigo -> CEREALES
@@ -2752,6 +2820,12 @@ async function analyzePhotos(photoList){
           const iaData=await iaResp.json();
           const text=iaData.choices?.[0]?.message?.content||'';
           result=parseAndValidateAI(text,'vision');
+          const ocrLocal=normalizeAIPhotoResult(buildResultFromOcrText(ocrText));
+          const merged=mergeAIWithOcrFallback(result,ocrLocal);
+          result=applyPhotoReviewValidation(merged.result,text,'vision_merged');
+          if(merged.recovered.length){
+            addLog('INFO','PHOTO_OCR_RECOVERY','PHOTO_OCR_RECOVERY',{analysis_id:analysisId,recovered:merged.recovered});
+          }
           result.nombre=fixNombreFromOcr(result.nombre,ocrText);
           result=normalizeAIPhotoResult(result);
         }else{
