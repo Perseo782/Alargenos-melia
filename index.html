@@ -153,6 +153,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 .cam-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
 .cam-btn{padding:14px;border-radius:var(--radius);border:1px solid var(--warm8-40);background:var(--white);font-family:var(--sans);font-size:12px;font-weight:600;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
 .cam-btn:active{background:var(--warm8-10)}
+.photo-source-target{font-size:12px;color:var(--text2);margin-bottom:12px}
 .cam-input{display:none}
 .ai-status{font-size:12px;color:var(--text2);padding:12px;border-radius:var(--radius);background:var(--warm8-10);margin-bottom:14px;display:none;line-height:1.5}
 .ai-status.show{display:block}
@@ -177,9 +178,13 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 .settings-section .save-btn,.settings-section .api-key-save{margin-top:12px;height:44px;border-radius:var(--radius);font-size:12px;letter-spacing:0.5px;display:flex;align-items:center;justify-content:center;gap:8px}
 .settings-section .btn-row{display:flex;gap:8px;margin-top:12px}
 .settings-section .btn-row .save-btn{flex:1;margin-top:0;height:44px}
+.api-key-actions{display:flex;gap:8px;align-items:stretch;margin-top:12px}
+.api-key-actions .api-key-save{flex:1;margin-top:0;height:44px;padding:0 10px}
+.api-key-actions .api-key-test{background:var(--warm8-80)}
 .api-key-input{width:100%;padding:12px 14px;border:1px solid var(--warm8-40);border-radius:var(--radius);font-size:13px;font-family:monospace;color:var(--text);outline:none;margin-bottom:8px}
 .api-key-input:focus{border-color:var(--warm8)}
 .api-key-save{padding:0 20px;height:44px;border-radius:var(--radius);border:none;background:var(--warm8);color:#fff;font-size:12px;font-family:var(--sans);cursor:pointer;font-weight:500}
+.api-key-save:disabled{opacity:.35;cursor:not-allowed}
 .api-key-status{font-size:12px;margin-top:8px;font-weight:500;font-family:var(--sans)}
 .api-key-status.ok{color:var(--green)}
 .api-key-status.no{color:var(--warm8-60)}
@@ -204,7 +209,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v0103202615:37h</div>
+    <div class="login-version">v0103202616:04h</div>
   </div>
 </div>
 
@@ -316,6 +321,17 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <button class="save-btn" id="warningOk">Entendido</button>
 </div></div>
 
+<!-- PHOTO SOURCE CHOOSER -->
+<div class="modal-bg" id="photoSourceBg" style="z-index:10002"><div class="modal" style="border-radius:12px;max-width:360px;margin:auto;padding:22px 20px">
+  <h2 style="justify-content:center;margin-bottom:8px">Seleccionar origen</h2>
+  <p class="photo-source-target" id="photoSourceTarget">Elige cómo añadir la foto</p>
+  <div class="cam-btns" style="margin-bottom:8px">
+    <button class="cam-btn" id="photoSourceCamera">📷 Cámara</button>
+    <button class="cam-btn" id="photoSourceGallery">🖼️ Galería</button>
+  </div>
+  <button class="save-btn" id="photoSourceCancel" style="background:var(--warm8-20);color:var(--text)">Cancelar</button>
+</div></div>
+
 <!-- ERROR MODAL (con miniatura) -->
 <div class="modal-bg" id="errorModalBg" style="z-index:10001"><div class="modal" style="border-radius:12px;max-width:420px;margin:auto;padding:24px 20px">
   <div style="text-align:center">
@@ -390,9 +406,9 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <h3>Lectura de etiquetas (IA)</h3>
     <div class="settings-info">Para usar la cámara con lectura automática de etiquetas y la revisión de incoherencias, necesitas una clave API de Google (Gemini). Si no la tienes, la función de cámara no funcionará, pero la consulta y edición manual siguen disponibles.</div>
     <input class="api-key-input" id="apiKeyInput" type="password" placeholder="AIza... (clave Gemini)">
-    <div class="btn-row">
-      <button class="api-key-save" id="apiKeySave" style="flex:1">Guardar clave</button>
-      <button class="save-btn" id="apiKeyTestBtn" style="flex:1;background:var(--warm8-80)">Probar conexión IA</button>
+    <div class="api-key-actions">
+      <button class="api-key-save" id="apiKeySave">Guardar clave</button>
+      <button class="api-key-save api-key-test" id="apiKeyTestBtn">Probar conexión IA</button>
     </div>
     <div class="api-key-status no" id="apiKeyStatus">Sin clave configurada</div>
     <div class="settings-info" id="apiKeyTestStatus" style="display:none;margin-top:8px;font-size:12px"></div>
@@ -407,7 +423,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.1 · v0103202615:37h</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.2 · v0103202616:04h</span></div>
     <button class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section">
@@ -485,6 +501,8 @@ function applyNavStack(stack){
   modalBg.classList.toggle('open',list.includes('add'));
   confirmBg.classList.toggle('open',list.includes('confirm'));
   photoWarningBg.classList.toggle('open',list.includes('photoWarning'));
+  const psBg=document.getElementById('photoSourceBg');
+  if(psBg) psBg.classList.toggle('open',list.includes('photoSource'));
   errorModalBg.classList.toggle('open',list.includes('errorModal'));
   batchSummaryBg.classList.toggle('open',list.includes('batchSummary'));
   batchReviewModalBg.classList.toggle('open',list.includes('batchReview'));
@@ -525,11 +543,13 @@ function openSettings(){
   const key=localStorage.getItem('alerg_apikey')||'';
   const driveKey=localStorage.getItem('gdrive_api_key')||'';
   document.getElementById('apiKeyInput').value=key;
+  if(typeof ensureRecommendedGdriveClientId==='function') ensureRecommendedGdriveClientId();
   const c=getGdriveConfig();
   const gci=document.getElementById('gdriveClientIdInput');
   const gak=document.getElementById('gdriveApiKeyInput');
   if(gci)gci.value=c.clientId||'';
   if(gak)gak.value=c.apiKey||'';
+  if(c.apiKey && !(gapiLoaded&&gisLoaded)) loadGoogleAPIs().catch(()=>{});
   updateGDriveUI();
   const st=document.getElementById('apiKeyStatus');
   if(key){st.textContent='✓ Clave configurada';st.className='api-key-status ok'}
@@ -962,7 +982,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.1-010320261537',
+    version:'1.0.2-010320261604',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -1962,6 +1982,45 @@ function normalizeAllergen(s){
   const inferred=inferAllergensFromText(t);
   return inferred.length===1?inferred[0]:'';
 }
+function localizeWarningMessage(msg){
+  const raw=String(msg||'').trim();
+  if(!raw) return '';
+  let out=raw.replace(/\s+/g,' ').trim();
+
+  const strictRules=[
+    [/^OCR unclear for ['"]?Contiene['"]? statement\.?$/i,'No se ha podido leer con claridad la frase "Contiene".'],
+    [/^OCR unclear for ['"]?Puede contener['"]? statement\.?$/i,'No se ha podido leer con claridad la frase "Puede contener".'],
+    [/^OCR unclear for ['"]?Trazas?['"]? statement\.?$/i,'No se ha podido leer con claridad la frase de trazas.'],
+    [/^OCR unclear for ['"]?Al[eé]rgenos?['"]? statement\.?$/i,'No se ha podido leer con claridad la sección de alérgenos.'],
+    [/^image blurry near allergens section\.?$/i,'Imagen borrosa en la sección de alérgenos.'],
+    [/^OCR unclear\.?$/i,'OCR poco claro.']
+  ];
+  for(const [rx,repl] of strictRules){
+    if(rx.test(out)) return repl;
+  }
+
+  out=out
+    .replace(/^OCR unclear for ['"]?(.+?)['"]? statement\.?$/i,'No se ha podido leer con claridad la frase "$1".')
+    .replace(/^OCR unclear/i,'OCR poco claro')
+    .replace(/\bstatement\b/gi,'frase')
+    .replace(/\blabel\b/gi,'etiqueta')
+    .replace(/\ballergen(s)?\b/gi,'alérgenos')
+    .replace(/\bingredients?\b/gi,'ingredientes')
+    .replace(/\bimage\b/gi,'imagen')
+    .replace(/\bsection\b/gi,'sección')
+    .replace(/\bnear\b/gi,'en')
+    .replace(/\bcontains?\b/gi,'contiene')
+    .replace(/\bmay contain\b/gi,'puede contener')
+    .replace(/\btraces?\b/gi,'trazas')
+    .replace(/\bblurry\b/gi,'borrosa')
+    .replace(/\bcropped\b/gi,'recortada')
+    .replace(/\bunclear\b/gi,'poco claro');
+
+  if(/(?:OCR|unclear|blurry|cropped|cannot|unable|not readable)/i.test(raw) && out===raw){
+    return 'No se ha podido leer con suficiente claridad la zona de alérgenos.';
+  }
+  return out;
+}
 
 function normalizeAIPhotoResult(obj){
   const out={...obj};
@@ -1971,7 +2030,7 @@ function normalizeAIPhotoResult(obj){
   out.alergenos=[...new Set((Array.isArray(out.alergenos)?out.alergenos:[]).map(normalizeAllergen).filter(Boolean))];
   out.trazas=[...new Set((Array.isArray(out.trazas)?out.trazas:[]).map(normalizeAllergen).filter(Boolean))];
   out.notas=String(out.notas||'').trim();
-  out.warning=String(out.warning||'').trim();
+  out.warning=localizeWarningMessage(String(out.warning||'').trim());
   return out;
 }
 function applyPhotoReviewValidation(result,rawText,source='photo'){
@@ -2279,6 +2338,8 @@ function closeModal(){
     modalBg.classList.remove('open');
     settingsBg.classList.remove('open');
     if(typeof photoWarningBg!=='undefined') photoWarningBg.classList.remove('open');
+    const psBg=document.getElementById('photoSourceBg');
+    if(psBg) psBg.classList.remove('open');
     if(typeof errorModalBg!=='undefined') errorModalBg.classList.remove('open');
     if(typeof batchSummaryBg!=='undefined') batchSummaryBg.classList.remove('open');
     if(typeof batchReviewModalBg!=='undefined') batchReviewModalBg.classList.remove('open');
@@ -2351,6 +2412,44 @@ document.getElementById('confirmDelete').addEventListener('click',()=>{if(delete
 // Warning modal
 const photoWarningBg=document.getElementById('photoWarningBg');
 document.getElementById('warningOk').addEventListener('click',()=>navBack());
+
+// Selector de origen de foto por slot (envase / etiquetado)
+const photoSourceBg=document.getElementById('photoSourceBg');
+const photoSourceTarget=document.getElementById('photoSourceTarget');
+let pendingPhotoSlot=null;
+function openPhotoSourceChooser(slotIdx){
+  pendingPhotoSlot=slotIdx;
+  if(photoSourceTarget){
+    photoSourceTarget.textContent=slotIdx===0?'Envase: elige Cámara o Galería':'Etiquetado: elige Cámara o Galería';
+  }
+  navPush('photoSource');
+  photoSourceBg.classList.add('open');
+}
+function choosePhotoSource(source){
+  if(pendingPhotoSlot==null) return;
+  currentSlot=pendingPhotoSlot;
+  pendingPhotoSlot=null;
+  photoSourceBg.classList.remove('open');
+  const stack=getNavStack();
+  if(stack[stack.length-1]==='photoSource') navBack();
+  if(source==='camera') camInput.click();
+  else galInput.click();
+}
+document.getElementById('photoSourceCamera').addEventListener('click',()=>choosePhotoSource('camera'));
+document.getElementById('photoSourceGallery').addEventListener('click',()=>choosePhotoSource('gallery'));
+document.getElementById('photoSourceCancel').addEventListener('click',()=>{
+  pendingPhotoSlot=null;
+  const stack=getNavStack();
+  if(stack[stack.length-1]==='photoSource') navBack();
+  else photoSourceBg.classList.remove('open');
+});
+photoSourceBg.addEventListener('click',e=>{
+  if(e.target!==photoSourceBg) return;
+  pendingPhotoSlot=null;
+  const stack=getNavStack();
+  if(stack[stack.length-1]==='photoSource') navBack();
+  else photoSourceBg.classList.remove('open');
+});
 
 // Error modal con miniatura
 const errorModalBg=document.getElementById('errorModalBg');
@@ -2483,7 +2582,7 @@ function showPhotoWarning(productName,warningMsg){
   if(!photoWarningsEnabled())return; // No mostrar si está desactivado
   navPush('photoWarning');
   document.getElementById('warningProduct').textContent=productName||'Producto desconocido';
-  document.getElementById('warningText').textContent=warningMsg;
+  document.getElementById('warningText').textContent=localizeWarningMessage(warningMsg);
   photoWarningBg.classList.add('open');
 }
 
@@ -2492,9 +2591,9 @@ const camInput=document.getElementById('camInput'),galInput=document.getElementB
 const slot1=document.getElementById('slot1'),slot2=document.getElementById('slot2');
 const img1=document.getElementById('img1'),img2=document.getElementById('img2');
 const analyzeBtn=document.getElementById('analyzeBtn');
-function resetCameraUI(){photos=[null,null];currentSlot=0;img1.style.display='none';img2.style.display='none';slot1.classList.remove('filled');slot2.classList.remove('filled');analyzeBtn.style.display='none';document.getElementById('aiStatus').classList.remove('show');document.getElementById('aiResult').classList.remove('show');document.getElementById('aiWarn').textContent='';hideMatch('aiMatch')}
-slot1.addEventListener('click',()=>{currentSlot=0;camInput.click()});
-slot2.addEventListener('click',()=>{currentSlot=1;camInput.click()});
+function resetCameraUI(){photos=[null,null];currentSlot=0;pendingPhotoSlot=null;if(photoSourceBg)photoSourceBg.classList.remove('open');img1.style.display='none';img2.style.display='none';slot1.classList.remove('filled');slot2.classList.remove('filled');analyzeBtn.style.display='none';document.getElementById('aiStatus').classList.remove('show');document.getElementById('aiResult').classList.remove('show');document.getElementById('aiWarn').textContent='';hideMatch('aiMatch')}
+slot1.addEventListener('click',()=>openPhotoSourceChooser(0));
+slot2.addEventListener('click',()=>openPhotoSourceChooser(1));
 document.getElementById('btnCapture').addEventListener('click',()=>{currentSlot=photos[0]?1:0;camInput.click()});
 document.getElementById('btnGallery').addEventListener('click',()=>{currentSlot=photos[0]?1:0;galInput.click()});
 camInput.addEventListener('change',handleImg);galInput.addEventListener('change',handleImg);
@@ -3652,9 +3751,10 @@ document.querySelectorAll('.method-btn').forEach(b=>b.addEventListener('click',(
 
 // ─── GOOGLE DRIVE SYNC ───
 // Claves: Client ID por defecto = OAuth del proyecto APP ALERGENOS (fenixsn369). API Key se introduce en Ajustes.
+const DEFAULT_GDRIVE_CLIENT_ID='929480709549-uqrrp0qb3l12tkp3j5eodkfnnfb1jjv5.apps.googleusercontent.com';
 function getGdriveConfig(){
   return {
-    clientId: (localStorage.getItem('gdrive_client_id')||'929480709549-uqrrp0qb3l12tkp3j5eodkfnnfb1jjv5.apps.googleusercontent.com').trim(),
+    clientId: (localStorage.getItem('gdrive_client_id')||DEFAULT_GDRIVE_CLIENT_ID).trim(),
     apiKey: (localStorage.getItem('gdrive_api_key')||'').trim(),
     scopes:'https://www.googleapis.com/auth/drive.file',
     folderName:'BaseDatos_Israel_NoEliminar_Sincronizacion',
@@ -3669,12 +3769,51 @@ let gdriveFileId=localStorage.getItem('gdrive_file_id');
 let syncInProgress=false;
 let gapiLoaded=false;
 let gisLoaded=false;
+let googleApisLoadingPromise=null;
 let tokenClient;
+
+function getGdriveAuthErrorMessage(response){
+  const err=String((response&&response.error)||'').trim();
+  const provider=String((response&&response.error_description)||'').trim();
+  if(err==='redirect_uri_mismatch'){
+    return 'Error 400 de Google: Client ID no válido para este dominio. Usa el Client ID recomendado de la app y vuelve a conectar.';
+  }
+  if(err==='popup_closed_by_user') return 'Autorización cancelada: cerraste la ventana de Google.';
+  if(err==='access_denied') return 'Autorización denegada por Google.';
+  if(err==='idpiframe_initialization_failed') return 'Google bloqueó el inicio de sesión (cookies o navegador).';
+  if(err==='invalid_client') return 'Client ID inválido. Revisa la configuración de Google.';
+  if(provider) return provider;
+  if(err) return err;
+  return 'No se pudo autorizar Google Drive.';
+}
+function shouldForceRecommendedClientId(){
+  try{
+    const host=(location&&location.hostname||'').toLowerCase();
+    return host==='perseo782.github.io';
+  }catch(_){
+    return false;
+  }
+}
+function ensureRecommendedGdriveClientId(){
+  const input=document.getElementById('gdriveClientIdInput');
+  const stored=(localStorage.getItem('gdrive_client_id')||'').trim();
+  if(shouldForceRecommendedClientId() && stored && stored!==DEFAULT_GDRIVE_CLIENT_ID){
+    localStorage.setItem('gdrive_client_id',DEFAULT_GDRIVE_CLIENT_ID);
+    if(input) input.value=DEFAULT_GDRIVE_CLIENT_ID;
+    addLog(LOG_LEVELS.WARN,'GDRIVE_CLIENT_ID_FORCED_DEFAULT','Se aplicó el Client ID recomendado para evitar redirect_uri_mismatch',{previous_client_id:stored});
+    showToast('Se aplicó el Client ID recomendado para evitar error 400 de Google.','info');
+  }
+}
 
 // Cargar Google APIs
 function loadGoogleAPIs(){
-  if(gapiLoaded&&gisLoaded)return Promise.resolve();
-  return new Promise((resolve,reject)=>{
+  if(gapiLoaded&&gisLoaded) return Promise.resolve();
+  if(googleApisLoadingPromise) return googleApisLoadingPromise;
+  googleApisLoadingPromise=new Promise((resolve,reject)=>{
+    let settled=false;
+    const safeResolve=()=>{if(!settled){settled=true;resolve();}};
+    const safeReject=(err)=>{if(!settled){settled=true;reject(err);}};
+
     const script1=document.createElement('script');
     script1.src='https://apis.google.com/js/api.js';
     script1.onload=()=>{
@@ -3685,7 +3824,7 @@ function loadGoogleAPIs(){
           return gapi.client.load('drive','v3');
         }).then(()=>{
           gapiLoaded=true;
-          if(gisLoaded)resolve();
+          if(gisLoaded)safeResolve();
         }).catch((err)=>{
           console.error('Error loading Drive API:',err);
           addLog(LOG_LEVELS.ERROR,'GDRIVE_API_LOAD_FAILED','Error cargando SDK de Google Drive',{
@@ -3695,7 +3834,7 @@ function loadGoogleAPIs(){
             probable_cause:'Client ID/API Key invalidos, API de Drive deshabilitada o bloqueo de red.'
           });
           showToast('Error cargando Google Drive API','info');
-          reject(err);
+          safeReject(err);
         });
       });
     };
@@ -3706,36 +3845,15 @@ function loadGoogleAPIs(){
         error:e&&e.message?e.message:'script_onerror',
         probable_cause:'Bloqueo de red, adblock, CSP o fallo temporal de Google.'
       });
-      reject(new Error('No se pudo cargar api.js'));
+      safeReject(new Error('No se pudo cargar api.js'));
     };
     document.head.appendChild(script1);
     
     const script2=document.createElement('script');
     script2.src='https://accounts.google.com/gsi/client';
     script2.onload=()=>{
-      tokenClient=google.accounts.oauth2.initTokenClient({
-        client_id:GDRIVE_CONFIG.clientId,
-        scope:GDRIVE_CONFIG.scopes,
-        callback:(response)=>{
-          if(response.access_token){
-            gdriveToken=response.access_token;
-            localStorage.setItem('gdrive_token',gdriveToken);
-            gapi.client.setToken({access_token:gdriveToken});
-            showToast('Google Drive conectado','info');
-            updateGDriveUI();
-            setTimeout(()=>gdriveSmartSync('startup'),1000);
-          }else if(response && (response.error || response.error_description)){
-            addLog(LOG_LEVELS.ERROR,ERROR_CODES.GDRIVE_AUTH_FAILED,'OAuth de Google Drive rechazado',{
-              service:'Google Drive',
-              operation:'oauth_token_callback',
-              error:response.error||'oauth_error',
-              provider_message:response.error_description||null
-            });
-          }
-        }
-      });
       gisLoaded=true;
-      if(gapiLoaded)resolve();
+      if(gapiLoaded)safeResolve();
     };
     script2.onerror=(e)=>{
       addLog(LOG_LEVELS.ERROR,'GDRIVE_GIS_LOAD_FAILED','No se pudo cargar https://accounts.google.com/gsi/client',{
@@ -3744,10 +3862,13 @@ function loadGoogleAPIs(){
         error:e&&e.message?e.message:'script_onerror',
         probable_cause:'Bloqueo de red, adblock, CSP o fallo temporal de Google.'
       });
-      reject(new Error('No se pudo cargar gsi/client'));
+      safeReject(new Error('No se pudo cargar gsi/client'));
     };
     document.head.appendChild(script2);
+  }).finally(()=>{
+    if(!(gapiLoaded&&gisLoaded)) googleApisLoadingPromise=null;
   });
+  return googleApisLoadingPromise;
 }
 
 function updateGDriveUI(){
@@ -3784,8 +3905,10 @@ function updateGDriveUI(){
   updateSyncStatusUI();
 }
 
-document.getElementById('gdriveConnectBtn').addEventListener('click',async()=>{
+document.getElementById('gdriveConnectBtn').addEventListener('click',()=>{
+  ensureRecommendedGdriveClientId();
   const cfg=getGdriveConfig();
+  const connectBtn=document.getElementById('gdriveConnectBtn');
   if(!cfg.clientId||!cfg.apiKey){
     addLog(LOG_LEVELS.ERROR,ERROR_CODES.CONFIG_MISSING,'Google Drive sin configurar (Client ID/API Key)',{
       service:'Google Drive',
@@ -3796,40 +3919,62 @@ document.getElementById('gdriveConnectBtn').addEventListener('click',async()=>{
     showToast('Configura Client ID y API Key de Google en Ajustes','info');
     return;
   }
-  try{
-    await loadGoogleAPIs();
-  }catch(err){
-    addLog(LOG_LEVELS.ERROR,'GDRIVE_CONNECT_PRECHECK_FAILED','No se pudo inicializar Google Drive antes de conectar',{
-      service:'Google Drive',
-      operation:'connect',
-      error:err&&err.message?err.message:String(err)
+
+  // Mantener el gesto de usuario: si falta cargar SDK, lo preparamos y pedimos un segundo toque.
+  if(!(gapiLoaded&&gisLoaded)){
+    const prevLabel=connectBtn.textContent;
+    connectBtn.disabled=true;
+    connectBtn.style.opacity='0.65';
+    connectBtn.textContent='Preparando…';
+    loadGoogleAPIs().catch(err=>{
+      addLog(LOG_LEVELS.ERROR,'GDRIVE_CONNECT_PRECHECK_FAILED','No se pudo inicializar Google Drive antes de conectar',{
+        service:'Google Drive',
+        operation:'connect',
+        error:err&&err.message?err.message:String(err)
+      });
+    }).finally(()=>{
+      connectBtn.disabled=false;
+      connectBtn.style.opacity='';
+      connectBtn.textContent=prevLabel;
     });
-    showToast('Error cargando servicios de Google. Revisa red/configuración.','info');
+    showToast('Preparando Google Drive… pulsa "Conectar Google Drive" de nuevo.','info');
     return;
   }
+
   tokenClient=google.accounts.oauth2.initTokenClient({
     client_id:cfg.clientId,
     scope:cfg.scopes,
     callback:(response)=>{
-      if(response.access_token){
+      if(response&&response.access_token){
         gdriveToken=response.access_token;
         localStorage.setItem('gdrive_token',gdriveToken);
         gapi.client.setToken({access_token:gdriveToken});
         showToast('Google Drive conectado','info');
         updateGDriveUI();
         setTimeout(()=>gdriveSmartSync('startup'),1000);
-      }else if(response && (response.error || response.error_description)){
+      }else{
+        const errorMsg=getGdriveAuthErrorMessage(response);
         addLog(LOG_LEVELS.ERROR,ERROR_CODES.GDRIVE_AUTH_FAILED,'No se pudo autorizar Google Drive',{
           service:'Google Drive',
           operation:'connect_oauth',
-          error:response.error||'oauth_error',
-          provider_message:response.error_description||null
+          error:response&&response.error?response.error:'oauth_error',
+          provider_message:response&&response.error_description?response.error_description:null,
+          client_id:cfg.clientId
         });
-        showToast('Autorización de Google Drive cancelada o rechazada','info');
+        showToast(errorMsg,'info');
       }
     }
   });
-  tokenClient.requestAccessToken();
+  try{
+    tokenClient.requestAccessToken({prompt:'select_account consent'});
+  }catch(err){
+    addLog(LOG_LEVELS.ERROR,ERROR_CODES.GDRIVE_AUTH_FAILED,'Fallo lanzando OAuth de Google Drive',{
+      service:'Google Drive',
+      operation:'connect_oauth_request',
+      error:err&&err.message?err.message:String(err)
+    });
+    showToast('No se pudo abrir el selector de cuenta de Google. Revisa bloqueador de ventanas emergentes.','info');
+  }
 });
 
 document.getElementById('gdriveConfigSave').addEventListener('click',()=>{
@@ -3838,6 +3983,10 @@ document.getElementById('gdriveConfigSave').addEventListener('click',()=>{
   const ak=normalizeApiKey(rawAk);
   if(cid)localStorage.setItem('gdrive_client_id',cid); else localStorage.removeItem('gdrive_client_id');
   if(ak){localStorage.setItem('gdrive_api_key',ak);document.getElementById('gdriveApiKeyInput').value=ak;} else localStorage.removeItem('gdrive_api_key');
+  ensureRecommendedGdriveClientId();
+  if(getGdriveConfig().apiKey){
+    loadGoogleAPIs().catch(()=>{});
+  }
   showToast('Configuración Google guardada','info');
 });
 
@@ -4286,7 +4435,7 @@ async function gdriveUpload(){
   const folderId=await gdriveFindOrCreateFolder();
   P = sanitizeProductList(P);
   const nowTs = Date.now();
-  const data={products:P,version:'1.0.1',lastUpdate:nowTs};
+  const data={products:P,version:'1.0.2',lastUpdate:nowTs};
   const content=JSON.stringify(data,null,2);
 
   const boundary='-------314159265358979323846';
