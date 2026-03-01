@@ -612,7 +612,8 @@ if(apiKeyTestBtn){
   apiKeyTestBtn.addEventListener('click',async()=>{
     const statusEl=document.getElementById('apiKeyTestStatus');
     const typedKey=normalizeApiKey((document.getElementById('apiKeyInput').value||''));
-    const keyToTest=typedKey||getApiKey();
+    const savedKey=getApiKey();
+    const keyToTest=typedKey||savedKey;
     if(statusEl){
       statusEl.style.display='block';
       statusEl.style.color='var(--text2)';
@@ -623,6 +624,14 @@ if(apiKeyTestBtn){
     try{
       const result=await testGeminiKey(keyToTest);
       if(result.ok){
+        // Si la prueba se hace con una clave escrita pero no guardada,
+        // guardarla automáticamente para que "Analizar" use la misma.
+        if(typedKey && typedKey!==savedKey){
+          localStorage.setItem('alerg_apikey',typedKey);
+          document.getElementById('apiKeyInput').value=typedKey;
+          const st=document.getElementById('apiKeyStatus');
+          if(st){st.textContent='✓ Clave guardada y validada';st.className='api-key-status ok'}
+        }
         if(statusEl){
           statusEl.style.color='var(--green)';
           statusEl.textContent=`✅ Conexión Gemini OK (HTTP ${result.status})`;
