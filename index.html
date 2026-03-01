@@ -209,7 +209,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v0103202616:04h</div>
+    <div class="login-version">v0103202621:10h</div>
   </div>
 </div>
 
@@ -423,7 +423,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.2 · v0103202616:04h</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.3 · v0103202621:10h</span></div>
     <button class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section">
@@ -982,7 +982,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.2-010320261604',
+    version:'1.0.3-010320262110',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -2142,6 +2142,44 @@ function buildReviewReason(result){
     });
   }
   return parts.length?parts.join(' '):'Revisión recomendada.';
+}
+const UNMAPPED_RISK_TRACE_RX=/\b(puede contener|contiene trazas|trazas de|may contain|traces of|spuren|kan innehålla|kan indeholde|può contenere|puo contenere)\b/i;
+const UNMAPPED_RISK_ECODE_RX=/\bE[-\s]?\d{3,4}\b/i;
+const UNMAPPED_SAFE_PREFIX_RX=/^\s*(ingredientes?|ingredients?|ingr[eé]dients?|zutaten|ingredi[eë]nten|componentes?|denominaci[oó]n|descripci[oó]n|peso|lote|caducidad|origen|fabricante|conservar|modo de empleo)\b/i;
+function isRiskLine(texto){
+  const line=String(texto||'').trim();
+  if(!line) return false;
+  if(UNMAPPED_RISK_TRACE_RX.test(line)) return true;
+  if(UNMAPPED_RISK_ECODE_RX.test(line)) return true;
+  if(inferAllergensFromText(line).length>0) return true;
+  const words=norm(line).split(' ').filter(Boolean);
+  return words.some(w=>!!ALLERGEN_ALIAS_MAP[w]);
+}
+function classifyUnmappedLine(texto){
+  const line=String(texto||'').trim();
+  if(!line) return 'SAFE';
+  if(isRiskLine(line)) return 'RISK';
+  if(UNMAPPED_SAFE_PREFIX_RX.test(line)) return 'SAFE';
+  // Por defecto tratamos como SAFE para no frenar el lote por ruido OCR.
+  return 'SAFE';
+}
+function evaluateBatchReviewForLote(result){
+  const warning=String((result&&result.warning)||'').trim();
+  const ra=(result&&result.review_alerts)||{};
+  const mapeo=Array.isArray(ra.mapeo)?ra.mapeo:[];
+  const ignored_safe_lines=[];
+  const filteredMapeo=mapeo.filter(item=>{
+    if(!item||item.motivo!=='sin_mapeo') return true;
+    const txt=String(item.texto||'').trim();
+    const cls=classifyUnmappedLine(txt);
+    if(cls==='SAFE') ignored_safe_lines.push(txt);
+    return cls==='RISK';
+  });
+  const filteredResult={...result,review_alerts:{...ra,mapeo:filteredMapeo}};
+  const requires_review=!!warning || filteredMapeo.length>0 || ((ra.keywords||[]).some(k=>k&&k.level==='high'));
+  const reason=requires_review?buildReviewReason(filteredResult):'';
+  const risk_lines=[...new Set(filteredMapeo.filter(m=>m&&m.motivo==='sin_mapeo').map(m=>String(m.texto||'').trim()).filter(Boolean))];
+  return {requires_review,reason,risk_lines,ignored_safe_lines,filtered_result:filteredResult};
 }
 function sortAllergens(arr){const uniq=[...new Set(arr)];return uniq.sort((a,b)=>AL.indexOf(a)-AL.indexOf(b) || a.localeCompare(b,'es'))}
 function similarity(a,b){const na=norm(a),nb=norm(b);if(na===nb)return 1;const ta=tokenize(a),tb=tokenize(b);if(!ta.length||!tb.length)return 0;if(Math.abs(ta.length-tb.length)>3)return 0;const sa=new Set(ta),sb=new Set(tb);const inter=new Set([...sa].filter(x=>sb.has(x)));const union=new Set([...sa,...sb]);const jaccard=inter.size/union.size;let sub=0;const smaller=Math.min(sa.size,sb.size);if(smaller>=2){const ss=sa.size<=sb.size?sa:sb;const bs=sa.size<=sb.size?sb:sa;if([...ss].every(t=>bs.has(t)))sub=smaller/Math.max(sa.size,sb.size)}return Math.max(jaccard,sub)}
@@ -3652,8 +3690,18 @@ async function processBatch(){
         throw new Error(errorMsg);
       }
 
+      const loteReview=evaluateBatchReviewForLote(result);
+      result.review_alerts=(loteReview.filtered_result&&loteReview.filtered_result.review_alerts)||result.review_alerts||null;
+      result.requires_review=!!loteReview.requires_review;
+      if(loteReview.ignored_safe_lines&&loteReview.ignored_safe_lines.length){
+        addLog(LOG_LEVELS.INFO,'BATCH_IGNORED_SAFE_UNMAPPED','Lote - sin_mapeo informativo ignorado para revisión',{
+          count:loteReview.ignored_safe_lines.length,
+          lines:loteReview.ignored_safe_lines.slice(0,6)
+        });
+      }
+
       addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, alergenos: result.alergenos||[], trazas: result.trazas||[], normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
-      addAnalysisSection(analysisId,'E_validations',{ review_alerts: result.review_alerts||null, requires_review: !!result.requires_review });
+      addAnalysisSection(analysisId,'E_validations',{ review_alerts: result.review_alerts||null, requires_review: !!result.requires_review, review_reason_lines: loteReview.risk_lines||[] });
 
       if(result.nombre){
         result.nombre=autoCorrectName(result.nombre);
@@ -3672,7 +3720,7 @@ async function processBatch(){
         addLog(LOG_LEVELS.WARN,ERROR_CODES.PHOTO_QUALITY,`Calidad de foto: ${productName}`,{warning:result.warning});
       }
 
-      if(isAutoOk(result)){
+      if(!loteReview.requires_review){
         const match=findMatch(result.nombre);
         const ts=new Date().toISOString();
         if(match){
@@ -3697,15 +3745,18 @@ async function processBatch(){
         }
         addLog(LOG_LEVELS.INFO,'PRODUCT_SAVED',`Producto guardado: ${result.nombre}`,{allergens:allA.length});
       }else{
-        addAnalysisSection(analysisId,'F_decision',{decision:'bloquear_revision',motivo:buildReviewReason(result)});
+        const reviewReason=loteReview.reason||buildReviewReason(result);
+        addAnalysisSection(analysisId,'F_decision',{decision:'bloquear_revision',motivo:reviewReason});
         finishPhotoAnalysis(analysisId);
         pendingReview.push({
           result,
           allA,
           dataUrl,
-          reason:buildReviewReason(result)
+          reason:reviewReason,
+          review_required:true,
+          review_reason_lines:loteReview.risk_lines||[]
         });
-        addLog(LOG_LEVELS.INFO,'BATCH_PENDING_REVIEW',`Pendiente de revisión: ${result.nombre}`,{reason:buildReviewReason(result)});
+        addLog(LOG_LEVELS.INFO,'BATCH_PENDING_REVIEW',`Pendiente de revisión: ${result.nombre}`,{reason:reviewReason,risk_lines:loteReview.risk_lines||[]});
       }
 
     }catch(err){
@@ -4435,7 +4486,7 @@ async function gdriveUpload(){
   const folderId=await gdriveFindOrCreateFolder();
   P = sanitizeProductList(P);
   const nowTs = Date.now();
-  const data={products:P,version:'1.0.2',lastUpdate:nowTs};
+  const data={products:P,version:'1.0.3',lastUpdate:nowTs};
   const content=JSON.stringify(data,null,2);
 
   const boundary='-------314159265358979323846';
