@@ -209,7 +209,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v0103202621:10h</div>
+    <div class="login-version">v0103202621:41h</div>
   </div>
 </div>
 
@@ -423,7 +423,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.3 · v0103202621:10h</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v0103202621:41h</span></div>
     <button class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section">
@@ -982,7 +982,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.3-010320262110',
+    version:'1.0.4-010320262141',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -3546,12 +3546,16 @@ importInput.addEventListener('change',async(e)=>{
 
 // ─── MODO LOTE ───
 let batchPhotos=[];
+let batchIsProcessing=false;
 const batchInput=document.getElementById('batchInput');
 const batchSelectBtn=document.getElementById('batchSelectBtn');
 const batchStatus=document.getElementById('batchStatus');
 const batchPreview=document.getElementById('batchPreview');
 
-batchSelectBtn.addEventListener('click',()=>batchInput.click());
+batchSelectBtn.addEventListener('click',()=>{
+  if(batchIsProcessing) return;
+  batchInput.click();
+});
 
 batchInput.addEventListener('change',async(e)=>{
   const files=Array.from(e.target.files).slice(0,10);
@@ -3635,16 +3639,27 @@ function updateBatchUIAfterChange(){
 }
 
 async function processBatch(){
+  if(batchIsProcessing) return;
+  if(!batchPhotos.length){
+    showToast('Selecciona al menos 1 foto para procesar','info');
+    return;
+  }
   if(!getApiKey()){
     addLog(LOG_LEVELS.ERROR,ERROR_CODES.CONFIG_MISSING,'Lote no iniciado: falta API Key Gemini',{service:'Gemini',operation:'processBatch'});
     showToast('Configura la clave API en Ajustes (⚙)','info');
     return;
   }
+  batchIsProcessing=true;
+  batchSelectBtn.disabled=true;
+  batchSelectBtn.style.opacity='0.65';
+  const actionRow=batchStatus.nextElementSibling;
+  if(actionRow&&actionRow.classList.contains('batch-actions'))actionRow.remove();
   batchStatus.innerHTML=`<span class="spinner"></span> Procesando 0/${batchPhotos.length}…`;
+  batchStatus.classList.add('show');
   let processed=0,successes=[],failures=[],pendingReview=[];
-  const photoResults=[];
-  
-  for(let i=0;i<batchPhotos.length;i++){
+  const totalToProcess=batchPhotos.length;
+  try{
+  for(let i=0;i<totalToProcess;i++){
     const dataUrl=batchPhotos[i];
     const { content, metadata }=await buildPhotoRequest([dataUrl]);
     const { analysisId }=startPhotoAnalysis('lote',1,metadata);
@@ -3776,17 +3791,27 @@ async function processBatch(){
     }
     
     processed++;
-    batchStatus.innerHTML=`<span class="spinner"></span> Procesando ${processed}/${batchPhotos.length}…`;
+    batchStatus.innerHTML=`<span class="spinner"></span> Procesando ${processed}/${totalToProcess}…`;
     await new Promise(r=>setTimeout(r,800));
   }
   
   render();
   updateAppStatus();
   
-  showBatchSummary(batchPhotos.length,successes,failures,pendingReview);
-  
-  batchPhotos=[];
-  batchPreview.innerHTML='';
+  showBatchSummary(totalToProcess,successes,failures,pendingReview);
+  }catch(err){
+    addLog(LOG_LEVELS.ERROR,ERROR_CODES.API_INVALID_RESPONSE,'Error inesperado en processBatch',{
+      service:'Gemini',
+      operation:'processBatch',
+      error:err&&err.message?err.message:String(err)
+    });
+    showToast('Error inesperado en lote. Vuelve a intentarlo.','info');
+  }finally{
+    batchIsProcessing=false;
+    batchSelectBtn.disabled=false;
+    batchSelectBtn.style.opacity='';
+    clearBatchPhotos();
+  }
 }
 
 // Modificar método de tabs para incluir batch
@@ -4486,7 +4511,7 @@ async function gdriveUpload(){
   const folderId=await gdriveFindOrCreateFolder();
   P = sanitizeProductList(P);
   const nowTs = Date.now();
-  const data={products:P,version:'1.0.3',lastUpdate:nowTs};
+  const data={products:P,version:'1.0.4',lastUpdate:nowTs};
   const content=JSON.stringify(data,null,2);
 
   const boundary='-------314159265358979323846';
