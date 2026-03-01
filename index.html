@@ -204,7 +204,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v0103202612:27h</div>
+    <div class="login-version">v0103202615:37h</div>
   </div>
 </div>
 
@@ -407,7 +407,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0 pruebas</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.1 · v0103202615:37h</span></div>
     <button class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section">
@@ -962,7 +962,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.0',
+    version:'1.0.1-010320261537',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -1280,12 +1280,17 @@ function extractTextFromVisionResponse(data){
   try{
     const responses = (data && data.responses) || [];
     let text = '';
-    responses.forEach(r=>{
+    responses.forEach((r,idx)=>{
+      let raw='';
       if(r && r.fullTextAnnotation && r.fullTextAnnotation.text){
-        text += (text ? '\n\n' : '') + r.fullTextAnnotation.text;
+        raw=r.fullTextAnnotation.text;
       }else if(Array.isArray(r && r.textAnnotations) && r.textAnnotations.length){
-        text += (text ? '\n\n' : '') + (r.textAnnotations[0].description || '');
+        raw=r.textAnnotations[0].description || '';
       }
+      raw=String(raw||'').trim();
+      if(!raw) return;
+      // Etiquetamos cada OCR por foto para evitar que la IA concatene títulos como si fueran productos distintos.
+      text += (text ? '\n\n' : '') + `--- FOTO ${idx+1} ---\n` + raw;
     });
     return String(text || '').trim();
   }catch(_){
@@ -1295,7 +1300,8 @@ function extractTextFromVisionResponse(data){
 
 function buildResultFromOcrText(rawText){
   const text=String(rawText||'').replace(/\r/g,'');
-  const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
+  const isPhotoMarker=(line)=>/^---\s*FOTO\s+\d+\s*---$/i.test(String(line||'').trim());
+  const lines=text.split('\n').map(l=>l.trim()).filter(Boolean).filter(line=>!isPhotoMarker(line));
   let nombre='';
   const candidatos=[];
   for(const line of lines){
@@ -1325,7 +1331,7 @@ function buildResultFromOcrText(rawText){
     {allergen:'SÉSAMO',rx:[/sésam/i,/sesam/i,/tahin[ií]/i]},
     {allergen:'APIO',rx:[/apio/i,/celery/i,/céleri/i]},
     {allergen:'MOSTAZA',rx:[/mostaz/i,/mustard/i]},
-    {allergen:'SULFITOS',rx:[/sulfit/i,/anhídrido\s+sulfuroso/i,/anhidrido\s+sulfuroso/i,/e22[0-8]/i]},
+    {allergen:'SULFITOS',rx:[/sulfit/i,/sulphit/i,/anhídrido\s+sulfuroso/i,/anhidrido\s+sulfuroso/i,/di[oó]xido\s+de\s+azufre/i,/sulfur\s+dioxide/i,/sulphur\s+dioxide/i,/e22[0-8]/i]},
     {allergen:'PESCADO',rx:[/pescad/i,/atun/i,/atún/i,/salmon/i,/salmón/i,/bacalao/i,/merluza/i]},
     {allergen:'CRUSTÁCEOS',rx:[/crustac[eé]o/i,/gamb[ao]/i,/langost/i,/marisc/i]},
     {allergen:'MOLUSCO',rx:[/mejillon/i,/mejillón/i,/almej/i,/pulpo/i,/calamar/i,/molusc/i]},
@@ -1361,27 +1367,67 @@ function buildResultFromOcrText(rawText){
 
 /** Si la IA devolvió un fragmento de ingredientes como "nombre", lo corrige usando el inicio del texto OCR (título real). */
 function fixNombreFromOcr(nombre, ocrText){
-  const n=(nombre||'').trim();
-  if(!n) return n;
+  let n=String(nombre||'').trim().replace(/\s+/g,' ');
   const ocr=String(ocrText||'').trim();
   if(!ocr) return n;
+  const isPhotoMarker=(line)=>/^---\s*FOTO\s+\d+\s*---$/i.test(String(line||'').trim());
+  const stopWords=/ingredientes?|información nutricional|al[ée]rgenos?|contiene|puede contener|trazas|kcal|E-\d|peso neto|peso bruto|modo de empleo|conservar/i;
   const looksLikeIngredients=/ingredientes?|E-\d|marina,|potenciador|harina de maíz|harina de trigo|sal,|agua,|pimiento,|cebolla,|aceite|grasa vegetal|Ngredientes/i.test(n) || (n.length>50 && /,/.test(n));
-  if(!looksLikeIngredients) return n;
-  const lines=ocr.replace(/\r/g,'').split('\n').map(l=>l.trim()).filter(Boolean);
-  const stopWords=/ingredientes?|información nutricional|kcal|E-\d|peso neto|peso bruto|modo de empleo/i;
-  const candidatos=[];
-  for(const line of lines){
-    if(stopWords.test(line)) break;
-    if(line.length>=2&&line.length<=120&&!/^\d+$/.test(line)) candidatos.push(line);
+  const looksLikeMergedTitle=/\b(helado|yogur|yogurt|pizza|hamburguesa|croqueta|sandwich|sándwich|barrita|batido)\b[\s\S]{0,120}\by\s+\1\b/i.test(n);
+
+  function extractTitleFromPrimaryPhoto(raw){
+    const clean=String(raw||'').replace(/\r/g,'').trim();
+    if(!clean) return '';
+    const sections=clean.split(/\n\s*---\s*FOTO\s+\d+\s*---\s*\n/i).map(s=>s.trim()).filter(Boolean);
+    const primary=(sections[0]||clean);
+    const lines=primary.split('\n').map(l=>l.trim()).filter(Boolean).filter(line=>!isPhotoMarker(line));
+    const titleLines=[];
+    for(const line of lines){
+      if(stopWords.test(line)){
+        if(titleLines.length) break;
+        continue;
+      }
+      if(line.length<2||line.length>100) continue;
+      if(/^\d+$/.test(line)) continue;
+      if(/\d{2,}/.test(line)) continue;
+      if((line.match(/[,;:]/g)||[]).length>=2) continue;
+      titleLines.push(line);
+      if(titleLines.length>=3) break;
+    }
+    if(!titleLines.length) return '';
+    let combined=titleLines[0]||'';
+    for(let i=1;i<titleLines.length;i++){
+      const ln=titleLines[i];
+      // Evitar añadir marcas/códigos cortos en mayúsculas como parte del nombre.
+      if(/^[A-ZÁÉÍÓÚÜÑ0-9 ]{2,14}$/.test(ln)) break;
+      if(combined.length>=40) break;
+      combined=(combined+' '+ln).replace(/\s+/g,' ').trim();
+      if(combined.length>=80) break;
+    }
+    combined=combined.replace(/\s+/g,' ').trim();
+    const atPeriod=combined.indexOf('.');
+    if(atPeriod>15) combined=combined.slice(0,atPeriod).trim();
+    if(combined.length>90) combined=combined.slice(0,90).trim();
+    return combined;
   }
-  if(candidatos.length===0) return n;
-  // Unir todas las líneas de título (ej. "Aceitunas" + "verdes" + "con hueso" + "partidas" + "aliñadas." + "Verdiales.")
-  let combined=candidatos.join(' ').replace(/\s+/g,' ').trim();
-  // Cortar en el primer punto si hay frase completa (evitar "Verdiales." como segundo título)
-  const atPeriod=combined.indexOf('.');
-  if(atPeriod>15) combined=combined.slice(0,atPeriod).trim();
-  if(combined.length>80) combined=combined.slice(0,80).trim();
-  return combined||n;
+
+  const ocrTitle=extractTitleFromPrimaryPhoto(ocr);
+  if((!n||looksLikeIngredients||looksLikeMergedTitle||n.length>90) && ocrTitle) n=ocrTitle;
+  if(!n&&ocrTitle) n=ocrTitle;
+  if(looksLikeMergedTitle){
+    const m=n.match(/\b(helado|yogur|yogurt|pizza|hamburguesa|croqueta|sandwich|sándwich|barrita|batido)\b[\s\S]{0,120}\by\s+\1\b/i);
+    const type=(m&&m[1])?String(m[1]).toLowerCase():'';
+    if(type){
+      const cut=n.toLowerCase().indexOf(` y ${type}`);
+      if(cut>18){
+        const short=n.slice(0,cut).trim();
+        if(short.length>=12) n=short;
+      }
+    }
+  }
+  n=n.replace(/\s+/g,' ').replace(/^[\-–—:;,. ]+|[\-–—:;,. ]+$/g,'').trim();
+  if(n.length>90) n=n.slice(0,90).trim();
+  return n;
 }
 const ACCENT_MAP={
   'rucula':'Rúcula','sesamo':'Sésamo','atun':'Atún','jamon':'Jamón','salmon':'Salmón',
@@ -1860,7 +1906,7 @@ const PHOTO_KEYWORD_RULES=[
   {rx:[/sesam/i,/tahini/i,/tahina/i], allergen:'SÉSAMO', level:'high'},
   {rx:[/soja/i,/edamame/i,/miso/i,/tofu/i], allergen:'SOJA', level:'high'},
   {rx:[/mostaz/i], allergen:'MOSTAZA', level:'high'},
-  {rx:[/sulfit/i,/anhidrido\s+sulfuroso/i,/e22[0-8]/i], allergen:'SULFITOS', level:'high'},
+  {rx:[/sulfit/i,/sulphit/i,/anhidrido\s+sulfuroso/i,/di[oó]xido\s+de\s+azufre/i,/sulfur\s+dioxide/i,/sulphur\s+dioxide/i,/e22[0-8]/i], allergen:'SULFITOS', level:'high'},
   {rx:[/apio/i], allergen:'APIO', level:'high'},
   {rx:[/cacahuet/i,/mani/i], allergen:'CACAHUETES', level:'high'},
   {rx:[/pescad/i,/atun/i,/salmon/i,/bacalao/i,/merluza/i], allergen:'PESCADO', level:'high'},
@@ -1869,13 +1915,52 @@ const PHOTO_KEYWORD_RULES=[
   {rx:[/e322/i], allergen:'SOJA', level:'info'}
 ];
 
+const ALLERGEN_SYNONYMS={
+  'ALTRAMUZ':['altramuz','altramuces','lupino','lupinos','lupin','lupins'],
+  'APIO':['apio','celery','céleri','celeri','sellerie'],
+  'CACAHUETES':['cacahuete','cacahuetes','mani','maní','peanut','peanuts'],
+  'CEREALES':['cereal','cereales','gluten','trigo','wheat','cebada','barley','avena','oat','oats','centeno','rye'],
+  'CRUSTÁCEOS':['crustaceo','crustaceos','crustáceo','crustáceos','crustacean','crustaceans','shellfish'],
+  'FRUTOS SECOS':['fruto seco','frutos secos','frutos de cascara','frutos de cáscara','tree nut','tree nuts','nuts'],
+  'HUEVO':['huevo','huevos','egg','eggs'],
+  'LÁCTEO':['lacteo','lacteos','lácteo','lácteos','leche','milk','dairy','lactose'],
+  'MOLUSCO':['molusco','moluscos','mollusc','molluscs','mollusk','mollusks'],
+  'MOSTAZA':['mostaza','mustard'],
+  'PESCADO':['pescado','fish','fishes'],
+  'SÉSAMO':['sesamo','sésamo','sesame','sesam'],
+  'SOJA':['soja','soy','soya'],
+  'SULFITOS':['sulfito','sulfitos','sulfite','sulfites','sulphite','sulphites','anhidrido sulfuroso','anhídrido sulfuroso','dioxido de azufre','dióxido de azufre','sulfur dioxide','sulphur dioxide','e220','e221','e222','e223','e224','e226','e227','e228']
+};
+const ALLERGEN_ALIAS_MAP=(()=>{
+  const out={};
+  AL.forEach(a=>{out[norm(a)]=a});
+  Object.entries(ALLERGEN_SYNONYMS).forEach(([official,aliases])=>{
+    aliases.forEach(alias=>{
+      const k=norm(alias);
+      if(k) out[k]=official;
+    });
+  });
+  return out;
+})();
+function inferAllergensFromText(text){
+  const src=String(text||'');
+  if(!src.trim()) return [];
+  const found=[];
+  PHOTO_KEYWORD_RULES.forEach(rule=>{
+    const hit=rule.rx.find(rx=>rx.test(src));
+    if(hit) found.push(rule.allergen);
+  });
+  return [...new Set(found)];
+}
 function normalizeAllergen(s){
   const t=String(s||'').trim();
   if(!t) return '';
   if(AL.includes(t)) return t;
   const n=norm(t);
-  const found=AL.find(a=>norm(a)===n);
-  return found||'';
+  if(!n) return '';
+  if(ALLERGEN_ALIAS_MAP[n]) return ALLERGEN_ALIAS_MAP[n];
+  const inferred=inferAllergensFromText(t);
+  return inferred.length===1?inferred[0]:'';
 }
 
 function normalizeAIPhotoResult(obj){
@@ -1888,6 +1973,54 @@ function normalizeAIPhotoResult(obj){
   out.notas=String(out.notas||'').trim();
   out.warning=String(out.warning||'').trim();
   return out;
+}
+function applyPhotoReviewValidation(result,rawText,source='photo'){
+  const alergSet=new Set([...(result.alergenos||[]),...(result.trazas||[])].map(normalizeAllergen));
+  const mapeoDiff=[];
+  result.hallazgos_texto.forEach(txt=>{
+    const key=norm(txt);
+    const exact=result.mapeo.filter(m=>norm(m.texto)===key).map(m=>m.alergeno).filter(Boolean);
+    const byContains=result.mapeo.filter(m=>key.includes(norm(m.texto))||norm(m.texto).includes(key)).map(m=>m.alergeno).filter(Boolean);
+    const mapped=[...new Set([...exact,...byContains])].filter(a=>OFFICIAL_ALLERGENS.includes(a));
+    if(!mapped.length){mapeoDiff.push({texto:txt,motivo:'sin_mapeo'});return;}
+    const miss=mapped.filter(a=>!alergSet.has(a));
+    if(miss.length)mapeoDiff.push({texto:txt,mapeado:mapped,faltan_en_resultado:miss});
+  });
+  if(mapeoDiff.length) addLog('WARN','PHOTO_MAPEO_DIFF','PHOTO_MAPEO_DIFF',{source,diff:mapeoDiff});
+  const textForCheck=(result.hallazgos_texto.join(' ')||String(rawText||''));
+  const keywordAlerts=[];
+  PHOTO_KEYWORD_RULES.forEach(rule=>{
+    const hit=rule.rx.find(rx=>rx.test(textForCheck));
+    if(hit && !alergSet.has(rule.allergen)) keywordAlerts.push({allergen:rule.allergen,level:rule.level,pattern:hit.toString()});
+  });
+  if(keywordAlerts.length) addLog('WARN','PHOTO_KEYWORD_ALERT','PHOTO_KEYWORD_ALERT',{source,alerts:keywordAlerts});
+  result.review_alerts={mapeo:mapeoDiff,keywords:keywordAlerts};
+  result.requires_review=!!(mapeoDiff.length || keywordAlerts.some(a=>a.level==='high'));
+  return result;
+}
+function mergeAIWithOcrFallback(aiResult,ocrResult){
+  const ai=normalizeAIPhotoResult(aiResult||{});
+  const ocr=normalizeAIPhotoResult(ocrResult||{});
+  const merged={...ocr,...ai};
+  merged.nombre=ai.nombre||ocr.nombre;
+  merged.hallazgos_texto=[...new Set([...(ocr.hallazgos_texto||[]),...(ai.hallazgos_texto||[])].map(x=>String(x||'').trim()).filter(Boolean))];
+  const map=new Map();
+  [...(ocr.mapeo||[]),...(ai.mapeo||[])].forEach(entry=>{
+    const texto=String((entry&&entry.texto)||'').trim();
+    const alergeno=normalizeAllergen((entry&&entry.alergeno)||'');
+    if(!texto&&!alergeno) return;
+    const key=`${norm(texto)}|${alergeno}`;
+    if(!map.has(key)) map.set(key,{texto,alergeno});
+  });
+  merged.mapeo=[...map.values()];
+  const aiAll=new Set([...(ai.alergenos||[]),...(ai.trazas||[])].map(normalizeAllergen).filter(Boolean));
+  const mergedAlergenos=new Set([...(ai.alergenos||[]),...(ocr.alergenos||[])].map(normalizeAllergen).filter(Boolean));
+  const mergedTrazas=new Set([...(ai.trazas||[]),...(ocr.trazas||[])].map(normalizeAllergen).filter(Boolean));
+  mergedAlergenos.forEach(a=>mergedTrazas.delete(a));
+  merged.alergenos=sortAllergens([...mergedAlergenos].filter(a=>AL.includes(a)));
+  merged.trazas=sortAllergens([...mergedTrazas].filter(a=>AL.includes(a)));
+  const recovered=[...new Set([...(merged.alergenos||[]),...(merged.trazas||[])])].filter(a=>!aiAll.has(a));
+  return {result:normalizeAIPhotoResult(merged),recovered};
 }
 function extractJsonFromAIResponse(rawText){
   let s=String(rawText||'').trim();
@@ -1924,28 +2057,7 @@ function parseAndValidateAI(rawText,source='photo'){
   }
   const result=normalizeAIPhotoResult(parsed);
   addLog('INFO','PHOTO_PARSED_RESULT','PHOTO_PARSED_RESULT',{source,parsed:{nombre:result.nombre,hallazgos_texto:result.hallazgos_texto,mapeo:result.mapeo,alergenos:result.alergenos,trazas:result.trazas,warning:result.warning||''}});
-  const alergSet=new Set([...(result.alergenos||[]),...(result.trazas||[])].map(normalizeAllergen));
-  const mapeoDiff=[];
-  result.hallazgos_texto.forEach(txt=>{
-    const key=norm(txt);
-    const exact=result.mapeo.filter(m=>norm(m.texto)===key).map(m=>m.alergeno).filter(Boolean);
-    const byContains=result.mapeo.filter(m=>key.includes(norm(m.texto))||norm(m.texto).includes(key)).map(m=>m.alergeno).filter(Boolean);
-    const mapped=[...new Set([...exact,...byContains])].filter(a=>OFFICIAL_ALLERGENS.includes(a));
-    if(!mapped.length){mapeoDiff.push({texto:txt,motivo:'sin_mapeo'});return;}
-    const miss=mapped.filter(a=>!alergSet.has(a));
-    if(miss.length)mapeoDiff.push({texto:txt,mapeado:mapped,faltan_en_resultado:miss});
-  });
-  if(mapeoDiff.length) addLog('WARN','PHOTO_MAPEO_DIFF','PHOTO_MAPEO_DIFF',{source,diff:mapeoDiff});
-  const textForCheck=(result.hallazgos_texto.join(' ')||String(rawText||''));
-  const keywordAlerts=[];
-  PHOTO_KEYWORD_RULES.forEach(rule=>{
-    const hit=rule.rx.find(rx=>rx.test(textForCheck));
-    if(hit && !alergSet.has(rule.allergen)) keywordAlerts.push({allergen:rule.allergen,level:rule.level,pattern:hit.toString()});
-  });
-  if(keywordAlerts.length) addLog('WARN','PHOTO_KEYWORD_ALERT','PHOTO_KEYWORD_ALERT',{source,alerts:keywordAlerts});
-  result.review_alerts={mapeo:mapeoDiff,keywords:keywordAlerts};
-  result.requires_review=!!(mapeoDiff.length || keywordAlerts.some(a=>a.level==='high'));
-  return result;
+  return applyPhotoReviewValidation(result,rawText,source);
 }
 function isAutoOk(result){
   if(!result)return false;
@@ -2434,6 +2546,7 @@ let aiCurrentMatch=null;
 const AI_PROMPT=`Eres un sistema de lectura de etiquetas alimentarias. Tu tarea es extraer TODOS los alérgenos presentes en la imagen.
 
 IMPORTANTE: Si recibes 2 fotos, son del MISMO producto (envase + etiquetado). La segunda suele mostrar el etiquetado completo (ingredientes, "puede contener trazas de..."). Combina ambas y extrae TODOS los alérgenos y trazas que estén ESCRITOS.
+NO trates cada foto como un producto distinto. Debes devolver UN SOLO nombre de producto.
 
 PASO 1 — LEE TODO EL TEXTO RELEVANTE
 Lee la etiqueta completa, incluido el texto pequeño. Busca en:
@@ -2445,6 +2558,7 @@ Lee la etiqueta completa, incluido el texto pequeño. Busca en:
 PASO 2 — HALLAZGOS Y MAPEO
 Extrae TODOS los términos detectados y mapea SIEMPRE a los 14 nombres oficiales:
 ALTRAMUZ, APIO, CACAHUETES, CEREALES, CRUSTÁCEOS, FRUTOS SECOS, HUEVO, LÁCTEO, MOLUSCO, MOSTAZA, PESCADO, SÉSAMO, SOJA, SULFITOS
+FORMATO OBLIGATORIO: en "mapeo[].alergeno", "alergenos[]" y "trazas[]" usa SOLO uno de esos 14 nombres exactos (en mayúsculas). Nunca pongas texto libre como "contiene ..." o palabras sueltas.
 
 Conversión obligatoria (ejemplos):
 gluten/trigo/cebada/avena/centeno/sémola de trigo -> CEREALES
@@ -2468,6 +2582,8 @@ PASO 3 — VERIFICACIÓN
 Revisa que no hayas omitido ningún alérgeno o traza que SÍ aparezca escrito en la imagen. Inclúyelos todos en hallazgos_texto, mapeo, alergenos y/o trazas.
 
 NOMBRE DEL PRODUCTO: Usa el nombre tal como aparece en el envase (título principal en español). Respeta mayúsculas de la primera letra de cada palabra significativa (ej.: "Salteado rústico - Mezcla de verduras"). No inventes ni reordenes.
+- Si detectas dos posibles títulos entre fotos, elige SOLO el título principal más claro. No concatenes títulos con "y".
+- El campo "nombre" debe ser único, canónico y breve (máximo 80 caracteres).
 
 ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
 - Incluye SOLO lo que esté EXPLÍCITAMENTE escrito (ingredientes, "puede contener", "presencia fortuita", etc.).
@@ -2481,6 +2597,7 @@ Responde SOLO JSON (sin markdown ni bloques \`\`\`json). No incluyas texto antes
 {"nombre":"...","hallazgos_texto":["..."],"mapeo":[{"texto":"...","alergeno":"..."}],"alergenos":["..."],"trazas":["..."],"notas":"","warning":""}`;
 
 const AI_PROMPT_FROM_OCR=`Eres un sistema de lectura de etiquetas alimentarias. A continuación se te da el TEXTO EXTRAÍDO de una etiqueta (OCR). No tienes imagen; solo este texto. Tu tarea es extraer el nombre del producto y TODOS los alérgenos presentes en el texto, con las MISMAS reglas que si tuvieras la imagen.
+El OCR puede incluir varias fotos del MISMO producto y cada bloque vendrá marcado como "--- FOTO N ---". Son vistas del mismo artículo, NO productos diferentes.
 
 PASO 1 — LEE TODO EL TEXTO RELEVANTE
 Lee el texto completo. Busca en:
@@ -2492,6 +2609,7 @@ Lee el texto completo. Busca en:
 PASO 2 — HALLAZGOS Y MAPEO
 Extrae TODOS los términos detectados y mapea SIEMPRE a los 14 nombres oficiales:
 ALTRAMUZ, APIO, CACAHUETES, CEREALES, CRUSTÁCEOS, FRUTOS SECOS, HUEVO, LÁCTEO, MOLUSCO, MOSTAZA, PESCADO, SÉSAMO, SOJA, SULFITOS
+FORMATO OBLIGATORIO: en "mapeo[].alergeno", "alergenos[]" y "trazas[]" usa SOLO uno de esos 14 nombres exactos (en mayúsculas). Nunca pongas texto libre como "contiene ..." o palabras sueltas.
 
 Conversión obligatoria (ejemplos):
 gluten/trigo/cebada/avena/centeno/sémola de trigo -> CEREALES
@@ -2515,6 +2633,8 @@ PASO 3 — VERIFICACIÓN
 Revisa que no hayas omitido ningún alérgeno o traza que SÍ aparezca escrito en el texto. Inclúyelos todos en hallazgos_texto, mapeo, alergenos y/o trazas.
 
 NOMBRE DEL PRODUCTO: Usa el nombre tal como aparece en el envase (título principal en español). Respeta mayúsculas de la primera letra de cada palabra significativa (ej.: "Salteado rústico - Mezcla de verduras"). No inventes ni reordenes.
+- Si detectas dos posibles títulos en bloques OCR distintos, elige SOLO el título principal más claro. No concatenes títulos con "y".
+- El campo "nombre" debe ser único, canónico y breve (máximo 80 caracteres).
 
 ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
 - Incluye SOLO lo que esté EXPLÍCITAMENTE escrito (ingredientes, "puede contener", "presencia fortuita", etc.).
@@ -2752,6 +2872,12 @@ async function analyzePhotos(photoList){
           const iaData=await iaResp.json();
           const text=iaData.choices?.[0]?.message?.content||'';
           result=parseAndValidateAI(text,'vision');
+          const ocrLocal=normalizeAIPhotoResult(buildResultFromOcrText(ocrText));
+          const merged=mergeAIWithOcrFallback(result,ocrLocal);
+          result=applyPhotoReviewValidation(merged.result,text,'vision_merged');
+          if(merged.recovered.length){
+            addLog('INFO','PHOTO_OCR_RECOVERY','PHOTO_OCR_RECOVERY',{analysis_id:analysisId,recovered:merged.recovered});
+          }
           result.nombre=fixNombreFromOcr(result.nombre,ocrText);
           result=normalizeAIPhotoResult(result);
         }else{
@@ -4160,7 +4286,7 @@ async function gdriveUpload(){
   const folderId=await gdriveFindOrCreateFolder();
   P = sanitizeProductList(P);
   const nowTs = Date.now();
-  const data={products:P,version:'1.0',lastUpdate:nowTs};
+  const data={products:P,version:'1.0.1',lastUpdate:nowTs};
   const content=JSON.stringify(data,null,2);
 
   const boundary='-------314159265358979323846';
