@@ -390,8 +390,12 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <h3>Lectura de etiquetas (IA)</h3>
     <div class="settings-info">Para usar la cámara con lectura automática de etiquetas y la revisión de incoherencias, necesitas una clave API de Google (Gemini). Si no la tienes, la función de cámara no funcionará, pero la consulta y edición manual siguen disponibles.</div>
     <input class="api-key-input" id="apiKeyInput" type="password" placeholder="AIza... (clave Gemini)">
-    <button class="api-key-save" id="apiKeySave">Guardar clave</button>
+    <div class="btn-row">
+      <button class="api-key-save" id="apiKeySave" style="flex:1">Guardar clave</button>
+      <button class="save-btn" id="apiKeyTestBtn" style="flex:1;background:var(--warm8-80)">Probar conexión IA</button>
+    </div>
     <div class="api-key-status no" id="apiKeyStatus">Sin clave configurada</div>
+    <div class="settings-info" id="apiKeyTestStatus" style="display:none;margin-top:8px;font-size:12px"></div>
     <div id="apiKeyOriginWarning" style="display:none;margin-top:10px;padding:10px;background:#fff5f5;border:1px solid #fc8181;border-radius:var(--radius);font-size:12px;color:#c53030;line-height:1.5"></div>
     <div class="settings-row" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--warm8-10)">
       <span class="settings-label">Advertencias de calidad de foto</span>
@@ -519,6 +523,7 @@ const settingsBg=document.getElementById('settingsBg');
 function openSettings(){
   document.getElementById('settingsCount').textContent=P.length;
   const key=localStorage.getItem('alerg_apikey')||'';
+  const driveKey=localStorage.getItem('gdrive_api_key')||'';
   document.getElementById('apiKeyInput').value=key;
   const c=getGdriveConfig();
   const gci=document.getElementById('gdriveClientIdInput');
@@ -528,7 +533,14 @@ function openSettings(){
   updateGDriveUI();
   const st=document.getElementById('apiKeyStatus');
   if(key){st.textContent='✓ Clave configurada';st.className='api-key-status ok'}
+  else if(driveKey){st.textContent='Sin clave Gemini (hay clave de Drive)';st.className='api-key-status no'}
   else{st.textContent='Sin clave configurada';st.className='api-key-status no'}
+  const testStatus=document.getElementById('apiKeyTestStatus');
+  if(testStatus){
+    testStatus.style.display='none';
+    testStatus.style.color='var(--text2)';
+    testStatus.textContent='';
+  }
   const originWarn=document.getElementById('apiKeyOriginWarning');
   if(originWarn){
     if(typeof location!=='undefined'&&location.protocol==='file:'){
@@ -595,6 +607,49 @@ document.getElementById('apiKeySave').addEventListener('click',()=>{
   if(key){localStorage.setItem('alerg_apikey',key);document.getElementById('apiKeyInput').value=key;const st=document.getElementById('apiKeyStatus');st.textContent='✓ Clave guardada';st.className='api-key-status ok';showToast('Clave API guardada','info')}
   else{localStorage.removeItem('alerg_apikey');const st=document.getElementById('apiKeyStatus');st.textContent='Clave eliminada';st.className='api-key-status no'}
 });
+const apiKeyTestBtn=document.getElementById('apiKeyTestBtn');
+if(apiKeyTestBtn){
+  apiKeyTestBtn.addEventListener('click',async()=>{
+    const statusEl=document.getElementById('apiKeyTestStatus');
+    const typedKey=normalizeApiKey((document.getElementById('apiKeyInput').value||''));
+    const keyToTest=typedKey||getApiKey();
+    if(statusEl){
+      statusEl.style.display='block';
+      statusEl.style.color='var(--text2)';
+      statusEl.textContent='Probando conexión con Gemini…';
+    }
+    apiKeyTestBtn.disabled=true;
+    apiKeyTestBtn.style.opacity='0.65';
+    try{
+      const result=await testGeminiKey(keyToTest);
+      if(result.ok){
+        if(statusEl){
+          statusEl.style.color='var(--green)';
+          statusEl.textContent=`✅ Conexión Gemini OK (HTTP ${result.status})`;
+        }
+        showToast('Conexión IA correcta','info');
+      }else{
+        const hint=result.hint?` ${result.hint}`:'';
+        if(statusEl){
+          statusEl.style.color='var(--red)';
+          statusEl.textContent=`❌ ${result.message||'Error de conexión Gemini'}.${hint}`;
+        }
+        showToast('Falló la prueba de conexión IA','info');
+      }
+    }catch(err){
+      const errMsg=(err&&err.message)?err.message:'Error de red';
+      const hint=buildGeminiTroubleshootingHint(errMsg,(err&&err.status)||0);
+      if(statusEl){
+        statusEl.style.color='var(--red)';
+        statusEl.textContent=`❌ ${errMsg}${hint?'. '+hint:''}`;
+      }
+      showToast('Error de red al probar IA','info');
+    }finally{
+      apiKeyTestBtn.disabled=false;
+      apiKeyTestBtn.style.opacity='';
+    }
+  });
+}
 
 // Photo warnings toggle
 const photoWarningsToggle=document.getElementById('photoWarningsToggle');
@@ -970,11 +1025,16 @@ document.addEventListener('DOMContentLoaded',()=>{
   addLog(LOG_LEVELS.INFO,'APP_STARTED','Aplicación iniciada',{});
 });
 
-// Clave Gemini: si no hay "Clave Gemini" guardada, usar la de Drive (misma key suele servir para Vision+Gemini+Drive).
+// Claves API: Gemini y Vision se guardan por separado para evitar usar por error la clave de Drive en Gemini.
 // Normalizar clave: quitar espacios, saltos de línea y caracteres invisibles que Google rechaza.
 function normalizeApiKey(s){if(typeof s!=='string')return '';return s.replace(/\s/g,'').replace(/\u200B|\uFEFF/g,'').trim()}
-function getApiKey(){return normalizeApiKey(localStorage.getItem('alerg_apikey')||localStorage.getItem('gdrive_api_key')||'')}
+function getApiKey(){return normalizeApiKey(localStorage.getItem('alerg_apikey')||'')}
 function getVisionApiKey(){return normalizeApiKey(localStorage.getItem('gdrive_api_key')||'')}
+const GEMINI_MODEL='gemini-1.5-flash';
+const GEMINI_GENERATE_URL=`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+function buildGeminiHeaders(apiKey){
+  return {'Content-Type':'application/json','x-goog-api-key':normalizeApiKey(apiKey||'')};
+}
 
 function sanitizeUrlForDiagnostics(rawUrl){
   const input=String(rawUrl||'');
@@ -1012,6 +1072,32 @@ function extractProviderErrorMessage(payload){
   }
   return trimDiagnostic(payload,1000)||'';
 }
+function isApiKeyInvalidMessage(providerMessage){
+  const msg=String(providerMessage||'').toLowerCase();
+  return /api[_ -]?key[^a-z0-9]*(not valid|invalid)|api_key_invalid|invalid api key|provided api key is invalid|request had invalid authentication credentials/.test(msg);
+}
+function buildGeminiTroubleshootingHint(providerMessage,status){
+  const msg=String(providerMessage||'').toLowerCase();
+  if(typeof location!=='undefined'&&location.protocol==='file:'){
+    return 'Abre la app desde GitHub Pages o localhost, no desde archivo local (file://).';
+  }
+  if(/referer|referrer|origin|not authorized for this referrer/.test(msg)){
+    return 'En Google Cloud, añade https://perseo782.github.io/* en "HTTP referrers" de la API key.';
+  }
+  if(isApiKeyInvalidMessage(msg)){
+    return 'La API key de Gemini no es válida para este proyecto; vuelve a pegarla y guárdala en Ajustes.';
+  }
+  if(/disabled|has not been used|not enabled|service disabled/.test(msg)){
+    return 'Habilita "Generative Language API" en Google Cloud para el proyecto de la clave.';
+  }
+  if(/billing|payment|financial/.test(msg)){
+    return 'Activa facturación en Google Cloud para el proyecto de la clave.';
+  }
+  if(status===403){
+    return 'Revisa restricciones de la API key: APIs permitidas y dominio autorizado.';
+  }
+  return '';
+}
 async function parseHttpErrorPayload(response){
   try{
     const clone=response.clone();
@@ -1025,6 +1111,7 @@ async function parseHttpErrorPayload(response){
 }
 function classifyHttpFailure(status, providerMessage){
   const msg=String(providerMessage||'').toLowerCase();
+  if(isApiKeyInvalidMessage(msg)) return 'API key inválida, mal copiada o de otro proyecto de Google Cloud.';
   if(status===0){
     if(/cors|origin|access-control/.test(msg)) return 'Bloqueo CORS u origen no permitido.';
     if(/failed to fetch|networkerror|load failed/.test(msg)) return 'No se pudo contactar con el servidor (DNS, red, firewall o adblock).';
@@ -1047,6 +1134,7 @@ function classifyHttpFailure(status, providerMessage){
 }
 function mapHttpStatusToErrorCode(status, providerMessage){
   const msg=String(providerMessage||'').toLowerCase();
+  if(isApiKeyInvalidMessage(msg)) return ERROR_CODES.API_AUTH_FAILED;
   if(status===400) return ERROR_CODES.API_BAD_REQUEST;
   if(status===401) return ERROR_CODES.API_AUTH_FAILED;
   if(status===403){
@@ -1137,6 +1225,46 @@ async function fetchWithDiagnostics(url, options={}, meta={}){
     wrapped.cause=err;
     throw wrapped;
   }
+}
+
+async function testGeminiKey(rawKey){
+  const apiKey=normalizeApiKey(rawKey||getApiKey());
+  if(!apiKey){
+    return {
+      ok:false,
+      status:401,
+      message:'Clave API de Gemini no configurada',
+      hint:'Guarda la clave en Ajustes y vuelve a probar.'
+    };
+  }
+  const response=await fetchWithDiagnostics(GEMINI_GENERATE_URL,{
+    method:'POST',
+    headers:buildGeminiHeaders(apiKey),
+    body:JSON.stringify({
+      contents:[{role:'user',parts:[{text:'Responde SOLO con "OK".'}]}],
+      generationConfig:{maxOutputTokens:16,temperature:0}
+    })
+  },{
+    service:'Gemini',
+    operation:'test de conexion',
+    requestTag:'gemini_healthcheck',
+    requireOnline:true,
+    logSuccess:true,
+    successCode:'GEMINI_HEALTH_OK'
+  });
+  if(!response.ok){
+    const payload=await parseHttpErrorPayload(response);
+    const providerMessage=extractProviderErrorMessage(payload)||`HTTP ${response.status}`;
+    return {
+      ok:false,
+      status:response.status,
+      message:providerMessage,
+      hint:buildGeminiTroubleshootingHint(providerMessage,response.status)
+    };
+  }
+  const data=await response.json().catch(()=>({}));
+  const text=(data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts&&data.candidates[0].content.parts[0])?String(data.candidates[0].content.parts[0].text||'').trim():'OK';
+  return {ok:true,status:response.status,message:text||'OK'};
 }
 
 function extractTextFromVisionResponse(data){
@@ -1564,9 +1692,9 @@ Si no detectas nada, responde: []
 Productos a analizar:
 ${lines}`;
 
-  const response = await fetchWithDiagnostics(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
+  const response = await fetchWithDiagnostics(GEMINI_GENERATE_URL, {
     method: 'POST',
-    headers: {'Content-Type':'application/json'},
+    headers: buildGeminiHeaders(apiKey),
     body: JSON.stringify({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: { maxOutputTokens: 2000, temperature: 0 }
@@ -2419,7 +2547,7 @@ async function apiCall(content, options){
     ?options.systemInstruction
     :'Responde ÚNICAMENTE con un objeto JSON válido en el formato exacto que te pida el usuario. No incluyas texto antes ni después del JSON, ni bloques de markdown (```). Sin explicaciones. En ese JSON, el campo "nombre" es SIEMPRE el título del producto (el que aparece al inicio de la etiqueta o del texto), nunca un fragmento de la lista de ingredientes.';
 
-  const url='https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key='+encodeURIComponent(key);
+  const url=GEMINI_GENERATE_URL;
   const body=JSON.stringify({
     systemInstruction:{ parts:[{ text: systemText }] },
     contents:[{role:'user',parts}],
@@ -2430,7 +2558,7 @@ async function apiCall(content, options){
     const ac=new AbortController();
     const t=setTimeout(()=>ac.abort(),60000);
     try{
-      lastResp=await fetchWithDiagnostics(url,{method:'POST',headers:{'Content-Type':'application/json'},body,signal:ac.signal},{
+      lastResp=await fetchWithDiagnostics(url,{method:'POST',headers:buildGeminiHeaders(key),body,signal:ac.signal},{
         service:'Gemini',
         operation:'analisis de etiqueta',
         requestTag:'apiCall_attempt_'+(attempt+1),
@@ -2443,11 +2571,14 @@ async function apiCall(content, options){
         return new Response(JSON.stringify({choices:[{message:{content:text}}]}),{status:200,headers:{'Content-Type':'application/json'}});
       }
       const errMsg=json.error&&json.error.message?json.error.message:'Error Gemini';
-      if((lastResp.status===429||lastResp.status>=500)&&attempt<2){
+      const errorCode=mapHttpStatusToErrorCode(lastResp.status,errMsg);
+      const normalizedStatus=errorCode===ERROR_CODES.API_AUTH_FAILED?401:lastResp.status;
+      const hint=buildGeminiTroubleshootingHint(errMsg,lastResp.status);
+      if((errorCode===ERROR_CODES.API_RATE_LIMIT||errorCode===ERROR_CODES.API_SERVER_ERROR)&&attempt<2){
         await new Promise(r=>setTimeout(r,attempt===0?2000:5000));
         continue;
       }
-      return new Response(JSON.stringify({error:{message:errMsg}}),{status:lastResp.status,statusText:lastResp.statusText,headers:{'Content-Type':'application/json'}});
+      return new Response(JSON.stringify({error:{message:errMsg,code:errorCode,hint}}),{status:normalizedStatus,statusText:lastResp.statusText,headers:{'Content-Type':'application/json'}});
     }catch(err){
       clearTimeout(t);
       if(err.code===ERROR_CODES.NETWORK_OFFLINE){
@@ -2600,8 +2731,8 @@ async function analyzePhotos(photoList){
 
     addAnalysisSection(analysisId,'C_raw_output',{ raw_text: String(ocrText).slice(0,5000), length: ocrText.length });
     let result;
-    const openAiKey=getApiKey();
-    if(openAiKey){
+    const geminiKey=getApiKey();
+    if(geminiKey){
       aiS.innerHTML='<span class="spinner"></span> Interpretando con IA (nombre y alérgenos)…';
       try{
         // Instrucciones completas en systemInstruction (como el "system" de GPT); solo el texto OCR en el user.
@@ -2615,14 +2746,16 @@ async function analyzePhotos(photoList){
           result.nombre=fixNombreFromOcr(result.nombre,ocrText);
           result=normalizeAIPhotoResult(result);
         }else{
+          const errBody=await iaResp.json().catch(()=>null);
+          const providerMessage=extractProviderErrorMessage(errBody)||`HTTP ${iaResp.status}`;
           result=normalizeAIPhotoResult(buildResultFromOcrText(ocrText));
-          const hint=(typeof location!=='undefined'&&location.protocol==='file:')?' Abre la app desde la URL de GitHub Pages o localhost, no desde archivo local.':' Comprueba en Google Cloud que la API key tenga "Generative Language API" habilitada.';
-          if(typeof showToast==='function') showToast('La IA no respondió; se usó interpretación local.'+hint,'info');
+          const hint=buildGeminiTroubleshootingHint(providerMessage,iaResp.status);
+          if(typeof showToast==='function') showToast('La IA no respondió; se usó interpretación local.'+(hint?` ${hint}`:''),'info');
         }
       }catch(e){
         result=normalizeAIPhotoResult(buildResultFromOcrText(ocrText));
-        const hint=(typeof location!=='undefined'&&location.protocol==='file:')?' Abre la app desde la URL de GitHub Pages o localhost, no desde archivo local.':'';
-        if(typeof showToast==='function') showToast('Error al interpretar con IA; se usó interpretación local.'+hint,'info');
+        const hint=buildGeminiTroubleshootingHint((e&&e.message)||'',(e&&e.status)||0);
+        if(typeof showToast==='function') showToast('Error al interpretar con IA; se usó interpretación local.'+(hint?` ${hint}`:''),'info');
       }
     }else{
       result=normalizeAIPhotoResult(buildResultFromOcrText(ocrText));
@@ -2761,20 +2894,19 @@ async function processQueue(){
         addAnalysisSection(analysisId,'B_input',{ dimensions: metadata.dimensions });
         const resp=await apiCall(content,{ systemInstruction: metadata.systemPrompt || AI_PROMPT });
         if(!resp.ok){
-          let errorCode,errorMsg;
-          if(resp.status===401){
-            errorCode=ERROR_CODES.API_AUTH_FAILED;
-            errorMsg='Clave API inválida';
-          }else if(resp.status===429){
-            errorCode=ERROR_CODES.API_RATE_LIMIT;
-            errorMsg='Límite alcanzado';
-          }else if(resp.status>=500){
-            errorCode=ERROR_CODES.API_SERVER_ERROR;
-            errorMsg='Error servidor';
-          }else{
-            errorCode=ERROR_CODES.API_INVALID_RESPONSE;
-            errorMsg=`HTTP ${resp.status}`;
-          }
+          const errBody=await resp.json().catch(()=>null);
+          const providerMessage=extractProviderErrorMessage(errBody);
+          const errorCode=mapHttpStatusToErrorCode(resp.status,providerMessage);
+          const errorMsgByCode={
+            [ERROR_CODES.API_AUTH_FAILED]:'Clave API inválida o no autorizada',
+            [ERROR_CODES.API_REFERRER_BLOCKED]:'Dominio no autorizado en la API key',
+            [ERROR_CODES.API_DISABLED]:'Generative Language API deshabilitada',
+            [ERROR_CODES.API_BILLING_REQUIRED]:'Falta facturación activa en Google Cloud',
+            [ERROR_CODES.API_RATE_LIMIT]:'Límite de cuota alcanzado',
+            [ERROR_CODES.API_SERVER_ERROR]:'Error temporal del servidor Gemini',
+            [ERROR_CODES.API_TIMEOUT]:'Timeout de Gemini'
+          };
+          const errorMsg=errorMsgByCode[errorCode]||providerMessage||`HTTP ${resp.status}`;
           addAnalysisSection(analysisId,'F_decision',{decision:'error',error:errorMsg});
           finishPhotoAnalysis(analysisId,new Error(errorMsg));
           throw new Error(errorMsg);
