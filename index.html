@@ -765,7 +765,7 @@ function startPhotoAnalysis(origin, nPhotos, imageMeta){
       n_photos: nPhotos,
       image_meta: imageMeta || null,
       prompt_id: 'AI_PROMPT',
-      model: 'gemini-1.5-flash',
+      model: typeof GEMINI_MODEL!=='undefined' ? GEMINI_MODEL : 'gemini-2.5-flash',
       provider: 'google',
       network_online: navigator.onLine
     },
@@ -1030,7 +1030,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 function normalizeApiKey(s){if(typeof s!=='string')return '';return s.replace(/\s/g,'').replace(/\u200B|\uFEFF/g,'').trim()}
 function getApiKey(){return normalizeApiKey(localStorage.getItem('alerg_apikey')||'')}
 function getVisionApiKey(){return normalizeApiKey(localStorage.getItem('gdrive_api_key')||'')}
-const GEMINI_MODEL='gemini-1.5-flash';
+const GEMINI_MODEL='gemini-2.5-flash';
 const GEMINI_GENERATE_URL=`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 function buildGeminiHeaders(apiKey){
   return {'Content-Type':'application/json','x-goog-api-key':normalizeApiKey(apiKey||'')};
