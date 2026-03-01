@@ -281,7 +281,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
       <input type="file" accept="image/*" class="cam-input" id="galInput">
       <div class="ai-status" id="aiStatus"></div>
       <button class="save-btn" id="analyzeBtn" style="background:var(--warm8-80);margin-bottom:14px;display:none">Analizar etiquetado</button>
-      <button class="save-btn" id="analyzeBtnFast" style="background:var(--warm8-60);margin-bottom:14px;display:none">⚡ Analizar rápido</button>
+      <button class="save-btn" id="analyzeBtnFast" style="background:var(--cool8-80);margin-bottom:14px;display:none">⚡ Analizar rápido</button>
     </div>
     <div class="ai-result" id="aiResult">
       <label class="form-label">Producto detectado</label>
@@ -2681,8 +2681,7 @@ analyzeBtn.addEventListener('click',()=>{
   analyzePhotos(pl);
 });
 
-if(analyzeBtnFast){
-analyzeBtnFast.addEventListener('click',()=>{
+analyzeBtnFast&&analyzeBtnFast.addEventListener('click',()=>{
   const vKey=getVisionApiKey();
   if(!vKey){
     addLog(LOG_LEVELS.ERROR,ERROR_CODES.CONFIG_MISSING,'Vision no configurada: falta API Key en ajustes',{service:'Cloud Vision',operation:'analyzeBtnFast'});
@@ -2696,7 +2695,7 @@ analyzeBtnFast.addEventListener('click',()=>{
   }
   if(!navigator.onLine){
     const aiS=document.getElementById('aiStatus');
-    addLog(LOG_LEVELS.ERROR,ERROR_CODES.NETWORK_OFFLINE,'Sin conexion al iniciar analisis de foto (rápido)',{service:'Cloud Vision',operation:'analyzeBtnFast'});
+    addLog(LOG_LEVELS.ERROR,ERROR_CODES.NETWORK_OFFLINE,'Sin conexion al iniciar analisis de foto (rapido)',{service:'Cloud Vision',operation:'analyzeBtnFast'});
     aiS.innerHTML='Sin conexión — la lectura de foto con Google Vision necesita internet.';
     aiS.classList.add('show');
     showToast('Sin conexión — no se puede analizar la foto ahora','info');
@@ -2704,8 +2703,6 @@ analyzeBtnFast.addEventListener('click',()=>{
   }
   analyzePhotosFast(pl);
 });
-}
-
 
 let aiCurrentMatch=null;
 const AI_PROMPT=`Eres un sistema de lectura de etiquetas alimentarias. Tu tarea es extraer TODOS los alérgenos presentes en la imagen.
@@ -2890,16 +2887,18 @@ async function apiCall(content, options){
 
 const PHOTO_MAX_SIZE=1120;
 const PHOTO_JPEG_QUALITY=0.85;
-const PHOTO_MAX_SIZE_FAST=900;
-const PHOTO_JPEG_QUALITY_FAST=0.78;
-function compressPhotoForAI_Fast(dataUrl){
+const PHOTO_FAST_MAX_SIZE=960;
+const PHOTO_FAST_JPEG_QUALITY=0.78;
+function compressPhotoForAI(dataUrl, opts){
   return new Promise((resolve,reject)=>{
     const img=new Image();
     img.onload=()=>{
       let w=img.width,h=img.height;
-      const needsResize=w>PHOTO_MAX_SIZE_FAST||h>PHOTO_MAX_SIZE_FAST;
+      const maxSize=(opts&&opts.maxSize)||PHOTO_MAX_SIZE;
+      const quality=(opts&&opts.quality)!=null?opts.quality:PHOTO_JPEG_QUALITY;
+      const needsResize=w>maxSize||h>maxSize;
       if(needsResize){
-        const r=Math.min(PHOTO_MAX_SIZE_FAST/w,PHOTO_MAX_SIZE_FAST/h);
+        const r=Math.min(maxSize/w,maxSize/h);
         w=Math.round(w*r);h=Math.round(h*r);
       }
       const canvas=document.createElement('canvas');
@@ -2908,34 +2907,7 @@ function compressPhotoForAI_Fast(dataUrl){
       if(!ctx){resolve({dataUrl,width:img.width,height:img.height});return;}
       ctx.drawImage(img,0,0,w,h);
       try{
-        const jpeg=canvas.toDataURL('image/jpeg',PHOTO_JPEG_QUALITY_FAST);
-        resolve({dataUrl:jpeg,width:w,height:h,originalWidth:img.width,originalHeight:img.height,resized:needsResize,fast:true});
-      }catch(e){
-        resolve({dataUrl,width:img.width,height:img.height});
-      }
-    };
-    img.onerror=()=>resolve({dataUrl,width:0,height:0});
-    img.src=dataUrl;
-  });
-}
-
-function compressPhotoForAI(dataUrl){
-  return new Promise((resolve,reject)=>{
-    const img=new Image();
-    img.onload=()=>{
-      let w=img.width,h=img.height;
-      const needsResize=w>PHOTO_MAX_SIZE||h>PHOTO_MAX_SIZE;
-      if(needsResize){
-        const r=Math.min(PHOTO_MAX_SIZE/w,PHOTO_MAX_SIZE/h);
-        w=Math.round(w*r);h=Math.round(h*r);
-      }
-      const canvas=document.createElement('canvas');
-      canvas.width=w;canvas.height=h;
-      const ctx=canvas.getContext('2d');
-      if(!ctx){resolve({dataUrl,width:img.width,height:img.height});return;}
-      ctx.drawImage(img,0,0,w,h);
-      try{
-        const jpeg=canvas.toDataURL('image/jpeg',PHOTO_JPEG_QUALITY);
+        const jpeg=canvas.toDataURL('image/jpeg',quality);
         resolve({dataUrl:jpeg,width:w,height:h,originalWidth:img.width,originalHeight:img.height,resized:needsResize});
       }catch(e){
         resolve({dataUrl,width:img.width,height:img.height});
@@ -3125,56 +3097,70 @@ async function analyzePhotos(photoList){
     const saveBtn=document.getElementById('aiSave');
     if(saveBtn){saveBtn.disabled=false;}
     updateSave('aiAllergens');
+  }catch(err){
+    if(analysisAborted){
+      if(analysisId){
+        addAnalysisSection(analysisId,'F_decision',{decision:'cancelado',motivo:'usuario'});
+        finishPhotoAnalysis(analysisId);
+      }
+      return;
+    }
+    if(analysisId){
+      addAnalysisSection(analysisId,'F_decision',{decision:'error',error:err.message||'Error desconocido'});
+      finishPhotoAnalysis(analysisId,err);
+    }
+    addLog(LOG_LEVELS.ERROR,ERROR_CODES.API_INVALID_RESPONSE,'Error en flujo de analisis de foto',{
+      service:'Vision+Gemini',
+      operation:'analyzePhotos',
+      error:err&&err.message?err.message:String(err),
+      probable_cause: classifyHttpFailure((err&&err.status)||0, (err&&err.message)||'')
+    });
+    aiS.innerHTML='Error: '+err.message;
   }
-
-// ================================
-// ⚡ MODO RÁPIDO (beta, aislado)
-// Si no te gusta: borra este bloque y el botón "analyzeBtnFast".
-// No toca el flujo normal.
-// ================================
-function compactOcrForGemini(ocrText){
-  const lines=String(ocrText||'').split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
-  if(!lines.length) return '';
-  const kw=/\b(ingred|al[eé]rgen|contiene|puede\s+contener|trazas|presencia\s+fortuita|may\s+contain|traces\s+of|ingredients|allergen)\b/i;
-  const drop=/\b(kj|kcal|valor\s+energ|informaci[oó]n\s+nutricional|grasas|hidratos|carbohidr|prote[ií]nas|sal)\b/i;
-
-  const head=lines.slice(0,12).filter(l=>l.length>2);
-  const keep=[];
-  for(const l of lines){
-    const letters=(l.match(/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g)||[]).length;
-    const digits=(l.match(/[0-9]/g)||[]).length;
-    const ratio=letters/Math.max(1,letters+digits);
-
-    // Quitar líneas típicas de tabla nutricional (mucha cifra)
-    if(drop.test(l) && digits>0 && ratio<0.60) continue;
-
-    // Mantener SIEMPRE líneas clave
-    if(kw.test(l)) { keep.push(l); continue; }
-
-    // Mantener líneas con texto "humano" (más letras que cifras)
-    if(ratio>=0.62) keep.push(l);
-  }
-
-  // Unir: cabecera + líneas útiles, sin duplicados
-  const merged=[...new Set([...head,...keep])];
-
-  // Si al filtrar nos quedamos con muy poco, mejor devolver original (seguro).
-  const out=merged.join('\n');
-  if(out.length < 400) return String(ocrText||'').trim();
-  return out;
 }
-function looksWeakOcr(ocrText){
-  const t=String(ocrText||'').trim();
-  if(t.length<140) return true;
-  const letters=(t.match(/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g)||[]).length;
-  if(letters<40) return true;
-  return false;
+
+
+// ================================
+// ⚡ MODO RÁPIDO (prueba controlada)
+// - No cambia el botón normal.
+// - Si falla OCR (texto vacío), cae al modo normal automáticamente.
+// ================================
+function compactOcrForGemini(ocrText, maxChars=9000){
+  const raw=String(ocrText||'');
+  const lines=raw.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  if(!lines.length) return '';
+  const kw=/\b(ingred|al[eé]rgen|contiene|puede\s+contener|trazas|may\s+contain|traces\s+of|ingredients|allergen)\b/i;
+  const head=lines.slice(0,12);
+  const kept=[];
+  for(const line of lines){
+    const hasKeyword=kw.test(line);
+    const digits=(line.match(/\d/g)||[]).length;
+    const letters=(line.match(/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g)||[]).length;
+    const ratioDigits = digits / Math.max(1,line.length);
+    const numericHeavy = ratioDigits>0.45 && digits>=6;
+    if(hasKeyword){
+      kept.push(line);
+      continue;
+    }
+    // Mantener líneas "humanas" (palabras), descartar líneas casi numéricas (tablas, códigos).
+    if(letters>=3 && !numericHeavy){
+      kept.push(line);
+    }
+  }
+  const merged=[...new Set([...head,...kept])].filter(l=>l && l.length>2);
+  let txt=merged.join('\n');
+  if(txt.length>maxChars) txt=txt.slice(0,maxChars);
+  return txt;
 }
 
 async function analyzePhotosFast(photoList){
   analysisAborted=false;
   const aiS=document.getElementById('aiStatus'),aiR=document.getElementById('aiResult');
-  aiS.innerHTML='<span class="spinner"></span> Preparando imagen (rápido)…';aiS.classList.add('show');aiR.classList.remove('show');hideMatch('aiMatch');aiCurrentMatch=null;
+  aiS.innerHTML='<span class="spinner"></span> ⚡ Preparando imagen (rápido)…';
+  aiS.classList.add('show');
+  aiR.classList.remove('show');
+  hideMatch('aiMatch');
+  aiCurrentMatch=null;
   let analysisId=null;
 
   const list=Array.isArray(photoList)?photoList.filter(Boolean):[photoList].filter(Boolean);
@@ -3187,14 +3173,28 @@ async function analyzePhotosFast(photoList){
     return;
   }
 
-  // Helper interno: una llamada a Vision con un array de imágenes ya preparadas
-  const runVision = async (compressedArr) => {
-    const images=(compressedArr||[]).map(c=>{
+  try{
+    // 1) Compresión más ligera (para subir menos y acelerar)
+    const compressed=await Promise.all(list.map(du=>compressPhotoForAI(du,{maxSize:PHOTO_FAST_MAX_SIZE,quality:PHOTO_FAST_JPEG_QUALITY})));
+    if(analysisAborted){aiS.innerHTML='❌ Análisis cancelado';return;}
+
+    const metadata={ dimensions: compressed.map(c=>c&&typeof c==='object'&&c.width!=null?{w:c.width,h:c.height}:null).filter(Boolean), fast:true };
+    const started=startPhotoAnalysis('vision_fast',list.length,metadata);
+    analysisId=started.analysisId;
+
+    aiS.innerHTML='<span class="spinner"></span> ⚡ OCR rápido (Vision)…';
+
+    const images=compressed.map(c=>{
       const dataUrl=typeof c==='object'&&c.dataUrl!=null?c.dataUrl:c;
       return (String(dataUrl||'').split(',')[1]||'').trim();
     }).filter(Boolean);
 
-    if(!images.length) return '';
+    if(!images.length){
+      addAnalysisSection(analysisId,'F_decision',{decision:'fallback',motivo:'no_image_fast'});
+      finishPhotoAnalysis(analysisId,new Error('No se pudo preparar la imagen (rápido)'));
+      aiS.innerHTML='Reintentando modo normal…';
+      return analyzePhotos(list);
+    }
 
     const body={
       requests:images.map(img=>({
@@ -3215,56 +3215,49 @@ async function analyzePhotosFast(photoList){
       requireOnline:true
     });
 
-    if(!resp.ok){
-      return '';
-    }
-    const data=await resp.json();
-    return extractTextFromVisionResponse(data) || '';
-  };
-
-  try{
-    // 1) Intento rápido: imagen más ligera
-    let compressed=await Promise.all(list.map(du=>compressPhotoForAI_Fast(du)));
-    if(analysisAborted){aiS.innerHTML='❌ Análisis cancelado';return;}
-
-    const metadata={ dimensions: compressed.map(c=>c&&typeof c==='object'&&c.width!=null?{w:c.width,h:c.height}:null).filter(Boolean), fast:true };
-    const started=startPhotoAnalysis('vision_fast',list.length,metadata);
-    analysisId=started.analysisId;
-
-    aiS.innerHTML='<span class="spinner"></span> Enviando y analizando (rápido)…';
-
-    let ocrText=await runVision(compressed);
-
-    // 2) Si el OCR sale flojo, reintento automático en calidad normal (sin tocarte a ti)
-    if(!ocrText || looksWeakOcr(ocrText)){
-      aiS.innerHTML='<span class="spinner"></span> Reintentando en calidad normal…';
-      compressed=await Promise.all(list.map(du=>compressPhotoForAI(du)));
-      ocrText=await runVision(compressed);
-    }
-
-    if(!ocrText){
-      addLog(LOG_LEVELS.WARN,ERROR_CODES.PHOTO_UNREADABLE,'Vision no detecto texto en la etiqueta (rápido)',{service:'Cloud Vision',operation:'ocr de etiqueta',analysis_id:analysisId});
-      addAnalysisSection(analysisId,'F_decision',{decision:'no_guardar',motivo:'ocr_sin_texto'});
-      finishPhotoAnalysis(analysisId);
-      aiS.innerHTML='No se pudo leer texto en la etiqueta';
+    if(analysisAborted){
+      if(analysisId){
+        addAnalysisSection(analysisId,'F_decision',{decision:'cancelado',motivo:'usuario'});
+        finishPhotoAnalysis(analysisId);
+      }
+      aiS.innerHTML='❌ Análisis cancelado';
       return;
     }
 
-    addAnalysisSection(analysisId,'C_raw_output',{ raw_text: String(ocrText).slice(0,5000), length: ocrText.length });
+    if(!resp.ok){
+      let msg='Error Vision ('+resp.status+')';
+      try{
+        const errBody=await resp.json();
+        if(errBody&&errBody.error&&errBody.error.message){
+          msg=errBody.error.message;
+        }
+      }catch(_){}
+      addAnalysisSection(analysisId,'F_decision',{decision:'fallback',motivo:'vision_error_fast',error:msg});
+      finishPhotoAnalysis(analysisId,new Error(msg));
+      aiS.innerHTML='Reintentando modo normal…';
+      return analyzePhotos(list);
+    }
 
-    // 3) A Gemini se le pasa el texto útil (menos ruido), para que responda antes
+    const data=await resp.json();
+    const ocrText=extractTextFromVisionResponse(data);
+    if(!ocrText){
+      addAnalysisSection(analysisId,'F_decision',{decision:'fallback',motivo:'empty_ocr_fast'});
+      finishPhotoAnalysis(analysisId,new Error('OCR vacío (rápido)'));
+      aiS.innerHTML='Reintentando modo normal…';
+      return analyzePhotos(list);
+    }
+
+    const compact=compactOcrForGemini(ocrText,9000);
+    addAnalysisSection(analysisId,'C_raw_output',{ raw_text: String(compact).slice(0,5000), length: compact.length, mode:'fast_compact' });
+
     let result;
     const geminiKey=getApiKey();
     if(geminiKey){
-      aiS.innerHTML='<span class="spinner"></span> Interpretando con IA (rápido)…';
+      aiS.innerHTML='<span class="spinner"></span> ⚡ Interpretando con IA…';
       try{
-        const compact=compactOcrForGemini(ocrText);
-        const userText='--- TEXTO DE LA ETIQUETA ---\n'+String(compact).slice(0,6500);
+        const userText='--- TEXTO DE LA ETIQUETA ---\n'+String(compact);
         const content=[{ type:'text', text: userText }];
-
-        // Limitar respuesta: el JSON cabe de sobra; menos salida suele ser más rápido
-        const iaResp=await apiCall(content,{ systemInstruction: AI_PROMPT_FROM_OCR, maxOutputTokens:1600 });
-
+        const iaResp=await apiCall(content,{ systemInstruction: AI_PROMPT_FROM_OCR, maxOutputTokens: 1200 });
         if(iaResp&&iaResp.ok){
           const iaData=await iaResp.json();
           const text=iaData.choices?.[0]?.message?.content||'';
@@ -3272,29 +3265,20 @@ async function analyzePhotosFast(photoList){
           const ocrLocal=normalizeAIPhotoResult(buildResultFromOcrText(ocrText));
           const merged=mergeAIWithOcrFallback(result,ocrLocal);
           result=applyPhotoReviewValidation(merged.result,text,'vision_fast_merged');
-          if(merged.recovered.length){
-            addLog('INFO','PHOTO_OCR_RECOVERY','PHOTO_OCR_RECOVERY',{analysis_id:analysisId,recovered:merged.recovered,fast:true});
-          }
           result.nombre=fixNombreFromOcr(result.nombre,ocrText);
           result=normalizeAIPhotoResult(result);
         }else{
-          const errBody=await iaResp.json().catch(()=>null);
-          const providerMessage=extractProviderErrorMessage(errBody)||`HTTP ${iaResp.status}`;
           result=normalizeAIPhotoResult(buildResultFromOcrText(ocrText));
-          const hint=buildGeminiTroubleshootingHint(providerMessage,iaResp.status);
-          if(typeof showToast==='function') showToast('La IA no respondió; se usó interpretación local.'+(hint?` ${hint}`:''),'info');
         }
       }catch(e){
         result=normalizeAIPhotoResult(buildResultFromOcrText(ocrText));
-        const hint=buildGeminiTroubleshootingHint((e&&e.message)||'',(e&&e.status)||0);
-        if(typeof showToast==='function') showToast('Error al interpretar con IA; se usó interpretación local.'+(hint?` ${hint}`:''),'info');
       }
     }else{
       result=normalizeAIPhotoResult(buildResultFromOcrText(ocrText));
     }
 
     result.nombre=fixNombreFromOcr(result.nombre||'',ocrText);
-    addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, alergenos: result.alergenos||[], trazas: result.trazas||[] });
+    addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, alergenos: result.alergenos||[], trazas: result.trazas||[], mode:'fast' });
     window.__lastAnalysisId=analysisId;
 
     aiS.innerHTML='✓ Análisis completado';
@@ -3329,17 +3313,6 @@ async function analyzePhotosFast(photoList){
     if(saveBtn){saveBtn.disabled=false;}
     updateSave('aiAllergens');
   }catch(err){
-    const msg=(err&&err.message)||String(err||'Error');
-    addAnalysisSection(analysisId,'F_decision',{decision:'error',error:msg});
-    finishPhotoAnalysis(analysisId,new Error(msg));
-    aiS.innerHTML='Error: '+msg;
-  }
-}
-// ================================
-// /⚡ MODO RÁPIDO
-// ================================
-
-catch(err){
     if(analysisAborted){
       if(analysisId){
         addAnalysisSection(analysisId,'F_decision',{decision:'cancelado',motivo:'usuario'});
@@ -3348,18 +3321,19 @@ catch(err){
       return;
     }
     if(analysisId){
-      addAnalysisSection(analysisId,'F_decision',{decision:'error',error:err.message||'Error desconocido'});
+      addAnalysisSection(analysisId,'F_decision',{decision:'error',error:(err&&err.message)||'Error desconocido'});
       finishPhotoAnalysis(analysisId,err);
     }
-    addLog(LOG_LEVELS.ERROR,ERROR_CODES.API_INVALID_RESPONSE,'Error en flujo de analisis de foto',{
+    addLog(LOG_LEVELS.ERROR,ERROR_CODES.API_INVALID_RESPONSE,'Error en flujo de analisis de foto (rápido)',{
       service:'Vision+Gemini',
-      operation:'analyzePhotos',
+      operation:'analyzePhotosFast',
       error:err&&err.message?err.message:String(err),
       probable_cause: classifyHttpFailure((err&&err.status)||0, (err&&err.message)||'')
     });
-    aiS.innerHTML='Error: '+err.message;
+    aiS.innerHTML='Error: '+((err&&err.message)?err.message:String(err));
   }
 }
+
 
 document.getElementById('aiName').addEventListener('input',()=>{updateSave('aiAllergens');const name=document.getElementById('aiName').value.trim();if(name.length<3){hideMatch('aiMatch');aiCurrentMatch=null;document.getElementById('aiSave').textContent='Guardar producto';return}const match=findMatch(name);aiCurrentMatch=match;if(match){showMatch('aiMatch',match);document.getElementById('aiSave').textContent='Actualizar existente'}else{hideMatch('aiMatch');document.getElementById('aiSave').textContent='Guardar producto nuevo'}});
 document.getElementById('aiName').addEventListener('blur',()=>{const v=document.getElementById('aiName').value.trim();if(v){const c=autoCorrectName(v);if(c!==v){document.getElementById('aiName').value=c;showToast('Ortografía corregida','info')}}});
