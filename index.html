@@ -42,15 +42,22 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 #app{display:none;flex-direction:column;height:100dvh;max-width:500px;margin:0 auto;position:relative}
 #app.show{display:flex}
 .hdr{padding:24px 16px 0;flex-shrink:0;background:var(--bg)}
-.hdr-row{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px}
+.hdr-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.hdr-row-top{margin-bottom:10px}
+.hdr-row-counters{justify-content:flex-start;gap:8px;flex-wrap:wrap;margin-bottom:10px}
 .hdr h1{font-family:var(--serif);font-size:26px;font-weight:400;letter-spacing:-0.3px;color:var(--text)}
-.hdr-right{display:flex;align-items:center;gap:10px}
-.hdr-count{font-size:11px;color:var(--text3);font-weight:400;letter-spacing:0.8px;text-transform:uppercase}
-.hdr-btn{width:44px;height:50px;border-radius:var(--radius);background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--warm8);transition:background .15s;margin-left:6px}
-.hdr-btn:active{background:var(--warm8-10)}
-.btn-icon{font-size:20px;line-height:1}
-.btn-label{font-size:9px;font-weight:500;letter-spacing:0.3px;text-transform:uppercase}
-.search{position:relative;margin-bottom:10px}
+.hdr-actions{display:flex;align-items:center;gap:8px}
+.hdr-chip{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;background:var(--warm8-10);border:1px solid var(--warm8-40);font-size:11px;color:var(--text2);font-weight:500;letter-spacing:0.7px;text-transform:uppercase;white-space:nowrap}
+.hdr-chip[hidden]{display:none!important}
+.hdr-chip-pending{background:var(--warm8-20);border-color:var(--warm8-60);color:var(--text)}
+.hdr-chip-pending[data-warning="true"]{box-shadow:0 0 0 1px var(--warm8-60) inset}
+.pending-warn{font-size:11px;line-height:1}
+.hdr-chip-btn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 11px;border-radius:999px;border:1px solid var(--warm8-40);background:var(--white);color:var(--warm8);font-family:var(--sans);font-size:10px;font-weight:600;letter-spacing:0.6px;text-transform:uppercase;cursor:pointer;transition:background .15s,border-color .15s,color .15s}
+.hdr-chip-btn:hover{background:var(--warm8-10);border-color:var(--warm8-60)}
+.hdr-chip-btn:active{background:var(--warm8-20)}
+.hdr-chip-btn:disabled{opacity:.6;cursor:not-allowed}
+.hdr-chip-icon{font-size:14px;line-height:1}
+.search{position:relative;margin-bottom:12px}
 .search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--warm8-60);pointer-events:none}
 .search input{width:100%;background:var(--white);border:1px solid var(--warm8-40);border-radius:var(--radius);padding:11px 40px 11px 36px;font-size:14px;color:var(--text);font-family:var(--sans);outline:none;transition:border-color .2s}
 .search input:focus{border-color:var(--warm8)}
@@ -217,19 +224,25 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 <div id="app">
   <div class="offline-banner" id="offlineBanner">Sin conexión — las fotos se guardan en cola</div>
   <div class="hdr">
-    <div class="hdr-row">
+    <div class="hdr-row hdr-row-top">
       <h1>Alérgenos</h1>
-      <div class="hdr-right">
-        <span class="hdr-count" id="cnt"></span>
-        <button class="hdr-btn" id="syncBtn" title="Sincronización forzada">
-          <div class="btn-icon">⟳</div>
-          <div class="btn-label">Sync</div>
+      <div class="hdr-actions">
+        <button class="hdr-chip-btn" id="syncBtn" title="Sincronización forzada">
+          <span class="hdr-chip-icon" aria-hidden="true">⟳</span>
+          <span>Sync</span>
         </button>
-        <button class="hdr-btn" id="gearBtn" title="Ajustes">
-          <div class="btn-icon">⚙</div>
-          <div class="btn-label">Ajustes</div>
+        <button class="hdr-chip-btn" id="gearBtn" title="Ajustes">
+          <span class="hdr-chip-icon" aria-hidden="true">⚙</span>
+          <span>Ajustes</span>
         </button>
       </div>
+    </div>
+    <div class="hdr-row hdr-row-counters">
+      <span class="hdr-chip" id="cnt">0 PRODUCTOS</span>
+      <span class="hdr-chip hdr-chip-pending" id="pendingChip" hidden>
+        <span class="pending-warn" id="pendingWarnIcon" aria-hidden="true">⚠︎</span>
+        <span id="pendingCountLabel">0 PENDIENTES</span>
+      </span>
     </div>
     <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7.5"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="text" placeholder="Buscar producto…" autocomplete="off" autocorrect="on" spellcheck="false"><button class="x-btn" id="xb">&times;</button></div>
     <div class="filter-row" id="fl"></div>
@@ -585,16 +598,14 @@ document.getElementById('settingsClose').addEventListener('click',()=>closeSetti
 document.getElementById('syncBtn').addEventListener('click',async()=>{
   if(!gdriveToken){showToast('Conecta Google Drive primero','info');return}
   const btn=document.getElementById('syncBtn');
-  btn.style.pointerEvents='none';
-  btn.style.opacity='0.5';
+  btn.disabled=true;
   try{
     showToast('⟳ Sincronizando...','info');
     await gdriveSmartSync('manual');
   }catch(e){
     showToast('Error al sincronizar','info');
   }finally{
-    btn.style.pointerEvents='';
-    btn.style.opacity='';
+    btn.disabled=false;
   }
 });
 settingsBg.addEventListener('click',e=>{if(e.target===settingsBg)closeSettings()});
@@ -953,11 +964,13 @@ function updateAppStatus(){
   const apiConfigured=!!getApiKey();
   const gdriveConnected=!!localStorage.getItem('gdrive_token');
   const offlineQueue=(typeof photoQueue!=='undefined' && Array.isArray(photoQueue))?photoQueue.length:0;
+  const pendingSync=getPendingSyncCount();
   status.innerHTML=`
     • Productos: ${P.length}
     • API Gemini: ${apiConfigured?'✓ Configurada':'❌ Sin configurar'}
     • Google Drive: ${gdriveConnected?'✓ Conectado':'❌ Desconectado'}
     • Cola offline: ${offlineQueue} pendientes
+    • Sync pendiente: ${pendingSync}
   `;
 }
 
@@ -975,6 +988,7 @@ function exportDiagnostics(){
     api_configured:!!getApiKey(),
     gdrive_connected:!!localStorage.getItem('gdrive_token'),
     offline_queue:0,
+    pending_sync_count:getPendingSyncCount(),
     db_source: typeof DB_SOURCE !== 'undefined' ? DB_SOURCE : 'unknown',
     local_last_update: localStorage.getItem('local_last_update') || null,
     remote_last_count: localStorage.getItem('remote_last_count') || null,
@@ -1585,8 +1599,74 @@ function finishSyncSession(session, decision, status, summary, errorDetail = nul
 }
 
 // Estado de sync visible en Ajustes
+const DRIVE_OUTBOX_KEY='alergenos_drive_outbox_v1';
+const DRIVE_OUTBOX_LIMIT=500;
+
+function loadDriveOutbox(){
+  try{
+    const raw=localStorage.getItem(DRIVE_OUTBOX_KEY);
+    if(!raw) return [];
+    const parsed=JSON.parse(raw);
+    if(!Array.isArray(parsed)) return [];
+    return parsed.filter(item=>item&&typeof item==='object');
+  }catch(_){
+    return [];
+  }
+}
+
+let driveOutbox=loadDriveOutbox();
 let lastSyncDecision = localStorage.getItem('last_sync_decision') || null;
-let pendingChanges = localStorage.getItem('pending_changes') === '1';
+let pendingChanges=false;
+
+function persistDriveOutbox(){
+  try{
+    localStorage.setItem(DRIVE_OUTBOX_KEY,JSON.stringify(driveOutbox));
+  }catch(_){}
+}
+
+function getPendingSyncCount(){
+  return Array.isArray(driveOutbox)?driveOutbox.length:0;
+}
+
+function refreshPendingChangesFlag(){
+  pendingChanges=getPendingSyncCount()>0;
+  localStorage.setItem('pending_changes',pendingChanges?'1':'0');
+}
+
+function enqueueSyncOutbox(changeType='db_write',details={}){
+  const entry={
+    id:'ob_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+    type:String(changeType||'db_write'),
+    createdAt:Date.now(),
+    details:(details&&typeof details==='object')?details:{}
+  };
+  driveOutbox.unshift(entry);
+  if(driveOutbox.length>DRIVE_OUTBOX_LIMIT) driveOutbox=driveOutbox.slice(0,DRIVE_OUTBOX_LIMIT);
+  persistDriveOutbox();
+  refreshPendingChangesFlag();
+  if(typeof updatePendingSyncChip==='function') updatePendingSyncChip();
+}
+
+function clearSyncOutbox(){
+  driveOutbox=[];
+  persistDriveOutbox();
+  refreshPendingChangesFlag();
+  if(typeof updatePendingSyncChip==='function') updatePendingSyncChip();
+}
+
+// Migración de versiones antiguas: si había flag legacy sin outbox, conservar 1 pendiente.
+(function hydrateLegacyPendingOutbox(){
+  if(localStorage.getItem('pending_changes')==='1' && driveOutbox.length===0){
+    driveOutbox=[{
+      id:'ob_legacy_'+Date.now(),
+      type:'legacy_pending',
+      createdAt:Date.now(),
+      details:{migrated:true}
+    }];
+    persistDriveOutbox();
+  }
+  refreshPendingChangesFlag();
+})();
 
 function updateSyncStatusUI() {
   const el = document.getElementById('syncStatusPanel');
@@ -1596,7 +1676,8 @@ function updateSyncStatusUI() {
   const remoteCount = localStorage.getItem('remote_last_count') || '—';
   const remoteTs = localStorage.getItem('remote_last_update_read') || null;
   const decision = localStorage.getItem('last_sync_decision') || '—';
-  const pending = pendingChanges ? '<span style="color:var(--red)">⚠ Cambios pendientes</span>' : '<span style="color:green">✓ Sincronizado</span>';
+  const pendingCount=getPendingSyncCount();
+  const pending = pendingCount>0 ? `<span style="color:var(--red)">⚠ ${pendingCount} pendiente${pendingCount!==1?'s':''}</span>` : '<span style="color:green">✓ Sincronizado</span>';
 
   el.innerHTML = `
     <div class="sync-status-grid">
@@ -1608,6 +1689,7 @@ function updateSyncStatusUI() {
       <div><b>Estado:</b> ${pending}</div>
     </div>
   `;
+  if(typeof updatePendingSyncChip==='function') updatePendingSyncChip();
 }
 
 // ============================================================
@@ -1618,19 +1700,25 @@ function saveDB(options = {}) {
   const skipAutoSync = options.skipAutoSync === true;
   try {
     P = sanitizeProductList(P);
+    const prevJson = localStorage.getItem('alergenos_db_v3') || '';
     const json = JSON.stringify(P);
     if(json.length > 4.5 * 1024 * 1024){
       addLog(LOG_LEVELS.WARN,'DB_SAVE_ERROR','Base de datos muy grande (cerca del límite)',{bytes:json.length});
     }
+    const dbChanged = prevJson !== json;
     localStorage.setItem('alergenos_db_v3', json);
-    localStorage.setItem('local_last_update', Date.now().toString());
-    if (!skipAutoSync) {
-      pendingChanges = true;
-      localStorage.setItem('pending_changes','1');
+    if(dbChanged) localStorage.setItem('local_last_update', Date.now().toString());
+    if (!skipAutoSync && dbChanged) {
+      enqueueSyncOutbox(options.changeType || 'db_write',{
+        origin:options.origin || 'saveDB'
+      });
       if(gdriveToken && navigator.onLine) setTimeout(() => gdriveSmartSync('auto'), 500);
+    } else {
+      refreshPendingChangesFlag();
     }
     updateAppStatus();
     updateSyncStatusUI();
+    if(typeof updatePendingSyncChip==='function') updatePendingSyncChip();
   } catch(e) {
     if(e && e.name === 'QuotaExceededError'){
       addLog(LOG_LEVELS.ERROR,'DB_SAVE_ERROR','Sin espacio en almacenamiento local',{error:e.message});
@@ -1916,6 +2004,37 @@ document.getElementById('gearBtn').addEventListener('click', () => {
 // ============================================================
 let af=new Set(),sinMode=false,lastSavedName=null;
 const q=document.getElementById('q'),xb=document.getElementById('xb'),ls=document.getElementById('ls'),cnt=document.getElementById('cnt'),fl=document.getElementById('fl');
+const pendingChip=document.getElementById('pendingChip');
+const pendingCountLabel=document.getElementById('pendingCountLabel');
+const pendingWarnIcon=document.getElementById('pendingWarnIcon');
+
+function getDriveConnectionState(){
+  if(!navigator.onLine) return 'offline';
+  if(!gdriveToken) return 'disconnected';
+  return 'connected';
+}
+
+function updatePendingSyncChip(){
+  if(cnt){
+    const total=Array.isArray(P)?P.length:0;
+    cnt.textContent=`${total} PRODUCTOS`;
+  }
+  if(!pendingChip||!pendingCountLabel||!pendingWarnIcon) return;
+  const pendingCount=getPendingSyncCount();
+  if(pendingCount<=0){
+    pendingChip.hidden=true;
+    pendingChip.removeAttribute('data-warning');
+    pendingWarnIcon.hidden=true;
+    return;
+  }
+  const connectionState=getDriveConnectionState();
+  const showWarn=connectionState!=='connected';
+  pendingChip.hidden=false;
+  pendingChip.dataset.warning=showWarn?'true':'false';
+  pendingWarnIcon.hidden=!showWarn;
+  pendingCountLabel.textContent=`${pendingCount} PENDIENTES`;
+  pendingChip.title=showWarn?'Pendientes sin conexión estable con Drive':'Cambios pendientes por sincronizar';
+}
 
 function norm(s){return s.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim()}
 function tokenize(s){return norm(s).split(' ').filter(w=>w.length>2)}
@@ -2193,7 +2312,7 @@ function mergeProduct(idx,nn,na,opts){
   if(nn.length>ex.n.length)ex.n=nn;
   ex.a=m;
   if(opts&&opts.analysisId!= null){ ex.last_analysis_id=opts.analysisId; ex.last_analysis_timestamp=opts.analysisTimestamp||new Date().toISOString(); }
-  saveDB();return{added}
+  saveDB({changeType:'edit_product',origin:'mergeProduct'});return{added}
 }
 
 const toastEl=document.getElementById('toast');let toastTimer;
@@ -2219,7 +2338,29 @@ function updateCancelReviewUI(){
 let renderLimit=150;
 let currentFiltered=[];
 
-function render(){const raw=q.value.trim(),query=norm(raw);xb.classList.toggle('on',raw.length>0);let f=P;if(query){const t=query.split(/\s+/);f=f.filter(p=>{const n=norm(p.n);return t.every(w=>n.includes(w))})}if(sinMode&&af.size>0)f=f.filter(p=>![...af].some(a=>p.a.includes(a)));else if(sinMode&&af.size===0)f=f.filter(p=>!p.a.length);else if(!sinMode&&af.size>0)f=f.filter(p=>[...af].some(a=>p.a.includes(a)));currentFiltered=f;renderLimit=150;cnt.textContent=f.length+' producto'+(f.length!==1?'s':'');if(!f.length){ls.innerHTML='<div class="empty">Sin resultados</div>';return}renderProducts()}
+function render(){
+  const raw=q.value.trim(),query=norm(raw);
+  xb.classList.toggle('on',raw.length>0);
+  let f=P;
+  if(query){
+    const t=query.split(/\s+/);
+    f=f.filter(p=>{
+      const n=norm(p.n);
+      return t.every(w=>n.includes(w));
+    });
+  }
+  if(sinMode&&af.size>0)f=f.filter(p=>![...af].some(a=>p.a.includes(a)));
+  else if(sinMode&&af.size===0)f=f.filter(p=>!p.a.length);
+  else if(!sinMode&&af.size>0)f=f.filter(p=>[...af].some(a=>p.a.includes(a)));
+  currentFiltered=f;
+  renderLimit=150;
+  updatePendingSyncChip();
+  if(!f.length){
+    ls.innerHTML='<div class="empty">Sin resultados</div>';
+    return;
+  }
+  renderProducts();
+}
 
 function renderProducts(){
   const f=currentFiltered;
@@ -2434,7 +2575,7 @@ let matchTimer,manualCurrentMatch=null;const manualNameInput=document.getElement
 manualNameInput.addEventListener('input',()=>{updateSave('manualAllergens');clearTimeout(matchTimer);matchTimer=setTimeout(()=>{if(editMode)return;const name=manualNameInput.value.trim();if(name.length<3){hideMatch('manualMatch');manualCurrentMatch=null;document.getElementById('manualSave').textContent='Guardar producto';return}const match=findMatch(name);manualCurrentMatch=match;if(match){showMatch('manualMatch',match);document.getElementById('manualSave').textContent='Actualizar existente'}else{hideMatch('manualMatch');document.getElementById('manualSave').textContent='Guardar producto nuevo'}},300)});
 manualNameInput.addEventListener('blur',()=>{const v=manualNameInput.value.trim();if(v){const c=autoCorrectName(v);if(c!==v){manualNameInput.value=c;showToast('Ortografía corregida','info')}}});
 
-document.getElementById('manualSave').addEventListener('click',()=>{let name=manualNameInput.value.trim();if(!name)return;name=autoCorrectName(name);const al=sortAllergens(getSelected('manualAllergens'));if(editMode&&editIdx>=0){const before={n:P[editIdx].n,a:[...P[editIdx].a]};P[editIdx].n=name;P[editIdx].a=al;saveDB();clearFlagOnSave(name,before,{n:name,a:[...al]});lastSavedName=name;render();showToast(`✓ "${name}" actualizado`,'update')}else if(manualCurrentMatch){const r=mergeProduct(manualCurrentMatch.index,name,al);logAuditEvent('merge_save',{target:manualCurrentMatch.product.n, merged_name:name, added_allergens:r.added});lastSavedName=manualCurrentMatch.product.n;render();showToast(r.added.length?`✓ "${manualCurrentMatch.product.n}" · +${r.added.length} alérgeno${r.added.length>1?'s':''}`:`✓ "${manualCurrentMatch.product.n}" sin cambios`,'update')}else{addNewProduct(name,al);logAuditEvent('new_product',{product:name, allergens:al});lastSavedName=name;render();showToast(`✓ "${name}" añadido`,'new')}closeModal();if(window.__batchReviewCorrecting){window.__batchReviewCorrecting=false;const p=window.__batchPendingReview||[];p.shift();if(p.length>0){if(typeof navPush==='function')navPush('batchReview');showNextBatchPending()}else closeModal();}});
+document.getElementById('manualSave').addEventListener('click',()=>{let name=manualNameInput.value.trim();if(!name)return;name=autoCorrectName(name);const al=sortAllergens(getSelected('manualAllergens'));if(editMode&&editIdx>=0){const before={n:P[editIdx].n,a:[...P[editIdx].a]};P[editIdx].n=name;P[editIdx].a=al;saveDB({changeType:'edit_product',origin:'manualSave'});clearFlagOnSave(name,before,{n:name,a:[...al]});lastSavedName=name;render();showToast(`✓ "${name}" actualizado`,'update')}else if(manualCurrentMatch){const r=mergeProduct(manualCurrentMatch.index,name,al);logAuditEvent('merge_save',{target:manualCurrentMatch.product.n, merged_name:name, added_allergens:r.added});lastSavedName=manualCurrentMatch.product.n;render();showToast(r.added.length?`✓ "${manualCurrentMatch.product.n}" · +${r.added.length} alérgeno${r.added.length>1?'s':''}`:`✓ "${manualCurrentMatch.product.n}" sin cambios`,'update')}else{addNewProduct(name,al);logAuditEvent('new_product',{product:name, allergens:al});lastSavedName=name;render();showToast(`✓ "${name}" añadido`,'new')}closeModal();if(window.__batchReviewCorrecting){window.__batchReviewCorrecting=false;const p=window.__batchPendingReview||[];p.shift();if(p.length>0){if(typeof navPush==='function')navPush('batchReview');showNextBatchPending()}else closeModal();}});
 function addNewProduct(name,al,opts){
   const nk=norm(name);
   let idx=P.findIndex(p=>norm(p.n)>nk);
@@ -2442,12 +2583,12 @@ function addNewProduct(name,al,opts){
   const obj={n:name,a:sortAllergens(al)};
   if(opts&&opts.analysisId!=null){ obj.last_analysis_id=opts.analysisId; obj.last_analysis_timestamp=opts.analysisTimestamp||new Date().toISOString(); }
   P.splice(idx,0,obj);
-  saveDB();updateAppStatus();
+  saveDB({changeType:'create_product',origin:'addNewProduct'});updateAppStatus();
 }
 let deleteTarget=-1;const confirmBg=document.getElementById('confirmBg');
 document.getElementById('deleteBtn').addEventListener('click',()=>{if(editIdx<0)return;deleteTarget=editIdx;document.getElementById('confirmText').textContent=`"${P[editIdx].n}" se eliminará permanentemente.`;navPush('confirm');confirmBg.classList.add('open')});
 document.getElementById('confirmCancel').addEventListener('click',()=>{navBack()});
-document.getElementById('confirmDelete').addEventListener('click',()=>{if(deleteTarget>=0){const n=P[deleteTarget].n;P.splice(deleteTarget,1);saveDB();render();showToast(`"${n}" eliminado`,'info')}navReplace(['main']);applyNavStack(['main'])});
+document.getElementById('confirmDelete').addEventListener('click',()=>{if(deleteTarget>=0){const n=P[deleteTarget].n;P.splice(deleteTarget,1);saveDB({changeType:'delete_product',origin:'confirmDelete'});render();showToast(`"${n}" eliminado`,'info')}navReplace(['main']);applyNavStack(['main'])});
 
 // Warning modal
 const photoWarningBg=document.getElementById('photoWarningBg');
@@ -3337,8 +3478,16 @@ async function processQueue(){
   }
 }
 document.getElementById('queueAction').addEventListener('click',processQueue);
-window.addEventListener('online',()=>{document.getElementById('offlineBanner').classList.remove('show');if(photoQueue.length&&getApiKey())processQueue(); if(gdriveToken && (pendingChanges || localStorage.getItem('pending_changes')==='1')) setTimeout(()=>gdriveSmartSync('online_reconnect'),800);});
-window.addEventListener('offline',()=>{document.getElementById('offlineBanner').classList.add('show')});
+window.addEventListener('online',()=>{
+  document.getElementById('offlineBanner').classList.remove('show');
+  if(photoQueue.length&&getApiKey())processQueue();
+  if(gdriveToken && getPendingSyncCount()>0) setTimeout(()=>gdriveSmartSync('online_reconnect'),800);
+  updatePendingSyncChip();
+});
+window.addEventListener('offline',()=>{
+  document.getElementById('offlineBanner').classList.add('show');
+  updatePendingSyncChip();
+});
 if(!navigator.onLine)document.getElementById('offlineBanner').classList.add('show');
 updateQueueBar();
 
@@ -4437,8 +4586,11 @@ async function gdriveSmartSync(trigger = 'manual') {
 
       if(!verified) {
         const msg = 'Upload no verificado: el remoto no coincide tras subir';
-        pendingChanges = true;
-        localStorage.setItem('pending_changes','1');
+        if(getPendingSyncCount()===0){
+          enqueueSyncOutbox('sync_unverified',{origin:'gdriveSmartSync'});
+        }else{
+          refreshPendingChangesFlag();
+        }
         session.remote_count_after = verifyState ? verifyState.remoteCount : null;
         session.remote_last_update_before = session.remote_last_update_before || null;
         addLog('SYNC_UPLOAD_VERIFY_FAILED', {
@@ -4454,8 +4606,7 @@ async function gdriveSmartSync(trigger = 'manual') {
         showToast('⚠ Subida no confirmada. Revisa historial de sync.', 'info');
         finishSyncSession(session, 'upload', 'error', msg, msg);
       } else {
-        pendingChanges = false;
-        localStorage.setItem('pending_changes','0');
+        clearSyncOutbox();
         session.remote_count_after = verifyState.remoteCount;
         session.remote_last_update_before = session.remote_last_update_before || null;
         addLog('SYNC_UPLOAD_APPLIED', {
@@ -4475,8 +4626,7 @@ async function gdriveSmartSync(trigger = 'manual') {
       P = sanitizeProductList(remoteState.products);
       saveDB({ skipAutoSync: true });
       render();
-      pendingChanges = false;
-      localStorage.setItem('pending_changes','0');
+      clearSyncOutbox();
       addLog('SYNC_DOWNLOAD_APPLIED', { sync_session_id: session.sync_session_id, trigger, remote_count: remoteState.remoteCount, reason });
       showToast(`✓ Descargado desde Drive: ${remoteState.remoteCount} productos`, 'info');
       session.remote_count_after = remoteState.remoteCount;
@@ -4485,8 +4635,7 @@ async function gdriveSmartSync(trigger = 'manual') {
     } else {
       addLog('SYNC_NO_CHANGES', { sync_session_id: session.sync_session_id, trigger, reason });
       if(trigger === 'manual') showToast('✓ Sin cambios. Todo actualizado.', 'info');
-      pendingChanges = false;
-      localStorage.setItem('pending_changes','0');
+      clearSyncOutbox();
       finishSyncSession(session, 'none', 'ok', 'Sin cambios necesarios');
     }
 
