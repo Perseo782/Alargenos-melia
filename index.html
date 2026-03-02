@@ -217,7 +217,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v0203202620:23h</div>
+    <div class="login-version">v0203202621:54h</div>
   </div>
 </div>
 
@@ -993,7 +993,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.4-020320262023',
+    version:'1.0.4-020320262154',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -3071,30 +3071,43 @@ function buildCondensedOcrForFast(rawText){
   if(!text)return text;
   const lines=text.split(/\r?\n/);
   const keywordRe=/(ingrediente|ingredientes|al[eé]rgenos?|contiene|puede\s+contener|trazas?|sin\s+gluten|allergen|allergy)/i;
+  // Zonas que casi nunca aportan alérgenos adicionales y solo añaden ruido
+  const noiseRe=/(INFORMACI[ÓO]N NUTRIC|kcal\b|kj\b|Valor Energ[ée]tico|MODO DE EMPLEO|Modo de empleo|horno|sart[eé]n|fre[ií]r|microondas|consumir preferentemente|Lote[:\s]|LOTE[:\s]|www\.|@\S+|S\.L\.|Zona Franca|C\/\s|Av\.|Avenida|CP\s*\d{5}|ES\s*\d{2}\.\d+\/[A-Z]{2})/i;
   const kept=[];
   for(let i=0;i<lines.length;i++){
     if(keywordRe.test(lines[i])){
       const start=Math.max(0,i-2);
       const end=Math.min(lines.length-1,i+4);
       for(let j=start;j<=end;j++){
-        kept.push(lines[j]);
+        const candidate=lines[j];
+        if(noiseRe.test(candidate))continue;
+        kept.push(candidate);
       }
       i=end;
     }
   }
-  if(!kept.length){
-    return lines.slice(0,40).join('\n');
+  let baseLines=kept;
+  if(!baseLines.length){
+    // Si no encontramos bloques claros de ingredientes/alérgenos, usamos el inicio
+    // del texto, pero filtrando ruido evidente (direcciones, nutrición, etc.).
+    const filtered=lines.filter(l=>!noiseRe.test(l));
+    baseLines=(filtered.length?filtered:lines).slice(0,40);
   }
   const unique=[];
   const seen=new Set();
-  for(const line of kept){
+  for(const line of baseLines){
     const trimmed=line.trim();
     if(!trimmed)continue;
     if(seen.has(trimmed))continue;
     seen.add(trimmed);
     unique.push(line);
   }
-  return unique.join('\n');
+  let condensed=unique.join('\n');
+  const MAX_FAST_CHARS=2200;
+  if(condensed.length>MAX_FAST_CHARS){
+    condensed=condensed.slice(0,MAX_FAST_CHARS);
+  }
+  return condensed;
 }
 
 const AI_PROMPT_FROM_OCR=`Eres un sistema de lectura de etiquetas alimentarias. A continuación se te da el TEXTO EXTRAÍDO de una etiqueta (OCR). No tienes imagen; solo este texto. Tu tarea es extraer el nombre del producto y TODOS los alérgenos presentes en el texto, con las MISMAS reglas que si tuvieras la imagen.
@@ -3378,12 +3391,28 @@ async function analyzePhotos(photoList, opts={}){
       aiS.innerHTML='<span class="spinner"></span> Interpretando con IA (nombre y alérgenos)…';
       try{
         // Instrucciones completas en systemInstruction (como el "system" de GPT); solo el texto OCR en el user.
-        const fastText=(typeof mode!=='undefined'&&mode==='fast')?buildCondensedOcrForFast(ocrText):ocrText;
-        const userText='--- TEXTO DE LA ETIQUETA ---\n'+String(fastText).slice(0,4000);
+        const isFast=(typeof mode!=='undefined'&&mode==='fast');
+        let fastText=isFast?buildCondensedOcrForFast(ocrText):ocrText;
+        if(isFast){
+          const MAX_FAST_USER_CHARS=2500;
+          if(typeof fastText==='string'&&fastText.length>MAX_FAST_USER_CHARS){
+            fastText=fastText.slice(0,MAX_FAST_USER_CHARS);
+          }
+        }
+        const userText='--- TEXTO DE LA ETIQUETA ---\n'+String(fastText).slice(0,isFast?2500:4000);
         const content=[{ type:'text', text: userText }];
+        const approxLen=isFast?String(fastText||'').length:String(ocrText||'').length;
+        let maxTokens;
+        if(isFast){
+          if(approxLen<800) maxTokens=450;
+          else if(approxLen<1600) maxTokens=700;
+          else maxTokens=900;
+        }else{
+          maxTokens=3000;
+        }
         const iaResp=await apiCall(content,{
           systemInstruction: AI_PROMPT_FROM_OCR,
-          maxOutputTokens: (typeof mode!=='undefined'&&mode==='fast')?400:3000
+          maxOutputTokens: maxTokens
         });
         if(iaResp&&iaResp.ok){
           const iaData=await iaResp.json();
