@@ -281,8 +281,9 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
       <input type="file" accept="image/*" class="cam-input" id="galInput">
       <div class="ai-status" id="aiStatus"></div>
       <button class="save-btn" id="analyzeBtn" style="background:var(--warm8-80);margin-bottom:14px;display:none">Analizar etiquetado</button>
-      <button class="save-btn" id="analyzeBtnFast" style="background:var(--cool8-80);margin-bottom:14px;display:none">⚡ Analizar rápido</button>
-    </div>
+    
+      <button class="save-btn" id="analyzeBtnFast" style="background:var(--warm8-80);margin-bottom:14px;display:none">Analizar rápido</button>
+</div>
     <div class="ai-result" id="aiResult">
       <label class="form-label">Producto detectado</label>
       <input class="form-input" id="aiName" placeholder="Nombre del producto" lang="es" spellcheck="true">
@@ -604,7 +605,7 @@ window.addEventListener('popstate',()=>{
     if(!confirm('¿Desea salir de la aplicación?')){
       history.pushState({app:true,stack:['main']},'',APP_ENTRY_URL||window.location.href.replace(/#.*$/,''));
       applyNavStack(['main']);
-      return;
+            return;
     }
     history.go(-1);
     return;
@@ -2658,6 +2659,29 @@ function handleImg(e){
   e.target.value='';
 }
 
+// ─── BENCHMARK (cronómetro) para comparar modos ───
+window.__photoBench=null;
+function benchStart(mode, meta={}){
+  window.__photoBench={active:true,mode:mode||'normal',t0:(performance&&performance.now?performance.now():Date.now()),meta:meta||{},startedAt:new Date().toISOString()};
+}
+function benchStop(status, productName, extra={}){
+  const b=window.__photoBench;
+  if(!b||!b.active)return;
+  const now=(performance&&performance.now?performance.now():Date.now());
+  const ms=Math.max(0,Math.round(now-(b.t0||now)));
+  const sec=(ms/1000).toFixed(2);
+  const modeLabel=(b.mode==='fast')?'rápido':'normal';
+  const prod=(productName||'').toString().trim()||'—';
+  const st=(status||'ok').toString();
+  const msg = st==='ok'
+    ? `Se analizó ${prod} en modo ${modeLabel} — tiempo: ${sec} s`
+    : st==='cancel'
+      ? `Análisis cancelado en modo ${modeLabel} — tiempo: ${sec} s`
+      : `Error en análisis en modo ${modeLabel} — tiempo: ${sec} s`;
+  addLog(LOG_LEVELS.INFO,'BENCHMARK',msg,{mode:b.mode,modeLabel,product:prod,status:st,ms,seconds:Number(sec),...b.meta,...extra});
+  window.__photoBench=null;
+}
+
 analyzeBtn.addEventListener('click',()=>{
   const vKey=getVisionApiKey();
   if(!vKey){
@@ -2678,7 +2702,8 @@ analyzeBtn.addEventListener('click',()=>{
     showToast('Sin conexión — no se puede analizar la foto ahora','info');
     return;
   }
-  analyzePhotos(pl);
+  benchStart('normal',{trigger:'analyzeBtn',photos:pl.length});
+  analyzePhotos(pl,{mode:'normal'});
 });
 
 analyzeBtnFast&&analyzeBtnFast.addEventListener('click',()=>{
@@ -2695,14 +2720,17 @@ analyzeBtnFast&&analyzeBtnFast.addEventListener('click',()=>{
   }
   if(!navigator.onLine){
     const aiS=document.getElementById('aiStatus');
-    addLog(LOG_LEVELS.ERROR,ERROR_CODES.NETWORK_OFFLINE,'Sin conexion al iniciar analisis de foto (rapido)',{service:'Cloud Vision',operation:'analyzeBtnFast'});
+    addLog(LOG_LEVELS.ERROR,ERROR_CODES.NETWORK_OFFLINE,'Sin conexion al iniciar analisis de foto (rápido)',{service:'Cloud Vision',operation:'analyzeBtnFast'});
     aiS.innerHTML='Sin conexión — la lectura de foto con Google Vision necesita internet.';
     aiS.classList.add('show');
     showToast('Sin conexión — no se puede analizar la foto ahora','info');
     return;
   }
-  analyzePhotosFast(pl);
+  benchStart('fast',{trigger:'analyzeBtnFast',photos:pl.length});
+  analyzePhotos(pl,{mode:'fast',compress:{maxSize:PHOTO_FAST_MAX_SIZE,quality:PHOTO_FAST_JPEG_QUALITY}});
 });
+
+
 
 let aiCurrentMatch=null;
 const AI_PROMPT=`Eres un sistema de lectura de etiquetas alimentarias. Tu tarea es extraer TODOS los alérgenos presentes en la imagen.
@@ -2842,7 +2870,7 @@ async function apiCall(content, options){
   const body=JSON.stringify({
     systemInstruction:{ parts:[{ text: systemText }] },
     contents:[{role:'user',parts}],
-    generationConfig:{maxOutputTokens:(options&&options.maxOutputTokens)||3000,temperature:0}
+    generationConfig:{maxOutputTokens:3000,temperature:0}
   });
   let lastResp=null;
   for(let attempt=0;attempt<=2;attempt++){
@@ -2887,15 +2915,16 @@ async function apiCall(content, options){
 
 const PHOTO_MAX_SIZE=1120;
 const PHOTO_JPEG_QUALITY=0.85;
+// Modo rápido: subir menos y ganar segundos (sin pedir recorte manual)
 const PHOTO_FAST_MAX_SIZE=960;
 const PHOTO_FAST_JPEG_QUALITY=0.78;
-function compressPhotoForAI(dataUrl, opts){
+function compressPhotoForAI(dataUrl, opts=null){
   return new Promise((resolve,reject)=>{
     const img=new Image();
     img.onload=()=>{
+      const maxSize=(opts&&opts.maxSize!=null)?opts.maxSize:PHOTO_MAX_SIZE;
+      const quality=(opts&&opts.quality!=null)?opts.quality:PHOTO_JPEG_QUALITY;
       let w=img.width,h=img.height;
-      const maxSize=(opts&&opts.maxSize)||PHOTO_MAX_SIZE;
-      const quality=(opts&&opts.quality)!=null?opts.quality:PHOTO_JPEG_QUALITY;
       const needsResize=w>maxSize||h>maxSize;
       if(needsResize){
         const r=Math.min(maxSize/w,maxSize/h);
@@ -2919,7 +2948,7 @@ function compressPhotoForAI(dataUrl, opts){
 }
 async function buildPhotoRequest(photoList){
   const list=Array.isArray(photoList)?photoList:[photoList].filter(Boolean);
-  const compressed=await Promise.all(list.map(du=>compressPhotoForAI(du)));
+  const compressed=await Promise.all(list.map(du=>compressPhotoForAI(du,compressOpts))));
   const content=compressed.map(c=>{
     const dataUrl=typeof c==='object'&&c.dataUrl!=null?c.dataUrl:c;
     const mediaType=dataUrl.split(';')[0].split(':')[1]||'image/jpeg';
@@ -2933,10 +2962,12 @@ async function buildPhotoRequest(photoList){
   return { content, metadata, systemPrompt: AI_PROMPT };
 }
 
-async function analyzePhotos(photoList){
+async function analyzePhotos(photoList, opts={}){
   analysisAborted=false;
   const aiS=document.getElementById('aiStatus'),aiR=document.getElementById('aiResult');
-  aiS.innerHTML='<span class="spinner"></span> Preparando imagen…';aiS.classList.add('show');aiR.classList.remove('show');hideMatch('aiMatch');aiCurrentMatch=null;
+  const mode=(opts&&opts.mode)||'normal';
+  const compressOpts=(opts&&opts.compress)||null;
+  aiS.innerHTML=`<span class="spinner"></span> ${(mode==='fast')?'⚡ ':''}Preparando imagen…`;aiS.classList.add('show');aiR.classList.remove('show');hideMatch('aiMatch');aiCurrentMatch=null;
   let analysisId=null;
 
   const list=Array.isArray(photoList)?photoList.filter(Boolean):[photoList].filter(Boolean);
@@ -2950,11 +2981,11 @@ async function analyzePhotos(photoList){
   }
 
   try{
-    const compressed=await Promise.all(list.map(du=>compressPhotoForAI(du)));
-    if(analysisAborted){aiS.innerHTML='❌ Análisis cancelado';return;}
+    const compressed=await Promise.all(list.map(du=>compressPhotoForAI(du,compressOpts)));
+    if(analysisAborted){aiS.innerHTML='❌ Análisis cancelado';benchStop('cancel', document.getElementById('aiName').value, {analysisId,mode});return;}
 
     const metadata={ dimensions: compressed.map(c=>c&&typeof c==='object'&&c.width!=null?{w:c.width,h:c.height}:null).filter(Boolean) };
-    const started=startPhotoAnalysis('vision',list.length,metadata);
+    const started=startPhotoAnalysis(mode==='fast'?'vision_fast':'vision',list.length,Object.assign({},metadata,mode==='fast'?{fast:true}:{}) );
     analysisId=started.analysisId;
 
     aiS.innerHTML='<span class="spinner"></span> Enviando y analizando…';
@@ -2997,6 +3028,7 @@ async function analyzePhotos(photoList){
         finishPhotoAnalysis(analysisId);
       }
       aiS.innerHTML='❌ Análisis cancelado';
+      benchStop('cancel', document.getElementById('aiName').value, {analysisId,mode});
       return;
     }
 
@@ -3097,12 +3129,14 @@ async function analyzePhotos(photoList){
     const saveBtn=document.getElementById('aiSave');
     if(saveBtn){saveBtn.disabled=false;}
     updateSave('aiAllergens');
+    benchStop('ok', (result&&result.nombre)?result.nombre:document.getElementById('aiName').value, {analysisId,mode});
   }catch(err){
     if(analysisAborted){
       if(analysisId){
         addAnalysisSection(analysisId,'F_decision',{decision:'cancelado',motivo:'usuario'});
         finishPhotoAnalysis(analysisId);
       }
+      benchStop('cancel', document.getElementById('aiName').value, {analysisId,mode});
       return;
     }
     if(analysisId){
@@ -3116,224 +3150,9 @@ async function analyzePhotos(photoList){
       probable_cause: classifyHttpFailure((err&&err.status)||0, (err&&err.message)||'')
     });
     aiS.innerHTML='Error: '+err.message;
+    benchStop('error', document.getElementById('aiName').value, {analysisId,mode,error:err&&err.message?err.message:String(err)});
   }
 }
-
-
-// ================================
-// ⚡ MODO RÁPIDO (prueba controlada)
-// - No cambia el botón normal.
-// - Si falla OCR (texto vacío), cae al modo normal automáticamente.
-// ================================
-function compactOcrForGemini(ocrText, maxChars=9000){
-  const raw=String(ocrText||'');
-  const lines=raw.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
-  if(!lines.length) return '';
-  const kw=/\b(ingred|al[eé]rgen|contiene|puede\s+contener|trazas|may\s+contain|traces\s+of|ingredients|allergen)\b/i;
-  const head=lines.slice(0,12);
-  const kept=[];
-  for(const line of lines){
-    const hasKeyword=kw.test(line);
-    const digits=(line.match(/\d/g)||[]).length;
-    const letters=(line.match(/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g)||[]).length;
-    const ratioDigits = digits / Math.max(1,line.length);
-    const numericHeavy = ratioDigits>0.45 && digits>=6;
-    if(hasKeyword){
-      kept.push(line);
-      continue;
-    }
-    // Mantener líneas "humanas" (palabras), descartar líneas casi numéricas (tablas, códigos).
-    if(letters>=3 && !numericHeavy){
-      kept.push(line);
-    }
-  }
-  const merged=[...new Set([...head,...kept])].filter(l=>l && l.length>2);
-  let txt=merged.join('\n');
-  if(txt.length>maxChars) txt=txt.slice(0,maxChars);
-  return txt;
-}
-
-async function analyzePhotosFast(photoList){
-  analysisAborted=false;
-  const aiS=document.getElementById('aiStatus'),aiR=document.getElementById('aiResult');
-  aiS.innerHTML='<span class="spinner"></span> ⚡ Preparando imagen (rápido)…';
-  aiS.classList.add('show');
-  aiR.classList.remove('show');
-  hideMatch('aiMatch');
-  aiCurrentMatch=null;
-  let analysisId=null;
-
-  const list=Array.isArray(photoList)?photoList.filter(Boolean):[photoList].filter(Boolean);
-  if(!list.length){aiS.innerHTML='No hay fotos para analizar';return;}
-
-  const visionKey=getVisionApiKey();
-  if(!visionKey){
-    addLog(LOG_LEVELS.ERROR,ERROR_CODES.CONFIG_MISSING,'Vision sin API Key configurada',{service:'Cloud Vision',operation:'analyzePhotosFast'});
-    aiS.innerHTML='Configura la API Key de Google (campo de Drive) en Ajustes.';
-    return;
-  }
-
-  try{
-    // 1) Compresión más ligera (para subir menos y acelerar)
-    const compressed=await Promise.all(list.map(du=>compressPhotoForAI(du,{maxSize:PHOTO_FAST_MAX_SIZE,quality:PHOTO_FAST_JPEG_QUALITY})));
-    if(analysisAborted){aiS.innerHTML='❌ Análisis cancelado';return;}
-
-    const metadata={ dimensions: compressed.map(c=>c&&typeof c==='object'&&c.width!=null?{w:c.width,h:c.height}:null).filter(Boolean), fast:true };
-    const started=startPhotoAnalysis('vision_fast',list.length,metadata);
-    analysisId=started.analysisId;
-
-    aiS.innerHTML='<span class="spinner"></span> ⚡ OCR rápido (Vision)…';
-
-    const images=compressed.map(c=>{
-      const dataUrl=typeof c==='object'&&c.dataUrl!=null?c.dataUrl:c;
-      return (String(dataUrl||'').split(',')[1]||'').trim();
-    }).filter(Boolean);
-
-    if(!images.length){
-      addAnalysisSection(analysisId,'F_decision',{decision:'fallback',motivo:'no_image_fast'});
-      finishPhotoAnalysis(analysisId,new Error('No se pudo preparar la imagen (rápido)'));
-      aiS.innerHTML='Reintentando modo normal…';
-      return analyzePhotos(list);
-    }
-
-    const body={
-      requests:images.map(img=>({
-        image:{content:img},
-        features:[{type:'DOCUMENT_TEXT_DETECTION'}],
-        imageContext:{languageHints:['es','en','fr','de']}
-      }))
-    };
-
-    const resp=await fetchWithDiagnostics('https://vision.googleapis.com/v1/images:annotate?key='+encodeURIComponent(visionKey),{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(body)
-    },{
-      service:'Cloud Vision',
-      operation:'ocr de etiqueta (rápido)',
-      requestTag:'analyzePhotosFast',
-      requireOnline:true
-    });
-
-    if(analysisAborted){
-      if(analysisId){
-        addAnalysisSection(analysisId,'F_decision',{decision:'cancelado',motivo:'usuario'});
-        finishPhotoAnalysis(analysisId);
-      }
-      aiS.innerHTML='❌ Análisis cancelado';
-      return;
-    }
-
-    if(!resp.ok){
-      let msg='Error Vision ('+resp.status+')';
-      try{
-        const errBody=await resp.json();
-        if(errBody&&errBody.error&&errBody.error.message){
-          msg=errBody.error.message;
-        }
-      }catch(_){}
-      addAnalysisSection(analysisId,'F_decision',{decision:'fallback',motivo:'vision_error_fast',error:msg});
-      finishPhotoAnalysis(analysisId,new Error(msg));
-      aiS.innerHTML='Reintentando modo normal…';
-      return analyzePhotos(list);
-    }
-
-    const data=await resp.json();
-    const ocrText=extractTextFromVisionResponse(data);
-    if(!ocrText){
-      addAnalysisSection(analysisId,'F_decision',{decision:'fallback',motivo:'empty_ocr_fast'});
-      finishPhotoAnalysis(analysisId,new Error('OCR vacío (rápido)'));
-      aiS.innerHTML='Reintentando modo normal…';
-      return analyzePhotos(list);
-    }
-
-    const compact=compactOcrForGemini(ocrText,9000);
-    addAnalysisSection(analysisId,'C_raw_output',{ raw_text: String(compact).slice(0,5000), length: compact.length, mode:'fast_compact' });
-
-    let result;
-    const geminiKey=getApiKey();
-    if(geminiKey){
-      aiS.innerHTML='<span class="spinner"></span> ⚡ Interpretando con IA…';
-      try{
-        const userText='--- TEXTO DE LA ETIQUETA ---\n'+String(compact);
-        const content=[{ type:'text', text: userText }];
-        const iaResp=await apiCall(content,{ systemInstruction: AI_PROMPT_FROM_OCR, maxOutputTokens: 1200 });
-        if(iaResp&&iaResp.ok){
-          const iaData=await iaResp.json();
-          const text=iaData.choices?.[0]?.message?.content||'';
-          result=parseAndValidateAI(text,'vision_fast');
-          const ocrLocal=normalizeAIPhotoResult(buildResultFromOcrText(ocrText));
-          const merged=mergeAIWithOcrFallback(result,ocrLocal);
-          result=applyPhotoReviewValidation(merged.result,text,'vision_fast_merged');
-          result.nombre=fixNombreFromOcr(result.nombre,ocrText);
-          result=normalizeAIPhotoResult(result);
-        }else{
-          result=normalizeAIPhotoResult(buildResultFromOcrText(ocrText));
-        }
-      }catch(e){
-        result=normalizeAIPhotoResult(buildResultFromOcrText(ocrText));
-      }
-    }else{
-      result=normalizeAIPhotoResult(buildResultFromOcrText(ocrText));
-    }
-
-    result.nombre=fixNombreFromOcr(result.nombre||'',ocrText);
-    addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, alergenos: result.alergenos||[], trazas: result.trazas||[], mode:'fast' });
-    window.__lastAnalysisId=analysisId;
-
-    aiS.innerHTML='✓ Análisis completado';
-    window.__lastAIPhotoAnalysis=result;
-
-    const allA=sortAllergens([...new Set([...(result.alergenos||[]),...(result.trazas||[])])].filter(a=>AL.includes(a)));
-    document.getElementById('aiName').value=result.nombre||'';
-    setSelected('aiAllergens',allA);
-
-    let warn='';
-    if(result.trazas&&result.trazas.length)warn='Trazas incluidas: '+result.trazas.join(', ');
-    if(result.notas)warn+=(warn?' · ':'')+result.notas;
-    document.getElementById('aiWarn').textContent=warn;
-
-    if(result.warning){
-      showPhotoWarning(result.nombre||'Producto desconocido',result.warning);
-    }
-
-    if(result.nombre){
-      const match=findMatch(result.nombre);
-      aiCurrentMatch=match;
-      if(match){
-        showMatch('aiMatch',match);
-        document.getElementById('aiSave').textContent='Actualizar existente';
-      }else{
-        document.getElementById('aiSave').textContent='Guardar producto nuevo';
-      }
-    }
-
-    aiR.classList.add('show');
-    const saveBtn=document.getElementById('aiSave');
-    if(saveBtn){saveBtn.disabled=false;}
-    updateSave('aiAllergens');
-  }catch(err){
-    if(analysisAborted){
-      if(analysisId){
-        addAnalysisSection(analysisId,'F_decision',{decision:'cancelado',motivo:'usuario'});
-        finishPhotoAnalysis(analysisId);
-      }
-      return;
-    }
-    if(analysisId){
-      addAnalysisSection(analysisId,'F_decision',{decision:'error',error:(err&&err.message)||'Error desconocido'});
-      finishPhotoAnalysis(analysisId,err);
-    }
-    addLog(LOG_LEVELS.ERROR,ERROR_CODES.API_INVALID_RESPONSE,'Error en flujo de analisis de foto (rápido)',{
-      service:'Vision+Gemini',
-      operation:'analyzePhotosFast',
-      error:err&&err.message?err.message:String(err),
-      probable_cause: classifyHttpFailure((err&&err.status)||0, (err&&err.message)||'')
-    });
-    aiS.innerHTML='Error: '+((err&&err.message)?err.message:String(err));
-  }
-}
-
 
 document.getElementById('aiName').addEventListener('input',()=>{updateSave('aiAllergens');const name=document.getElementById('aiName').value.trim();if(name.length<3){hideMatch('aiMatch');aiCurrentMatch=null;document.getElementById('aiSave').textContent='Guardar producto';return}const match=findMatch(name);aiCurrentMatch=match;if(match){showMatch('aiMatch',match);document.getElementById('aiSave').textContent='Actualizar existente'}else{hideMatch('aiMatch');document.getElementById('aiSave').textContent='Guardar producto nuevo'}});
 document.getElementById('aiName').addEventListener('blur',()=>{const v=document.getElementById('aiName').value.trim();if(v){const c=autoCorrectName(v);if(c!==v){document.getElementById('aiName').value=c;showToast('Ortografía corregida','info')}}});
