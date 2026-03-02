@@ -43,20 +43,21 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 #app.show{display:flex}
 .hdr{padding:24px 16px 0;flex-shrink:0;background:var(--bg)}
 .hdr-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.hdr-row-top{margin-bottom:10px}
-.hdr-row-counters{justify-content:flex-start;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.hdr-row-top{margin-bottom:8px}
+.hdr-row-counters{justify-content:flex-start;gap:8px;flex-wrap:wrap;margin-bottom:8px}
 .hdr h1{font-family:var(--serif);font-size:26px;font-weight:400;letter-spacing:-0.3px;color:var(--text)}
-.hdr-actions{display:flex;align-items:center;gap:8px}
-.hdr-chip{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;background:var(--warm8-10);border:1px solid var(--warm8-40);font-size:11px;color:var(--text2);font-weight:500;letter-spacing:0.7px;text-transform:uppercase;white-space:nowrap}
+.hdr-chip{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;background:var(--white);border:1px solid var(--warm8-40);font-size:13px;color:var(--text2);font-weight:500;letter-spacing:0.1px;white-space:nowrap}
 .hdr-chip[hidden]{display:none!important}
-.hdr-chip-pending{background:var(--warm8-20);border-color:var(--warm8-60);color:var(--text)}
+.hdr-chip-pending{background:var(--warm8-10);border-color:var(--warm8-60);color:var(--text);font-family:var(--sans);cursor:pointer}
 .hdr-chip-pending[data-warning="true"]{box-shadow:0 0 0 1px var(--warm8-60) inset}
+.hdr-chip-pending.active{background:var(--warm8-20);border-color:var(--warm8);box-shadow:0 0 0 1px var(--warm8-60)}
 .pending-warn{font-size:11px;line-height:1}
-.hdr-chip-btn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 11px;border-radius:999px;border:1px solid var(--warm8-40);background:var(--white);color:var(--warm8);font-family:var(--sans);font-size:10px;font-weight:600;letter-spacing:0.6px;text-transform:uppercase;cursor:pointer;transition:background .15s,border-color .15s,color .15s}
+.hdr-chip-btn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 11px;border-radius:999px;border:1px solid var(--warm8-40);background:var(--white);color:var(--warm8);font-family:var(--sans);font-size:13px;font-weight:500;letter-spacing:0.1px;cursor:pointer;transition:background .15s,border-color .15s,color .15s}
 .hdr-chip-btn:hover{background:var(--warm8-10);border-color:var(--warm8-60)}
 .hdr-chip-btn:active{background:var(--warm8-20)}
 .hdr-chip-btn:disabled{opacity:.6;cursor:not-allowed}
 .hdr-chip-icon{font-size:14px;line-height:1}
+.pending-view-indicator{font-size:11px;color:var(--text2);margin-bottom:8px;padding:0 2px;letter-spacing:0.2px}
 .search{position:relative;margin-bottom:12px}
 .search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--warm8-60);pointer-events:none}
 .search input{width:100%;background:var(--white);border:1px solid var(--warm8-40);border-radius:var(--radius);padding:11px 40px 11px 36px;font-size:14px;color:var(--text);font-family:var(--sans);outline:none;transition:border-color .2s}
@@ -216,7 +217,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v0103202621:41h</div>
+    <div class="login-version">v0203202615:57h</div>
   </div>
 </div>
 
@@ -226,24 +227,23 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="hdr">
     <div class="hdr-row hdr-row-top">
       <h1>Alérgenos</h1>
-      <div class="hdr-actions">
-        <button class="hdr-chip-btn" id="syncBtn" title="Sincronización forzada">
-          <span class="hdr-chip-icon" aria-hidden="true">⟳</span>
-          <span>Sync</span>
-        </button>
-        <button class="hdr-chip-btn" id="gearBtn" title="Ajustes">
-          <span class="hdr-chip-icon" aria-hidden="true">⚙</span>
-          <span>Ajustes</span>
-        </button>
-      </div>
     </div>
     <div class="hdr-row hdr-row-counters">
-      <span class="hdr-chip" id="cnt">0 PRODUCTOS</span>
-      <span class="hdr-chip hdr-chip-pending" id="pendingChip" hidden>
+      <span class="hdr-chip" id="cnt">0 en la nube</span>
+      <button class="hdr-chip hdr-chip-pending" id="pendingChip" hidden type="button" title="Filtrar pendientes">
         <span class="pending-warn" id="pendingWarnIcon" aria-hidden="true">⚠︎</span>
-        <span id="pendingCountLabel">0 PENDIENTES</span>
-      </span>
+        <span id="pendingCountLabel">0 pendientes</span>
+      </button>
+      <button class="hdr-chip-btn" id="syncBtn" title="Sincronización forzada">
+        <span class="hdr-chip-icon" aria-hidden="true">⟳</span>
+        <span>Sync</span>
+      </button>
+      <button class="hdr-chip-btn" id="gearBtn" title="Ajustes">
+        <span class="hdr-chip-icon" aria-hidden="true">⚙</span>
+        <span>Ajustes</span>
+      </button>
     </div>
+    <div class="pending-view-indicator" id="pendingViewIndicator" hidden>Mostrando pendientes</div>
     <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7.5"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="text" placeholder="Buscar producto…" autocomplete="off" autocorrect="on" spellcheck="false"><button class="x-btn" id="xb">&times;</button></div>
     <div class="filter-row" id="fl"></div>
   </div>
@@ -257,11 +257,6 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 <div class="modal-bg" id="modalBg"><div class="modal">
   <h2 id="modalTitle">Añadir producto <button class="modal-close" id="modalClose">&times;</button></h2>
   <div class="methods" id="methodsRow">
-    <button class="method-btn active" data-method="manual">
-      <div class="m-icon">✏️</div>
-      <div class="m-label">Manual</div>
-      <div class="m-desc">Escribir nombre y alérgenos</div>
-    </button>
     <button class="method-btn" data-method="camera">
       <div class="m-icon">📷</div>
       <div class="m-label">Fotografía</div>
@@ -998,7 +993,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.4-010320262141',
+    version:'1.0.4-020320261557',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -1618,6 +1613,71 @@ let driveOutbox=loadDriveOutbox();
 let lastSyncDecision = localStorage.getItem('last_sync_decision') || null;
 let pendingChanges=false;
 
+function normalizeRecordKey(value){
+  const key=norm(String(value||''));
+  return key||'';
+}
+
+function dedupeRecordKeys(keys){
+  if(!Array.isArray(keys)) return [];
+  const out=[];
+  const seen=new Set();
+  keys.forEach(k=>{
+    const nk=normalizeRecordKey(k);
+    if(!nk||seen.has(nk)) return;
+    seen.add(nk);
+    out.push(nk);
+  });
+  return out;
+}
+
+function computeChangedRecordKeys(prevList,nextList){
+  const prevMap=new Map();
+  const nextMap=new Map();
+  (Array.isArray(prevList)?prevList:[]).forEach(item=>{
+    const key=normalizeRecordKey(item&&item.n);
+    if(!key) return;
+    prevMap.set(key,{ n:String(item.n||''), a:sortAllergens(Array.isArray(item.a)?item.a:[]) });
+  });
+  (Array.isArray(nextList)?nextList:[]).forEach(item=>{
+    const key=normalizeRecordKey(item&&item.n);
+    if(!key) return;
+    nextMap.set(key,{ n:String(item.n||''), a:sortAllergens(Array.isArray(item.a)?item.a:[]) });
+  });
+  const changed=[];
+  const allKeys=new Set([...prevMap.keys(),...nextMap.keys()]);
+  allKeys.forEach(key=>{
+    const before=prevMap.get(key);
+    const after=nextMap.get(key);
+    if(!before||!after){
+      changed.push(key);
+      return;
+    }
+    if(before.n!==after.n || JSON.stringify(before.a)!==JSON.stringify(after.a)) changed.push(key);
+  });
+  return dedupeRecordKeys(changed).slice(0,300);
+}
+
+function collectPendingRecordKeys(){
+  const keys=new Set();
+  let hasUnknown=false;
+  (Array.isArray(driveOutbox)?driveOutbox:[]).forEach(entry=>{
+    const details=(entry&&entry.details&&typeof entry.details==='object')?entry.details:{};
+    const fromArray=Array.isArray(details.recordKeys)?details.recordKeys:[];
+    const recordKeys=dedupeRecordKeys([
+      ...fromArray,
+      details.recordKey,
+      details.previousRecordKey
+    ]);
+    if(recordKeys.length===0){
+      hasUnknown=true;
+      return;
+    }
+    recordKeys.forEach(k=>keys.add(k));
+  });
+  return { keys, hasUnknown };
+}
+
 function persistDriveOutbox(){
   try{
     localStorage.setItem(DRIVE_OUTBOX_KEY,JSON.stringify(driveOutbox));
@@ -1634,11 +1694,20 @@ function refreshPendingChangesFlag(){
 }
 
 function enqueueSyncOutbox(changeType='db_write',details={}){
+  const detailsObj=(details&&typeof details==='object')?details:{};
+  const normalizedKeys=dedupeRecordKeys([
+    ...(Array.isArray(detailsObj.recordKeys)?detailsObj.recordKeys:[]),
+    detailsObj.recordKey,
+    detailsObj.previousRecordKey
+  ]).slice(0,300);
   const entry={
     id:'ob_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
     type:String(changeType||'db_write'),
     createdAt:Date.now(),
-    details:(details&&typeof details==='object')?details:{}
+    details:{
+      ...detailsObj,
+      recordKeys: normalizedKeys
+    }
   };
   driveOutbox.unshift(entry);
   if(driveOutbox.length>DRIVE_OUTBOX_LIMIT) driveOutbox=driveOutbox.slice(0,DRIVE_OUTBOX_LIMIT);
@@ -1701,6 +1770,10 @@ function saveDB(options = {}) {
   try {
     P = sanitizeProductList(P);
     const prevJson = localStorage.getItem('alergenos_db_v3') || '';
+    let prevList = [];
+    if(prevJson){
+      try{ prevList = sanitizeProductList(JSON.parse(prevJson)); }catch(_){ prevList = []; }
+    }
     const json = JSON.stringify(P);
     if(json.length > 4.5 * 1024 * 1024){
       addLog(LOG_LEVELS.WARN,'DB_SAVE_ERROR','Base de datos muy grande (cerca del límite)',{bytes:json.length});
@@ -1709,8 +1782,17 @@ function saveDB(options = {}) {
     localStorage.setItem('alergenos_db_v3', json);
     if(dbChanged) localStorage.setItem('local_last_update', Date.now().toString());
     if (!skipAutoSync && dbChanged) {
+      let recordKeys = dedupeRecordKeys([
+        ...(Array.isArray(options.recordKeys)?options.recordKeys:[]),
+        options.recordKey,
+        options.previousRecordKey
+      ]);
+      if(recordKeys.length===0){
+        recordKeys = computeChangedRecordKeys(prevList, P);
+      }
       enqueueSyncOutbox(options.changeType || 'db_write',{
-        origin:options.origin || 'saveDB'
+        origin:options.origin || 'saveDB',
+        recordKeys
       });
       if(gdriveToken && navigator.onLine) setTimeout(() => gdriveSmartSync('auto'), 500);
     } else {
@@ -2007,6 +2089,8 @@ const q=document.getElementById('q'),xb=document.getElementById('xb'),ls=documen
 const pendingChip=document.getElementById('pendingChip');
 const pendingCountLabel=document.getElementById('pendingCountLabel');
 const pendingWarnIcon=document.getElementById('pendingWarnIcon');
+const pendingViewIndicator=document.getElementById('pendingViewIndicator');
+let pendingFilterActive=false;
 
 function getDriveConnectionState(){
   if(!navigator.onLine) return 'offline';
@@ -2014,17 +2098,29 @@ function getDriveConnectionState(){
   return 'connected';
 }
 
+function updatePendingFilterIndicator(){
+  if(!pendingViewIndicator) return;
+  pendingViewIndicator.hidden=!(pendingFilterActive&&getPendingSyncCount()>0);
+}
+
 function updatePendingSyncChip(){
   if(cnt){
     const total=Array.isArray(P)?P.length:0;
-    cnt.textContent=`${total} PRODUCTOS`;
+    cnt.textContent=`${total} en la nube`;
   }
   if(!pendingChip||!pendingCountLabel||!pendingWarnIcon) return;
   const pendingCount=getPendingSyncCount();
   if(pendingCount<=0){
+    const wasPendingFilterActive=pendingFilterActive;
+    pendingFilterActive=false;
     pendingChip.hidden=true;
     pendingChip.removeAttribute('data-warning');
+    pendingChip.classList.remove('active');
     pendingWarnIcon.hidden=true;
+    updatePendingFilterIndicator();
+    if(wasPendingFilterActive && typeof render==='function'){
+      setTimeout(()=>render(),0);
+    }
     return;
   }
   const connectionState=getDriveConnectionState();
@@ -2032,8 +2128,18 @@ function updatePendingSyncChip(){
   pendingChip.hidden=false;
   pendingChip.dataset.warning=showWarn?'true':'false';
   pendingWarnIcon.hidden=!showWarn;
-  pendingCountLabel.textContent=`${pendingCount} PENDIENTES`;
-  pendingChip.title=showWarn?'Pendientes sin conexión estable con Drive':'Cambios pendientes por sincronizar';
+  pendingChip.classList.toggle('active',pendingFilterActive);
+  pendingCountLabel.textContent=pendingCount===1?'1 pendiente':`${pendingCount} pendientes`;
+  pendingChip.title=pendingFilterActive?'Mostrando solo pendientes':(showWarn?'Pendientes sin conexión estable con Drive':'Filtrar registros pendientes');
+  updatePendingFilterIndicator();
+}
+
+if(pendingChip){
+  pendingChip.addEventListener('click',()=>{
+    if(getPendingSyncCount()<=0) return;
+    pendingFilterActive=!pendingFilterActive;
+    render();
+  });
 }
 
 function norm(s){return s.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim()}
@@ -2307,12 +2413,18 @@ function similarity(a,b){const na=norm(a),nb=norm(b);if(na===nb)return 1;const t
 function findMatch(name,excludeIdx){let best=null,bs=0;for(let i=0;i<P.length;i++){if(i===excludeIdx)continue;const s=similarity(name,P[i].n);if(s>bs){bs=s;best={index:i,product:P[i],score:s}}}return(best&&bs>=0.70)?best:null}
 function mergeProduct(idx,nn,na,opts){
   const ex=P[idx],os=new Set(ex.a);
+  const prevName=ex.n;
   const m=sortAllergens([...new Set([...ex.a,...na])]);
   const added=m.filter(a=>!os.has(a));
   if(nn.length>ex.n.length)ex.n=nn;
   ex.a=m;
   if(opts&&opts.analysisId!= null){ ex.last_analysis_id=opts.analysisId; ex.last_analysis_timestamp=opts.analysisTimestamp||new Date().toISOString(); }
-  saveDB({changeType:'edit_product',origin:'mergeProduct'});return{added}
+  saveDB({
+    changeType:'edit_product',
+    origin:'mergeProduct',
+    recordKeys:[prevName, ex.n]
+  });
+  return{added}
 }
 
 const toastEl=document.getElementById('toast');let toastTimer;
@@ -2342,6 +2454,14 @@ function render(){
   const raw=q.value.trim(),query=norm(raw);
   xb.classList.toggle('on',raw.length>0);
   let f=P;
+  if(pendingFilterActive){
+    const pendingKeysInfo=collectPendingRecordKeys();
+    if(!pendingKeysInfo.hasUnknown && pendingKeysInfo.keys.size>0){
+      f=f.filter(p=>pendingKeysInfo.keys.has(norm(p.n)));
+    }else if(!pendingKeysInfo.hasUnknown && pendingKeysInfo.keys.size===0){
+      f=[];
+    }
+  }
   if(query){
     const t=query.split(/\s+/);
     f=f.filter(p=>{
@@ -2355,6 +2475,7 @@ function render(){
   currentFiltered=f;
   renderLimit=150;
   updatePendingSyncChip();
+  updatePendingFilterIndicator();
   if(!f.length){
     ls.innerHTML='<div class="empty">Sin resultados</div>';
     return;
@@ -2366,7 +2487,7 @@ function renderProducts(){
   const f=currentFiltered;
   
   // Separate flagged vs normal (only when no search/filter active)
-  const isFiltering = q.value.trim() || af.size > 0 || sinMode;
+  const isFiltering = q.value.trim() || af.size > 0 || sinMode || pendingFilterActive;
   const flagged = !isFiltering ? f.filter(p => getFlag(p)) : [];
   const normal = !isFiltering ? f.filter(p => !getFlag(p)) : f;
   
@@ -2532,7 +2653,12 @@ function closeModal(){
 function openModal(){
   navPush('add');
   modalBg.classList.add('open');
-  document.getElementById('modalTitle').innerHTML=(editMode?'Editar producto':'Añadir producto')+' <button class="modal-close" id="mc2">&times;</button>';document.getElementById('mc2').addEventListener('click',closeModal);document.getElementById('methodsRow').style.display=editMode?'none':'grid';document.getElementById('editBtns').style.display=editMode?'flex':'none';document.getElementById('secManual').classList.add('show');document.getElementById('secCamera').classList.remove('show');document.querySelectorAll('.method-btn').forEach(b=>b.classList.toggle('active',b.dataset.method==='manual'));resetCameraUI();
+  document.getElementById('modalTitle').innerHTML=(editMode?'Editar producto':'Añadir producto')+' <button class="modal-close" id="mc2">&times;</button>';
+  document.getElementById('mc2').addEventListener('click',closeModal);
+  document.getElementById('methodsRow').style.display=editMode?'none':'grid';
+  document.getElementById('editBtns').style.display=editMode?'flex':'none';
+  activateMethod('manual');
+  resetCameraUI();
   // Audit flag UI
   const dismissRow=document.getElementById('auditDismissRow');
   const dismissBtn=document.getElementById('auditDismissBtn');
@@ -2563,7 +2689,23 @@ function openModal(){
   }else{document.getElementById('manualName').value='';document.querySelectorAll('#manualAllergens .ag-item').forEach(i=>i.classList.remove('sel'));hideMatch('manualMatch');manualCurrentMatch=null;document.getElementById('manualSave').textContent='Guardar producto';document.getElementById('manualSave').disabled=true;dismissRow.style.display='none';const existing=document.getElementById('auditFlagHint');if(existing)existing.remove();}
 }
 function openEdit(idx){editMode=true;editIdx=idx;openModal()}
-document.querySelectorAll('.method-btn').forEach(btn=>{btn.addEventListener('click',()=>{document.querySelectorAll('.method-btn').forEach(b=>b.classList.toggle('active',b===btn));document.getElementById('secManual').classList.toggle('show',btn.dataset.method==='manual');document.getElementById('secCamera').classList.toggle('show',btn.dataset.method==='camera')})});
+function activateMethod(method='manual'){
+  const isCamera=method==='camera';
+  const isBatch=method==='batch';
+  document.querySelectorAll('.method-btn').forEach(btn=>{
+    btn.classList.toggle('active',btn.dataset.method===method && method!=='manual');
+  });
+  document.getElementById('secManual').classList.add('show');
+  document.getElementById('secCamera').classList.toggle('show',isCamera);
+  document.getElementById('secBatch').classList.toggle('show',isBatch);
+  autoMode=false;
+  if(typeof btnAutoFlow!=='undefined' && btnAutoFlow){
+    btnAutoFlow.style.display=isBatch?'none':'';
+  }
+}
+document.querySelectorAll('.method-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>activateMethod(btn.dataset.method));
+});
 function buildGrid(id){const c=document.getElementById(id);let h='';AL.forEach(a=>{h+=`<div class="ag-item" data-a="${a}" title="${a}"><img src="${IC[a]}" alt="${a}"></div>`});c.innerHTML=h;c.querySelectorAll('.ag-item').forEach(item=>item.addEventListener('click',()=>{item.classList.toggle('sel');updateSave(id)}))}
 function getSelected(id){return[...document.getElementById(id).querySelectorAll('.ag-item.sel')].map(i=>i.dataset.a)}
 function setSelected(id,arr){document.getElementById(id).querySelectorAll('.ag-item').forEach(i=>i.classList.toggle('sel',arr.includes(i.dataset.a)))}
@@ -2575,7 +2717,7 @@ let matchTimer,manualCurrentMatch=null;const manualNameInput=document.getElement
 manualNameInput.addEventListener('input',()=>{updateSave('manualAllergens');clearTimeout(matchTimer);matchTimer=setTimeout(()=>{if(editMode)return;const name=manualNameInput.value.trim();if(name.length<3){hideMatch('manualMatch');manualCurrentMatch=null;document.getElementById('manualSave').textContent='Guardar producto';return}const match=findMatch(name);manualCurrentMatch=match;if(match){showMatch('manualMatch',match);document.getElementById('manualSave').textContent='Actualizar existente'}else{hideMatch('manualMatch');document.getElementById('manualSave').textContent='Guardar producto nuevo'}},300)});
 manualNameInput.addEventListener('blur',()=>{const v=manualNameInput.value.trim();if(v){const c=autoCorrectName(v);if(c!==v){manualNameInput.value=c;showToast('Ortografía corregida','info')}}});
 
-document.getElementById('manualSave').addEventListener('click',()=>{let name=manualNameInput.value.trim();if(!name)return;name=autoCorrectName(name);const al=sortAllergens(getSelected('manualAllergens'));if(editMode&&editIdx>=0){const before={n:P[editIdx].n,a:[...P[editIdx].a]};P[editIdx].n=name;P[editIdx].a=al;saveDB({changeType:'edit_product',origin:'manualSave'});clearFlagOnSave(name,before,{n:name,a:[...al]});lastSavedName=name;render();showToast(`✓ "${name}" actualizado`,'update')}else if(manualCurrentMatch){const r=mergeProduct(manualCurrentMatch.index,name,al);logAuditEvent('merge_save',{target:manualCurrentMatch.product.n, merged_name:name, added_allergens:r.added});lastSavedName=manualCurrentMatch.product.n;render();showToast(r.added.length?`✓ "${manualCurrentMatch.product.n}" · +${r.added.length} alérgeno${r.added.length>1?'s':''}`:`✓ "${manualCurrentMatch.product.n}" sin cambios`,'update')}else{addNewProduct(name,al);logAuditEvent('new_product',{product:name, allergens:al});lastSavedName=name;render();showToast(`✓ "${name}" añadido`,'new')}closeModal();if(window.__batchReviewCorrecting){window.__batchReviewCorrecting=false;const p=window.__batchPendingReview||[];p.shift();if(p.length>0){if(typeof navPush==='function')navPush('batchReview');showNextBatchPending()}else closeModal();}});
+document.getElementById('manualSave').addEventListener('click',()=>{let name=manualNameInput.value.trim();if(!name)return;name=autoCorrectName(name);const al=sortAllergens(getSelected('manualAllergens'));if(editMode&&editIdx>=0){const before={n:P[editIdx].n,a:[...P[editIdx].a]};P[editIdx].n=name;P[editIdx].a=al;saveDB({changeType:'edit_product',origin:'manualSave',recordKeys:[before.n,name]});clearFlagOnSave(name,before,{n:name,a:[...al]});lastSavedName=name;render();showToast(`✓ "${name}" actualizado`,'update')}else if(manualCurrentMatch){const r=mergeProduct(manualCurrentMatch.index,name,al);logAuditEvent('merge_save',{target:manualCurrentMatch.product.n, merged_name:name, added_allergens:r.added});lastSavedName=manualCurrentMatch.product.n;render();showToast(r.added.length?`✓ "${manualCurrentMatch.product.n}" · +${r.added.length} alérgeno${r.added.length>1?'s':''}`:`✓ "${manualCurrentMatch.product.n}" sin cambios`,'update')}else{addNewProduct(name,al);logAuditEvent('new_product',{product:name, allergens:al});lastSavedName=name;render();showToast(`✓ "${name}" añadido`,'new')}closeModal();if(window.__batchReviewCorrecting){window.__batchReviewCorrecting=false;const p=window.__batchPendingReview||[];p.shift();if(p.length>0){if(typeof navPush==='function')navPush('batchReview');showNextBatchPending()}else closeModal();}});
 function addNewProduct(name,al,opts){
   const nk=norm(name);
   let idx=P.findIndex(p=>norm(p.n)>nk);
@@ -2583,12 +2725,12 @@ function addNewProduct(name,al,opts){
   const obj={n:name,a:sortAllergens(al)};
   if(opts&&opts.analysisId!=null){ obj.last_analysis_id=opts.analysisId; obj.last_analysis_timestamp=opts.analysisTimestamp||new Date().toISOString(); }
   P.splice(idx,0,obj);
-  saveDB({changeType:'create_product',origin:'addNewProduct'});updateAppStatus();
+  saveDB({changeType:'create_product',origin:'addNewProduct',recordKey:name});updateAppStatus();
 }
 let deleteTarget=-1;const confirmBg=document.getElementById('confirmBg');
 document.getElementById('deleteBtn').addEventListener('click',()=>{if(editIdx<0)return;deleteTarget=editIdx;document.getElementById('confirmText').textContent=`"${P[editIdx].n}" se eliminará permanentemente.`;navPush('confirm');confirmBg.classList.add('open')});
 document.getElementById('confirmCancel').addEventListener('click',()=>{navBack()});
-document.getElementById('confirmDelete').addEventListener('click',()=>{if(deleteTarget>=0){const n=P[deleteTarget].n;P.splice(deleteTarget,1);saveDB({changeType:'delete_product',origin:'confirmDelete'});render();showToast(`"${n}" eliminado`,'info')}navReplace(['main']);applyNavStack(['main'])});
+document.getElementById('confirmDelete').addEventListener('click',()=>{if(deleteTarget>=0){const n=P[deleteTarget].n;P.splice(deleteTarget,1);saveDB({changeType:'delete_product',origin:'confirmDelete',recordKey:n});render();showToast(`"${n}" eliminado`,'info')}navReplace(['main']);applyNavStack(['main'])});
 
 // Warning modal
 const photoWarningBg=document.getElementById('photoWarningBg');
@@ -2747,10 +2889,7 @@ function batchReviewCorrect(){
   batchReviewModalBg.classList.remove('open');
   document.getElementById('manualName').value=item.result.nombre||'';
   setSelected('manualAllergens',item.allA);
-  document.querySelectorAll('.method-btn').forEach(x=>x.classList.remove('active'));
-  document.querySelector('.method-btn[data-method="manual"]').classList.add('active');
-  document.querySelectorAll('.form-section').forEach(s=>s.classList.remove('show'));
-  document.getElementById('secManual').classList.add('show');
+  activateMethod('manual');
   document.getElementById('modalBg').classList.add('open');
   window.__batchReviewCorrecting=true;
 }
@@ -3297,7 +3436,7 @@ async function analyzePhotos(photoList, opts={}){
 
 document.getElementById('aiName').addEventListener('input',()=>{updateSave('aiAllergens');const name=document.getElementById('aiName').value.trim();if(name.length<3){hideMatch('aiMatch');aiCurrentMatch=null;document.getElementById('aiSave').textContent='Guardar producto';return}const match=findMatch(name);aiCurrentMatch=match;if(match){showMatch('aiMatch',match);document.getElementById('aiSave').textContent='Actualizar existente'}else{hideMatch('aiMatch');document.getElementById('aiSave').textContent='Guardar producto nuevo'}});
 document.getElementById('aiName').addEventListener('blur',()=>{const v=document.getElementById('aiName').value.trim();if(v){const c=autoCorrectName(v);if(c!==v){document.getElementById('aiName').value=c;showToast('Ortografía corregida','info')}}});
-document.getElementById('aiCancel').addEventListener('click',()=>{resetCameraUI();document.getElementById('aiResult').classList.remove('show');document.getElementById('secCamera').classList.add('show');document.querySelectorAll('.method-btn').forEach(b=>b.classList.toggle('active',b.dataset.method==='camera'));});
+document.getElementById('aiCancel').addEventListener('click',()=>{resetCameraUI();document.getElementById('aiResult').classList.remove('show');activateMethod('camera');});
 document.getElementById('aiSave').addEventListener('click',()=>{
   let name=document.getElementById('aiName').value.trim();if(!name)return;
   name=autoCorrectName(name);
@@ -3417,7 +3556,7 @@ async function processQueue(){
                 P[match.index].review_alerts=result.review_alerts||null;
                 P[match.index].warning=result.warning||P[match.index].warning||'';
               }
-              saveDB();
+              saveDB({changeType:'edit_product',origin:'queue_auto_update',recordKeys:[match.product.n,result.nombre]});
               if(result.requires_review) showToast('⚠ Revisar IA: posible omisión','info');
               showToast(r.added.length?`✓ Cola: "${match.product.n}" +${r.added.length}`:`✓ Cola: "${match.product.n}" verificado`,'update');
               addLog(LOG_LEVELS.INFO,'QUEUE_UPDATED',`Cola - Actualizado: ${match.product.n}`,{added:r.added.length});
@@ -3431,7 +3570,7 @@ async function processQueue(){
                 P[idx].requires_review=!!result.requires_review;
                 P[idx].review_alerts=result.review_alerts||null;
                 P[idx].warning=result.warning||'';
-                saveDB();
+                saveDB({changeType:'edit_product',origin:'queue_auto_flags',recordKey:result.nombre});
               }
               if(result.requires_review) showToast('⚠ Revisar IA: posible omisión','info');
               showToast(`✓ Cola: "${result.nombre}" añadido`,'new');
@@ -3740,7 +3879,7 @@ importInput.addEventListener('change',async(e)=>{
         }
 
         P = sanitizeProductList([...map.values()]);
-        saveDB();
+        saveDB({changeType:'import_excel',origin:'importExcel'});
         render();
         logAuditEvent('import_excel',{ imported, updated, ignored, total_after:P.length, file_name:file.name });
         addLog('IMPORT_EXCEL',{ imported, updated, ignored, total_after:P.length, file:file.name });
@@ -3836,10 +3975,7 @@ if(typeof window!=='undefined')window.clearBatchPhotos=clearBatchPhotos;
 
 function cancelBatchAndReturnToAdd(){
   clearBatchPhotos();
-  document.querySelectorAll('.method-btn').forEach(b=>b.classList.toggle('active',b.dataset.method==='manual'));
-  document.getElementById('secManual').classList.add('show');
-  document.getElementById('secCamera').classList.remove('show');
-  document.getElementById('secBatch').classList.remove('show');
+  activateMethod('manual');
 }
 
 function updateBatchUIAfterChange(){
@@ -4027,16 +4163,7 @@ async function processBatch(){
   }
 }
 
-// Modificar método de tabs para incluir batch
-document.querySelectorAll('.method-btn').forEach(b=>b.addEventListener('click',()=>{
-  document.querySelectorAll('.method-btn').forEach(x=>x.classList.remove('active'));
-  b.classList.add('active');
-  const m=b.dataset.method;
-  document.querySelectorAll('.form-section').forEach(s=>s.classList.remove('show'));
-  if(m==='manual'){document.getElementById('secManual').classList.add('show');autoMode=false;btnAutoFlow.style.display=''}
-  else if(m==='camera'){document.getElementById('secCamera').classList.add('show');autoMode=false;btnAutoFlow.style.display=''}
-  else if(m==='batch'){document.getElementById('secBatch').classList.add('show');autoMode=false;btnAutoFlow.style.display='none'}
-}));
+// Tabs de método gestionadas por activateMethod(...)
 
 // ─── GOOGLE DRIVE SYNC ───
 // Claves: Client ID por defecto = OAuth del proyecto APP ALERGENOS (fenixsn369). API Key se introduce en Ajustes.
