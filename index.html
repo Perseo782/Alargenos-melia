@@ -2946,9 +2946,9 @@ function compressPhotoForAI(dataUrl, opts=null){
     img.src=dataUrl;
   });
 }
-async function buildPhotoRequest(photoList){
+async function buildPhotoRequest(photoList, compressOpts=null){
   const list=Array.isArray(photoList)?photoList:[photoList].filter(Boolean);
-  const compressed=await Promise.all(list.map(du=>compressPhotoForAI(du,compressOpts))));
+  const compressed=await Promise.all(list.map(du=>compressPhotoForAI(du,compressOpts)));
   const content=compressed.map(c=>{
     const dataUrl=typeof c==='object'&&c.dataUrl!=null?c.dataUrl:c;
     const mediaType=dataUrl.split(';')[0].split(':')[1]||'image/jpeg';
