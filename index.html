@@ -1333,17 +1333,33 @@ function buildResultFromOcrText(rawText){
   const text=String(rawText||'').replace(/\r/g,'');
   const isPhotoMarker=(line)=>/^---\s*FOTO\s+\d+\s*---$/i.test(String(line||'').trim());
   const lines=text.split('\n').map(l=>l.trim()).filter(Boolean).filter(line=>!isPhotoMarker(line));
+  const stopWords=/ingredientes?|información nutricional|al[ée]rgenos?|allergen|contiene|puede contener|trazas|kcal|E-\d|peso neto|peso bruto|modo de empleo|conservar/i;
   let nombre='';
-  const candidatos=[];
-  for(const line of lines){
-    const low=line.toLowerCase();
-    if(low.includes('ingrediente')||low.includes('alérgen')||low.includes('alergen')||low.includes('allergen')) continue;
-    if(low.includes('información nutricional')||low.includes('peso neto')||low.includes('peso bruto')) continue;
-    if(line.length>=3&&line.length<=120) candidatos.push(line);
-  }
-  if(candidatos.length){
-    candidatos.sort((a,b)=>b.length-a.length);
-    nombre=candidatos[0];
+  {
+    // Heurística general: nombre suele estar en las primeras líneas, antes de "ingredientes/alérgenos".
+    const titleLines=[];
+    for(const line of lines.slice(0,12)){
+      if(stopWords.test(line)){
+        if(titleLines.length) break;
+        continue;
+      }
+      if(line.length<2||line.length>100) continue;
+      if(/^\d+$/.test(line)) continue;
+      // Evitar "códigos" cortos en mayúsculas (SKU/lote) como nombre.
+      if(/^[A-ZÁÉÍÓÚÜÑ0-9 ]{2,14}$/.test(line)) continue;
+      // Evitar líneas claramente tipo ingredientes (muchas comas).
+      if((line.match(/[,;:]/g)||[]).length>=2) continue;
+      titleLines.push(line);
+      if(titleLines.length>=3) break;
+    }
+    if(titleLines.length){
+      nombre=titleLines[0];
+      for(let i=1;i<titleLines.length;i++){
+        if(nombre.length>=40) break;
+        nombre=(nombre+' '+titleLines[i]).replace(/\s+/g,' ').trim();
+      }
+      if(nombre.length>90) nombre=nombre.slice(0,90).trim();
+    }
   }
   if(!nombre) nombre=lines[0]||'';
 
@@ -1369,21 +1385,53 @@ function buildResultFromOcrText(rawText){
     {allergen:'ALTRAMUZ',rx:[/altramuz/i,/lupin/i]}
   ];
 
-  lines.forEach(line=>{
-    const low=line.toLowerCase();
-    const isAllergenLine=/al[ée]rgenos?/i.test(line)||/allergen/i.test(line)||/contiene/i.test(line)||/puede contener/i.test(line)||/trazas/i.test(line);
-    if(!isAllergenLine) return;
+  function recordHit(line, allergen, kind){
+    if(kind==='trace') trazas.add(allergen);
+    else alergenos.add(allergen);
     hallazgos_texto.push(line);
-    const isTrace=/puede contener|trazas/i.test(low);
+    mapeo.push({texto:line,alergeno:allergen});
+  }
+  function scanLineForAllergens(line, kind){
+    const low=String(line||'').toLowerCase();
     ALLERGEN_RULES.forEach(rule=>{
       const hit=rule.rx.find(rx=>rx.test(line));
-      if(hit){
-        if(isTrace)trazas.add(rule.allergen);
-        else alergenos.add(rule.allergen);
-        mapeo.push({texto:line,alergeno:rule.allergen});
-      }
+      if(!hit) return;
+      // Evitar falsos positivos de "sin gluten" por el patrón "gluten" (pero permitir trigo/cebada/avena…).
+      if(rule.allergen==='CEREALES' && String(hit).includes('gluten') && /(sin\s+gluten|gluten\s*free|sin\s*tacc)/i.test(low)) return;
+      recordHit(line,rule.allergen,kind);
     });
+  }
+
+  // 1) Líneas explícitas de trazas/puede contener (trazas)
+  lines.forEach(line=>{
+    const low=line.toLowerCase();
+    if(/puede contener|trazas|presencia fortuita/i.test(low)){
+      scanLineForAllergens(line,'trace');
+    }
   });
+
+  // 2) Líneas explícitas de "alérgenos/contiene" (contiene)
+  lines.forEach(line=>{
+    const low=line.toLowerCase();
+    if(/al[ée]rgenos?|allergen|contiene/i.test(low) && !/puede contener|trazas|presencia fortuita/i.test(low)){
+      scanLineForAllergens(line,'contains');
+    }
+  });
+
+  // 3) Bloque de ingredientes (si existe) (contiene)
+  (function(){
+    const startIdx=lines.findIndex(l=>/ingredientes?/i.test(l));
+    if(startIdx<0) return;
+    const block=[];
+    for(let i=startIdx;i<Math.min(lines.length,startIdx+18);i++){
+      const line=lines[i];
+      if(i!==startIdx && stopWords.test(line)) break;
+      block.push(line);
+    }
+    const joined=block.join(' ');
+    if(joined.length<10) return;
+    scanLineForAllergens(joined,'contains');
+  })();
 
   return{
     nombre,
@@ -1394,6 +1442,88 @@ function buildResultFromOcrText(rawText){
     notas:'',
     warning:''
   };
+}
+
+// ─── ZONA DE REGLAS: Vision como datos, IA como juez ───
+// Si las reglas (buildResultFromOcrText) resuelven nombre + alérgenos, no se llama a la IA.
+const RULES = {
+  minNombreLength: 3,
+  maxNombreLength: 120,
+  nameReject: /^(ingredientes?|información nutricional|al[ée]rgenos?|contiene|puede contener|trazas|peso neto|peso bruto)$/i,
+  textSuggestsAllergens: /al[ée]rgenos?|allergen|contiene|puede contener|trazas\s+de|presencia fortuita/i
+};
+function shouldCallJudge(ocrText, ruleResult) {
+  if (!ruleResult) return true;
+  const nombre = String(ruleResult.nombre || '').trim();
+  const alergenos = ruleResult.alergenos || [];
+  const trazas = ruleResult.trazas || [];
+  const hasAllergens = alergenos.length > 0 || trazas.length > 0;
+  const nombreOk = nombre.length >= RULES.minNombreLength && nombre.length <= RULES.maxNombreLength && !RULES.nameReject.test(nombre);
+  if (!nombreOk) return true;
+  const text = String(ocrText || '').toLowerCase();
+  if (RULES.textSuggestsAllergens.test(text) && !hasAllergens) return true;
+  return false;
+}
+const JUDGE_LOG_KEY = 'alergenos_judge_log';
+const JUDGE_LOG_MAX = 100;
+function getJudgeLog() {
+  try {
+    const raw = localStorage.getItem(JUDGE_LOG_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+function appendJudgeLog(entry) {
+  try {
+    const log = getJudgeLog();
+    log.push({ ts: Date.now(), ...entry });
+    if (log.length > JUDGE_LOG_MAX) log.splice(0, log.length - JUDGE_LOG_MAX);
+    localStorage.setItem(JUDGE_LOG_KEY, JSON.stringify(log));
+  } catch (e) {}
+}
+
+/** Normaliza un texto OCR para comparación (mismo producto → misma huella). */
+function normalizeOcrForMatch(ocr) {
+  return String(ocr || '').trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 400);
+}
+
+/** Busca en el registro del juez una resolución previa para el mismo producto (por huella OCR o por nombre). Si hay coincidencia, devuelve el aiResult guardado y no hace falta llamar a la IA. */
+function findLearnedRule(ocrText, ruleResult) {
+  const log = getJudgeLog();
+  if (!log.length) return null;
+  const currentKey = normalizeOcrForMatch(ocrText);
+  const currentPrefix = currentKey.slice(0, 120);
+  for (let i = log.length - 1; i >= 0; i--) {
+    const entry = log[i];
+    if (!entry || !entry.aiResult) continue;
+    const entryKey = normalizeOcrForMatch(entry.ocrSnippet || '');
+    if (entryKey.length < 20) continue;
+    if (currentPrefix === entryKey.slice(0, 120) || currentKey === entryKey) {
+      return { nombre: entry.aiResult.nombre, alergenos: entry.aiResult.alergenos || [], trazas: entry.aiResult.trazas || [] };
+    }
+  }
+  const candidateName = (ruleResult && String(ruleResult.nombre || '').trim().length >= 2)
+    ? ruleResult.nombre
+    : (function () {
+        const raw = String(ocrText || '').replace(/\r/g, '').trim();
+        if (!raw) return '';
+        const lines = raw.split(/\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+        const stop = /ingredientes?|información nutricional|al[ée]rgenos?|contiene|puede contener|trazas|peso neto|peso bruto/i;
+        for (let j = 0; j < Math.min(5, lines.length); j++) {
+          if (stop.test(lines[j])) break;
+          if (lines[j].length >= 2 && lines[j].length <= 90) return lines[j];
+        }
+        return '';
+      })();
+  if (!candidateName) return null;
+  const normalizedCandidate = canonicalizeProductName(candidateName);
+  for (let i = log.length - 1; i >= 0; i--) {
+    const entry = log[i];
+    if (!entry || !entry.aiResult || !entry.aiResult.nombre) continue;
+    if (canonicalizeProductName(entry.aiResult.nombre) === normalizedCandidate) {
+      return { nombre: entry.aiResult.nombre, alergenos: entry.aiResult.alergenos || [], trazas: entry.aiResult.trazas || [] };
+    }
+  }
+  return null;
 }
 
 /** Si la IA devolvió un fragmento de ingredientes como "nombre", lo corrige usando el inicio del texto OCR (título real). */
@@ -1519,13 +1649,12 @@ try {
     P = sanitizeProductList(JSON.parse(s));
     DB_SOURCE = 'DB_SOURCE_LOCALSTORAGE';
   } else {
-    // Solo usamos INITIAL si no hay base local persistida
     P = sanitizeProductList(JSON.parse(JSON.stringify(INITIAL)));
-    DB_SOURCE = 'DB_SOURCE_INITIAL';
+    DB_SOURCE = (INITIAL && INITIAL.length) ? 'DB_SOURCE_INITIAL' : 'DB_SOURCE_EMPTY';
   }
 } catch(e) {
   P = sanitizeProductList(JSON.parse(JSON.stringify(INITIAL)));
-  DB_SOURCE = 'DB_SOURCE_INITIAL_FALLBACK';
+  DB_SOURCE = (INITIAL && INITIAL.length) ? 'DB_SOURCE_INITIAL_FALLBACK' : 'DB_SOURCE_EMPTY_FALLBACK';
 }
 // Log del origen al arrancar (se ejecuta después de que addLog esté disponible)
 setTimeout(() => {
@@ -3386,11 +3515,23 @@ async function analyzePhotos(photoList, opts={}){
 
     addAnalysisSection(analysisId,'C_raw_output',{ raw_text: String(ocrText).slice(0,5000), length: ocrText.length });
     let result;
+    let ruleResult=normalizeAIPhotoResult(buildResultFromOcrText(ocrText));
+    ruleResult.nombre=fixNombreFromOcr(ruleResult.nombre,ocrText);
+    ruleResult=normalizeAIPhotoResult(ruleResult);
+    const needJudge=shouldCallJudge(ocrText,ruleResult);
     const geminiKey=getApiKey();
-    if(geminiKey){
+    const learned=needJudge&&geminiKey ? findLearnedRule(ocrText,ruleResult) : null;
+    if(geminiKey&&!needJudge){
+      result=ruleResult;
+      addLog('INFO','RESOLVED_BY_RULES','Resuelto por reglas (sin IA)',{analysis_id:analysisId,nombre:result.nombre,alergenos:result.alergenos||[]});
+    }else if(learned){
+      result=learned;
+      result.nombre=fixNombreFromOcr(result.nombre,ocrText);
+      result=normalizeAIPhotoResult(result);
+      addLog('INFO','RESOLVED_BY_LEARNED_RULE','Resuelto por regla aprendida (sin llamar a la IA)',{analysis_id:analysisId,nombre:result.nombre,alergenos:result.alergenos||[]});
+    }else if(geminiKey){
       aiS.innerHTML='<span class="spinner"></span> Interpretando con IA (nombre y alérgenos)…';
       try{
-        // Instrucciones completas en systemInstruction (como el "system" de GPT); solo el texto OCR en el user.
         const isFast=(typeof mode!=='undefined'&&mode==='fast');
         let fastText=isFast?buildCondensedOcrForFast(ocrText):ocrText;
         if(isFast){
@@ -3426,6 +3567,7 @@ async function analyzePhotos(photoList, opts={}){
           }
           result.nombre=fixNombreFromOcr(result.nombre,ocrText);
           result=normalizeAIPhotoResult(result);
+          appendJudgeLog({ocrSnippet:String(ocrText).slice(0,1500),ruleResult:{nombre:ruleResult.nombre,alergenos:ruleResult.alergenos||[],trazas:ruleResult.trazas||[]},aiResult:{nombre:result.nombre,alergenos:result.alergenos||[],trazas:result.trazas||[]}});
         }else{
           const errBody=await iaResp.json().catch(()=>null);
           const providerMessage=extractProviderErrorMessage(errBody)||`HTTP ${iaResp.status}`;
@@ -3439,7 +3581,7 @@ async function analyzePhotos(photoList, opts={}){
         if(typeof showToast==='function') showToast('Error al interpretar con IA; se usó interpretación local.'+(hint?` ${hint}`:''),'info');
       }
     }else{
-      result=normalizeAIPhotoResult(buildResultFromOcrText(ocrText));
+      result=ruleResult;
     }
 
     result.nombre=fixNombreFromOcr(result.nombre||'',ocrText);
