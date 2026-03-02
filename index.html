@@ -217,7 +217,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v0203202615:57h</div>
+    <div class="login-version">v0203202620:23h</div>
   </div>
 </div>
 
@@ -993,7 +993,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.4-020320261557',
+    version:'1.0.4-020320262023',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -3066,6 +3066,37 @@ Si la zona de alérgenos está cortada o la imagen está muy borrosa y no puedes
 Responde SOLO JSON (sin markdown ni bloques \`\`\`json). No incluyas texto antes o después del objeto.
 {"nombre":"...","hallazgos_texto":["..."],"mapeo":[{"texto":"...","alergeno":"..."}],"alergenos":["..."],"trazas":["..."],"notas":"","warning":""}`;
 
+function buildCondensedOcrForFast(rawText){
+  const text=String(rawText||'');
+  if(!text)return text;
+  const lines=text.split(/\r?\n/);
+  const keywordRe=/(ingrediente|ingredientes|al[eé]rgenos?|contiene|puede\s+contener|trazas?|sin\s+gluten|allergen|allergy)/i;
+  const kept=[];
+  for(let i=0;i<lines.length;i++){
+    if(keywordRe.test(lines[i])){
+      const start=Math.max(0,i-2);
+      const end=Math.min(lines.length-1,i+4);
+      for(let j=start;j<=end;j++){
+        kept.push(lines[j]);
+      }
+      i=end;
+    }
+  }
+  if(!kept.length){
+    return lines.slice(0,40).join('\n');
+  }
+  const unique=[];
+  const seen=new Set();
+  for(const line of kept){
+    const trimmed=line.trim();
+    if(!trimmed)continue;
+    if(seen.has(trimmed))continue;
+    seen.add(trimmed);
+    unique.push(line);
+  }
+  return unique.join('\n');
+}
+
 const AI_PROMPT_FROM_OCR=`Eres un sistema de lectura de etiquetas alimentarias. A continuación se te da el TEXTO EXTRAÍDO de una etiqueta (OCR). No tienes imagen; solo este texto. Tu tarea es extraer el nombre del producto y TODOS los alérgenos presentes en el texto, con las MISMAS reglas que si tuvieras la imagen.
 El OCR puede incluir varias fotos del MISMO producto y cada bloque vendrá marcado como "--- FOTO N ---". Son vistas del mismo artículo, NO productos diferentes.
 
@@ -3146,11 +3177,15 @@ async function apiCall(content, options){
     ?options.systemInstruction
     :'Responde ÚNICAMENTE con un objeto JSON válido en el formato exacto que te pida el usuario. No incluyas texto antes ni después del JSON, ni bloques de markdown (```). Sin explicaciones. En ese JSON, el campo "nombre" es SIEMPRE el título del producto (el que aparece al inicio de la etiqueta o del texto), nunca un fragmento de la lista de ingredientes.';
 
+  const maxTokens=(options&&typeof options.maxOutputTokens==='number'&&options.maxOutputTokens>0)
+    ?options.maxOutputTokens
+    :3000;
+
   const url=GEMINI_GENERATE_URL;
   const body=JSON.stringify({
     systemInstruction:{ parts:[{ text: systemText }] },
     contents:[{role:'user',parts}],
-    generationConfig:{maxOutputTokens:3000,temperature:0}
+    generationConfig:{maxOutputTokens:maxTokens,temperature:0}
   });
   let lastResp=null;
   for(let attempt=0;attempt<=2;attempt++){
@@ -3343,9 +3378,13 @@ async function analyzePhotos(photoList, opts={}){
       aiS.innerHTML='<span class="spinner"></span> Interpretando con IA (nombre y alérgenos)…';
       try{
         // Instrucciones completas en systemInstruction (como el "system" de GPT); solo el texto OCR en el user.
-        const userText='--- TEXTO DE LA ETIQUETA ---\n'+String(ocrText).slice(0,12000);
+        const fastText=(typeof mode!=='undefined'&&mode==='fast')?buildCondensedOcrForFast(ocrText):ocrText;
+        const userText='--- TEXTO DE LA ETIQUETA ---\n'+String(fastText).slice(0,4000);
         const content=[{ type:'text', text: userText }];
-        const iaResp=await apiCall(content,{ systemInstruction: AI_PROMPT_FROM_OCR });
+        const iaResp=await apiCall(content,{
+          systemInstruction: AI_PROMPT_FROM_OCR,
+          maxOutputTokens: (typeof mode!=='undefined'&&mode==='fast')?400:3000
+        });
         if(iaResp&&iaResp.ok){
           const iaData=await iaResp.json();
           const text=iaData.choices?.[0]?.message?.content||'';
