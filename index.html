@@ -87,8 +87,8 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 .card{background:var(--white);border:1px solid var(--warm8-20);border-radius:var(--radius);padding:12px 14px;margin-bottom:6px;cursor:pointer;transition:all .2s}
 .card:active{background:var(--warm8-10)}
 .card.highlight{border-color:var(--warm8);box-shadow:0 0 0 2px var(--warm8-60);transition:all .3s}
-.card-from-app{border-left:3px solid var(--green);position:relative}
-.card-app-label{position:absolute;bottom:10px;right:12px;font-size:9px;font-weight:600;color:var(--green);letter-spacing:0.5px;opacity:0.85}
+.card-from-app{border-left:3px solid var(--green);position:relative;padding-bottom:22px}
+.card-app-label{position:absolute;bottom:8px;right:12px;font-size:9px;font-weight:600;color:var(--green);letter-spacing:0.3px;opacity:0.9;white-space:nowrap}
 .card.audit-high{border-color:#e53e3e;box-shadow:0 0 0 2px rgba(229,62,62,.25)}
 .card.audit-medium{border-color:#dd6b20;box-shadow:0 0 0 2px rgba(221,107,32,.2)}
 .audit-section-header{font-size:12px;font-weight:600;color:#c53030;letter-spacing:.5px;text-transform:uppercase;padding:8px 2px 4px;margin-bottom:4px;display:flex;align-items:center;gap:6px}
@@ -228,7 +228,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button type="button" class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v0303202520:49h</div>
+    <div class="login-version">v0303202521:16h</div>
   </div>
 </div>
 
@@ -442,7 +442,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v0303202520:49h</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v0303202521:16h</span></div>
     <button type="button" class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section">
@@ -1005,7 +1005,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.4-030320252049',
+    version:'1.0.4-030320252116',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -1415,7 +1415,9 @@ function fixNombreFromOcr(nombre, ocrText){
   if(!ocr) return n;
   const isPhotoMarker=(line)=>/^---\s*FOTO\s+\d+\s*---$/i.test(String(line||'').trim());
   const stopWords=/ingredientes?|información nutricional|al[ée]rgenos?|contiene|puede contener|trazas|kcal|E-\d|peso neto|peso bruto|modo de empleo|conservar/i;
-  const looksLikeIngredients=/ingredientes?|E-\d|marina,|potenciador|harina de maíz|harina de trigo|sal,|agua,|pimiento,|cebolla,|aceite|grasa vegetal|Ngredientes/i.test(n) || (n.length>50 && /,/.test(n));
+  /* No reemplazar si parece producto válido (ej. "SALSA PESTO CON ALBAHACA Y ACEITE DE OLIVA") */
+  const looksLikeValidProduct=/^(salsa|pesto|crema|caldo|sopa|pat[eé]|pur[eé]|mermelada|conserva|macedonia)\s+/i.test(n) || /\b(salsa|pesto|crema|caldo)\s+con\s+/i.test(n);
+  const looksLikeIngredients=!looksLikeValidProduct && (/ingredientes?|E-\d|marina,|potenciador|harina de maíz|harina de trigo|sal,|agua,|pimiento,|cebolla,|grasa vegetal|Ngredientes/i.test(n) || (n.length>50 && /,/.test(n)) || /, aceite|aceite,|aceite refinado|aceite de girasol/i.test(n));
   const looksLikeMergedTitle=/\b(helado|yogur|yogurt|pizza|hamburguesa|croqueta|sandwich|sándwich|barrita|batido)\b[\s\S]{0,120}\by\s+\1\b/i.test(n);
 
   function extractTitleFromPrimaryPhoto(raw){
@@ -2533,8 +2535,8 @@ function renderProducts(){
       const count=p.a.length?`<div class="a-count">${p.a.length} alérgeno${p.a.length>1?'s':''}</div>`:'';
       const badge=`<span class="audit-badge ${severity}">${severity==='high'?'Alta':'Media'}</span>`;
       const reviewBadge=p.requires_review?'<span class="audit-badge medium">Revisar IA</span>':'';
-      const fromApp=p._src==='app'?' from-app':'';
-      const appLabel=p._src==='app'?'<span class="card-app-label">APP</span>':'';
+      const fromApp=p._src==='app'?' card-from-app':'';
+      const appLabel=p._src==='app'?'<span class="card-app-label">Creado con app</span>':'';
       h+=`<div class="card audit-${severity}${fromApp}" data-idx="${oi}"><div class="card-name">${nm}${badge}${reviewBadge}</div>${ic}${count}${appLabel}</div>`;
     });
     h+='<hr class="audit-separator">';
@@ -2542,7 +2544,7 @@ function renderProducts(){
 
   // Normal section
   const show=normal.slice(0,renderLimit);
-  show.forEach(p=>{const oi=P.indexOf(p);let nm=esc(p.n);const query=norm(q.value.trim());if(query)nm=hi(nm,query);let ic='';if(!p.a.length)ic='<span class="safe">✓ Sin alérgenos</span>';else{ic='<div class="icons-row">';p.a.forEach(a=>{if(IC[a])ic+=`<img class="a-icon" src="${IC[a]}" alt="${a}" title="${a}">`});ic+='</div>'}const isHL=lastSavedName&&norm(p.n)===norm(lastSavedName);const fromApp=p._src==='app'?' from-app':'';const appLabel=p._src==='app'?'<span class="card-app-label">APP</span>':'';const count=p.a.length?`<div class="a-count">${p.a.length} alérgeno${p.a.length>1?'s':''}</div>`:'';const reviewBadge=p.requires_review?'<span class="audit-badge medium">Revisar IA</span>':'';h+=`<div class="card${isHL?' highlight':''}${fromApp}" data-idx="${oi}"><div class="card-name">${nm}${reviewBadge}</div>${ic}${count}${appLabel}</div>`});
+  show.forEach(p=>{const oi=P.indexOf(p);let nm=esc(p.n);const query=norm(q.value.trim());if(query)nm=hi(nm,query);let ic='';if(!p.a.length)ic='<span class="safe">✓ Sin alérgenos</span>';else{ic='<div class="icons-row">';p.a.forEach(a=>{if(IC[a])ic+=`<img class="a-icon" src="${IC[a]}" alt="${a}" title="${a}">`});ic+='</div>'}const isHL=lastSavedName&&norm(p.n)===norm(lastSavedName);const fromApp=p._src==='app'?' card-from-app':'';const appLabel=p._src==='app'?'<span class="card-app-label">Creado con app</span>':'';const count=p.a.length?`<div class="a-count">${p.a.length} alérgeno${p.a.length>1?'s':''}</div>`:'';const reviewBadge=p.requires_review?'<span class="audit-badge medium">Revisar IA</span>':'';h+=`<div class="card${isHL?' highlight':''}${fromApp}" data-idx="${oi}"><div class="card-name">${nm}${reviewBadge}</div>${ic}${count}${appLabel}</div>`});
   if(normal.length>renderLimit)h+=`<div class="empty" id="loadMore">Mostrando ${renderLimit} de ${normal.length} — Baja para cargar más</div>`;
   ls.innerHTML=h;
   updateCancelReviewUI();
