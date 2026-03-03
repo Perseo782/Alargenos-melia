@@ -6,37 +6,41 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#928981">
+<meta name="description" content="Gestión de alérgenos alimentarios para establecimientos Meliá">
 <title>Alérgenos · Meliá</title>
 <link rel="manifest" href="data:application/json,%7B%22name%22%3A%22Al%C3%A9rgenos%20Meli%C3%A1%22%2C%22short_name%22%3A%22Al%C3%A9rgenos%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23F3F2F2%22%2C%22theme_color%22%3A%22%23928981%22%7D">
-<link href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Text:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 <link href="https://use.typekit.net/fvb1vnf.css" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{
-  --warm8:#928981;--warm8-80:#A29B97;--warm8-60:#B9B4B1;--warm8-40:#D1CDCB;
+  --warm8:#928981;--warm8-80:#A29897;--warm8-60:#B9B4B1;--warm8-40:#D1CDCB;
   --warm8-20:#E8E6E5;--warm8-10:#F3F2F2;--warm8-05:#F8F7F6;--warm4:#B4ACA7;--gray-comp:#E2E5E5;
-  --bg:#F3F2F2;--white:#fff;--text:#3a3632;--text2:var(--warm8);--text3:var(--warm8-60);
+  --bg:#F3F2F2;--white:#FFFFFF;--text:#3a3632;--text2:var(--warm8);--text3:var(--warm8-60);
   --green:#5a7a5a;--red:#8c3a3a;--radius:8px;
-  --serif:'Libre Caslon Text',Georgia,'Times New Roman',serif;
-  --sans:graphik,'Graphik Web',-apple-system,Arial,Helvetica,sans-serif;
+  --serif:'Adobe Caslon Pro','Libre Baskerville',Georgia,'Times New Roman',serif;
+  --sans:graphik,'Graphik Web','Century Gothic','CenturyGothic',Avenir,-apple-system,Arial,sans-serif;
+  --logo-font:'Century Gothic','CenturyGothic',AppleGothic,sans-serif;
   --card-shadow:0 2px 8px rgba(58,54,50,.06);--card-radius:12px;
 }
 html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--text);overflow:hidden;font-size:14px}
 
-/* ─── LOGIN ─── */
-#loginScreen{position:fixed;inset:0;background:var(--bg);z-index:999;display:flex;align-items:center;justify-content:center}
+/* ─── LOGIN (estilo Meliá Hotels & Resorts) ─── */
+#loginScreen{position:fixed;inset:0;background:var(--bg);z-index:999;display:flex;align-items:center;justify-content:center;padding:20px}
 #loginScreen.hidden{display:none}
-.login-box{width:90%;max-width:340px;text-align:center;padding:20px}
-.login-logo{font-family:var(--serif);font-size:13px;letter-spacing:4px;color:var(--warm8);margin-bottom:12px;text-transform:uppercase;font-weight:400}
-.login-title{font-family:var(--serif);font-size:32px;font-weight:400;color:var(--text);margin-bottom:8px;letter-spacing:-0.5px}
-.login-sub{font-size:13px;color:var(--text3);margin-bottom:36px;letter-spacing:0.3px}
-.login-field{width:100%;padding:13px 14px;border:1px solid var(--warm8-40);border-radius:var(--radius);font-size:14px;font-family:var(--sans);color:var(--text);outline:none;margin-bottom:10px;background:var(--white);transition:border-color .2s}
+.login-box{width:100%;max-width:360px;text-align:center;padding:28px 24px}
+.login-logo{display:flex;flex-direction:column;align-items:center;margin-bottom:28px}
+.login-logo-main{font-family:var(--logo-font);font-size:28px;font-weight:700;letter-spacing:0.12em;color:var(--warm8);line-height:1.1;margin-bottom:2px}
+.login-logo-sub{font-family:var(--logo-font);font-size:9px;font-weight:400;letter-spacing:0.2em;color:var(--warm8-60);text-transform:uppercase}
+.login-title{font-family:var(--serif);font-size:26px;font-weight:400;color:var(--text);margin-bottom:6px;letter-spacing:-0.3px}
+.login-sub{font-size:13px;color:var(--text3);margin-bottom:28px;letter-spacing:0.2px;font-family:var(--sans)}
+.login-field{width:100%;padding:14px 16px;border:1px solid var(--warm8-40);border-radius:var(--radius);font-size:14px;font-family:var(--sans);color:var(--text);outline:none;margin-bottom:10px;background:var(--white);transition:border-color .2s}
 .login-field:focus{border-color:var(--warm8)}
 .login-field::placeholder{color:var(--warm8-60)}
-.login-btn{width:100%;padding:14px;border-radius:var(--radius);border:none;background:var(--warm8);color:#fff;font-size:14px;font-weight:500;font-family:var(--sans);cursor:pointer;letter-spacing:0.5px;margin-top:4px;transition:opacity .15s}
+.login-btn{width:100%;padding:14px;border-radius:var(--radius);border:none;background:var(--warm8);color:#fff;font-size:14px;font-weight:600;font-family:var(--sans);cursor:pointer;letter-spacing:0.5px;margin-top:6px;transition:opacity .15s}
 .login-btn:active{opacity:.8}
 .login-error{font-size:12px;color:var(--red);margin-top:10px;min-height:18px}
-.login-version{font-size:10px;color:var(--warm8-60);margin-top:32px;letter-spacing:0.5px}
+.login-version{font-size:10px;color:var(--warm8-60);margin-top:28px;letter-spacing:0.5px}
 
 /* ─── APP ─── */
 #app{display:none;flex-direction:column;height:100dvh;max-width:500px;margin:0 auto;position:relative}
@@ -207,17 +211,20 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 </head>
 <body>
 
-<!-- ─── LOGIN SCREEN ─── -->
+<!-- ─── LOGIN SCREEN (Meliá Hotels & Resorts) ─── -->
 <div id="loginScreen">
   <div class="login-box">
-    <div class="login-logo">MELIÁ</div>
+    <div class="login-logo">
+      <span class="login-logo-main">MELIÁ</span>
+      <span class="login-logo-sub">Hotels & Resorts</span>
+    </div>
     <div class="login-title">Alérgenos</div>
     <div class="login-sub">Gestión de alérgenos alimentarios</div>
     <input class="login-field" id="loginUser" type="text" placeholder="Usuario" autocomplete="username" autocapitalize="none">
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
-    <button class="login-btn" id="loginBtn">Entrar</button>
+    <button type="button" class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v0203202621:54h</div>
+    <div class="login-version">v0303202519:51h</div>
   </div>
 </div>
 
@@ -234,35 +241,35 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
         <span class="pending-warn" id="pendingWarnIcon" aria-hidden="true">⚠︎</span>
         <span id="pendingCountLabel">0 pendientes</span>
       </button>
-      <button class="hdr-chip-btn" id="syncBtn" title="Sincronización forzada">
+      <button type="button" class="hdr-chip-btn" id="syncBtn" title="Sincronización forzada">
         <span class="hdr-chip-icon" aria-hidden="true">⟳</span>
         <span>Sync</span>
       </button>
-      <button class="hdr-chip-btn" id="gearBtn" title="Ajustes">
+      <button type="button" class="hdr-chip-btn" id="gearBtn" title="Ajustes">
         <span class="hdr-chip-icon" aria-hidden="true">⚙</span>
         <span>Ajustes</span>
       </button>
     </div>
     <div class="pending-view-indicator" id="pendingViewIndicator" hidden>Mostrando pendientes</div>
-    <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7.5"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="text" placeholder="Buscar producto…" autocomplete="off" autocorrect="on" spellcheck="false"><button class="x-btn" id="xb">&times;</button></div>
+    <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7.5"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="text" placeholder="Buscar producto…" autocomplete="off" autocorrect="on" spellcheck="false"><button type="button" class="x-btn" id="xb">&times;</button></div>
     <div class="filter-row" id="fl"></div>
   </div>
   <div class="list" id="ls"><div class="ptr-indicator" id="ptrIndicator">⟳</div></div>
-  <div class="queue-bar" id="queueBar"><div class="queue-dot" id="queueDot"></div><span class="queue-text" id="queueText"></span><button class="queue-action" id="queueAction">Procesar</button></div>
-  <div class="bottom-bar"><button class="add-btn" id="addBtn">+ Añadir producto</button><button class="cancel-review-btn" id="cancelReviewBtn">Cancelar revisión</button></div>
+  <div class="queue-bar" id="queueBar"><div class="queue-dot" id="queueDot"></div><span class="queue-text" id="queueText"></span><button type="button" class="queue-action" id="queueAction">Procesar</button></div>
+  <div class="bottom-bar"><button type="button" class="add-btn" id="addBtn">+ Añadir producto</button><button type="button" class="cancel-review-btn" id="cancelReviewBtn">Cancelar revisión</button></div>
 </div>
 <div class="toast" id="toast"></div>
 
 <!-- ADD/EDIT MODAL -->
 <div class="modal-bg" id="modalBg"><div class="modal">
-  <h2 id="modalTitle">Añadir producto <button class="modal-close" id="modalClose">&times;</button></h2>
+  <h2 id="modalTitle">Añadir producto <button type="button" class="modal-close" id="modalClose">&times;</button></h2>
   <div class="methods" id="methodsRow">
-    <button class="method-btn" data-method="camera">
+    <button type="button" class="method-btn" data-method="camera">
       <div class="m-icon">📷</div>
       <div class="m-label">Fotografía</div>
       <div class="m-desc">Analizar y revisar antes de guardar</div>
     </button>
-    <button class="method-btn" data-method="batch">
+    <button type="button" class="method-btn" data-method="batch">
       <div class="m-icon">🖼️</div>
       <div class="m-label">Lote</div>
       <div class="m-desc">Procesar hasta 10 fotos de golpe</div>
@@ -274,9 +281,9 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <div class="match-box" id="manualMatch"><div class="match-title">Producto similar encontrado</div><div class="match-name" id="manualMatchName"></div><div class="match-detail" id="manualMatchDetail"></div></div>
     <label class="form-label">Alérgenos</label>
     <div class="allergen-grid" id="manualAllergens"></div>
-    <button class="save-btn" id="manualSave" disabled>Guardar producto</button>
-    <div id="auditDismissRow" style="display:none"><button class="audit-dismiss-btn" id="auditDismissBtn">👁 No mostrar más esta advertencia</button></div>
-    <div class="btn-row" id="editBtns" style="display:none"><button class="btn-delete" id="deleteBtn">Eliminar producto</button></div>
+    <button type="button" class="save-btn" id="manualSave" disabled>Guardar producto</button>
+    <div id="auditDismissRow" style="display:none"><button type="button" class="audit-dismiss-btn" id="auditDismissBtn">👁 No mostrar más esta advertencia</button></div>
+    <div class="btn-row" id="editBtns" style="display:none"><button type="button" class="btn-delete" id="deleteBtn">Eliminar producto</button></div>
   </div>
   <div class="form-section" id="secCamera">
     <div class="cam-area">
@@ -284,13 +291,13 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
         <div class="photo-slot" id="slot1"><span class="slot-icon">📦</span><span class="slot-label">Envase</span><img id="img1" style="display:none"></div>
         <div class="photo-slot" id="slot2"><span class="slot-icon">🏷️</span><span class="slot-label">Etiquetado</span><img id="img2" style="display:none"></div>
       </div>
-      <div class="cam-btns"><button class="cam-btn" id="btnCapture">📷 Hacer foto</button><button class="cam-btn" id="btnGallery">🖼️ Galería</button></div>
+      <div class="cam-btns"><button type="button" class="cam-btn" id="btnCapture">📷 Hacer foto</button><button type="button" class="cam-btn" id="btnGallery">🖼️ Galería</button></div>
       <input type="file" accept="image/*" capture="environment" class="cam-input" id="camInput">
       <input type="file" accept="image/*" class="cam-input" id="galInput">
       <div class="ai-status" id="aiStatus"></div>
-      <button class="save-btn" id="analyzeBtn" style="background:var(--warm8-80);margin-bottom:14px;display:none">Analizar etiquetado</button>
+      <button type="button" class="save-btn" id="analyzeBtn" style="background:var(--warm8-80);margin-bottom:14px;display:none">Analizar etiquetado</button>
     
-      <button class="save-btn" id="analyzeBtnFast" style="background:var(--warm8-80);margin-bottom:14px;display:none">Analizar rápido</button>
+      <button type="button" class="save-btn" id="analyzeBtnFast" style="background:var(--warm8-80);margin-bottom:14px;display:none">Analizar rápido</button>
 </div>
     <div class="ai-result" id="aiResult">
       <label class="form-label">Producto detectado</label>
@@ -300,15 +307,15 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
       <div class="ai-warn" id="aiWarn"></div>
       <div class="allergen-grid" id="aiAllergens"></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="save-btn" id="aiCancel" style="flex:1;min-width:120px;background:var(--warm8-20);color:var(--text)">Cancelar</button>
-        <button class="save-btn" id="aiSave" disabled style="flex:1;min-width:120px">Guardar producto</button>
+        <button type="button" class="save-btn" id="aiCancel" style="flex:1;min-width:120px;background:var(--warm8-20);color:var(--text)">Cancelar</button>
+        <button type="button" class="save-btn" id="aiSave" disabled style="flex:1;min-width:120px">Guardar producto</button>
       </div>
     </div>
   </div>
   <div class="form-section" id="secBatch">
     <div class="cam-area">
       <input type="file" accept="image/*" multiple class="cam-input" id="batchInput">
-      <button class="save-btn" id="batchSelectBtn" style="margin-bottom:14px">Seleccionar hasta 10 fotos</button>
+      <button type="button" class="save-btn" id="batchSelectBtn" style="margin-bottom:14px">Seleccionar hasta 10 fotos</button>
       <div class="ai-status" id="batchStatus"></div>
       <div id="batchPreview" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px"></div>
     </div>
@@ -319,7 +326,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 <div class="modal-bg" id="confirmBg"><div class="modal" style="border-radius:12px;max-width:340px;margin:auto;padding:24px 20px;text-align:center">
   <h2 style="justify-content:center;margin-bottom:8px">¿Eliminar producto?</h2>
   <p style="font-size:13px;color:var(--text2);margin-bottom:20px" id="confirmText"></p>
-  <div style="display:flex;gap:8px"><button class="save-btn" id="confirmCancel" style="background:var(--warm8-20);color:var(--text)">Cancelar</button><button class="save-btn" id="confirmDelete" style="background:var(--red)">Eliminar</button></div>
+  <div style="display:flex;gap:8px"><button type="button" class="save-btn" id="confirmCancel" style="background:var(--warm8-20);color:var(--text)">Cancelar</button><button type="button" class="save-btn" id="confirmDelete" style="background:var(--red)">Eliminar</button></div>
 </div></div>
 
 <!-- PHOTO WARNING -->
@@ -328,7 +335,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <h2 style="justify-content:center;margin-bottom:12px">Problema detectado</h2>
   <p style="font-size:14px;color:var(--text);margin-bottom:8px;font-weight:500" id="warningProduct"></p>
   <p style="font-size:13px;color:var(--text2);margin-bottom:20px;line-height:1.5" id="warningText"></p>
-  <button class="save-btn" id="warningOk">Entendido</button>
+  <button type="button" class="save-btn" id="warningOk">Entendido</button>
 </div></div>
 
 <!-- PHOTO SOURCE CHOOSER -->
@@ -336,10 +343,10 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <h2 style="justify-content:center;margin-bottom:8px">Seleccionar origen</h2>
   <p class="photo-source-target" id="photoSourceTarget">Elige cómo añadir la foto</p>
   <div class="cam-btns" style="margin-bottom:8px">
-    <button class="cam-btn" id="photoSourceCamera">📷 Cámara</button>
-    <button class="cam-btn" id="photoSourceGallery">🖼️ Galería</button>
+    <button type="button" class="cam-btn" id="photoSourceCamera">📷 Cámara</button>
+    <button type="button" class="cam-btn" id="photoSourceGallery">🖼️ Galería</button>
   </div>
-  <button class="save-btn" id="photoSourceCancel" style="background:var(--warm8-20);color:var(--text)">Cancelar</button>
+  <button type="button" class="save-btn" id="photoSourceCancel" style="background:var(--warm8-20);color:var(--text)">Cancelar</button>
 </div></div>
 
 <!-- ERROR MODAL (con miniatura) -->
@@ -355,14 +362,14 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <div style="font-size:12px;color:var(--text2);margin-bottom:4px">Motivo:</div>
     <div style="font-size:13px;color:var(--red);line-height:1.4" id="errorReason"></div>
   </div>
-  <button class="save-btn" id="errorModalOk">Aceptar</button>
+  <button type="button" class="save-btn" id="errorModalOk">Aceptar</button>
 </div></div>
 
 <!-- BATCH SUMMARY MODAL (con miniaturas) -->
 <div class="modal-bg" id="batchSummaryBg" style="z-index:10002"><div class="modal" style="border-radius:12px;max-width:480px;margin:auto;padding:24px 20px;max-height:80vh;overflow-y:auto">
   <h2 style="justify-content:center;margin-bottom:16px">📊 Resumen del lote</h2>
   <div id="batchSummaryContent"></div>
-  <button class="save-btn" id="batchSummaryOk" style="margin-top:16px">Aceptar</button>
+  <button type="button" class="save-btn" id="batchSummaryOk" style="margin-top:16px">Aceptar</button>
 </div></div>
 
 <!-- BATCH PENDING REVIEW MODAL (revisión manual una por una) -->
@@ -374,15 +381,15 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div style="font-size:11px;color:var(--red);margin-bottom:12px;line-height:1.4;background:#fff5f5;padding:10px;border-radius:8px;border:1px solid var(--red)" id="batchReviewReason"></div>
   <div style="font-size:11px;color:var(--text2);margin-bottom:12px" id="batchReviewAllergens"></div>
   <div style="display:flex;flex-direction:column;gap:8px">
-    <button class="save-btn" id="batchReviewConfirmBtn">Confirmar y guardar</button>
-    <button class="save-btn" id="batchReviewCorrectBtn" style="background:var(--warm8-80)">Corregir y guardar</button>
-    <button class="save-btn" id="batchReviewSkipBtn" style="background:var(--warm8-20);color:var(--text)">Saltar (no guardar)</button>
+    <button type="button" class="save-btn" id="batchReviewConfirmBtn">Confirmar y guardar</button>
+    <button type="button" class="save-btn" id="batchReviewCorrectBtn" style="background:var(--warm8-80)">Corregir y guardar</button>
+    <button type="button" class="save-btn" id="batchReviewSkipBtn" style="background:var(--warm8-20);color:var(--text)">Saltar (no guardar)</button>
   </div>
 </div></div>
 
 <!-- SETTINGS MODAL -->
 <div class="modal-bg" id="settingsBg"><div class="modal">
-  <h2>Ajustes <button class="modal-close" id="settingsClose">&times;</button></h2>
+  <h2>Ajustes <button type="button" class="modal-close" id="settingsClose">&times;</button></h2>
   <div class="settings-section">
     <h3>Cuenta</h3>
     <div class="settings-row"><span class="settings-label">Usuario</span><span class="settings-val" id="settingsUser">administrador</span></div>
@@ -399,10 +406,10 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
       <label style="font-size:12px;color:var(--text2)">API Key de Google (obligatorio para Drive)</label>
       <input class="api-key-input" id="gdriveApiKeyInput" type="password" placeholder="AIza..." style="margin-top:4px;width:100%">
     </div>
-    <button class="save-btn" id="gdriveConfigSave" style="background:var(--warm8-60);margin-bottom:12px">Guardar configuración Google</button>
-    <button class="save-btn" id="gdriveConnectBtn" style="background:#4285f4;color:#fff">🔗 Conectar Google Drive</button>
-    <button class="save-btn" id="gdriveDisconnectBtn" style="background:var(--red);display:none">Desconectar Google Drive</button>
-    <button class="save-btn" id="gdriveSyncManualBtn" style="background:var(--warm8-80);display:none">🔄 Sincronizar ahora</button>
+    <button type="button" class="save-btn" id="gdriveConfigSave" style="background:var(--warm8-60);margin-bottom:12px">Guardar configuración Google</button>
+    <button type="button" class="save-btn" id="gdriveConnectBtn" style="background:#4285f4;color:#fff">🔗 Conectar Google Drive</button>
+    <button type="button" class="save-btn" id="gdriveDisconnectBtn" style="background:var(--red);display:none">Desconectar Google Drive</button>
+    <button type="button" class="save-btn" id="gdriveSyncManualBtn" style="background:var(--warm8-80);display:none">🔄 Sincronizar ahora</button>
     <div id="syncManualStatus" style="margin-top:12px;display:none"></div>
     <div class="settings-row" id="gdriveStatus" style="display:none">
       <span class="settings-label">Estado</span>
@@ -417,8 +424,8 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <div class="settings-info">Para usar la cámara con lectura automática de etiquetas y la revisión de incoherencias, necesitas una clave API de Google (Gemini). Si no la tienes, la función de cámara no funcionará, pero la consulta y edición manual siguen disponibles.</div>
     <input class="api-key-input" id="apiKeyInput" type="password" placeholder="AIza... (clave Gemini)">
     <div class="api-key-actions">
-      <button class="api-key-save" id="apiKeySave">Guardar clave</button>
-      <button class="api-key-save api-key-test" id="apiKeyTestBtn">Probar conexión IA</button>
+      <button type="button" class="api-key-save" id="apiKeySave">Guardar clave</button>
+      <button type="button" class="api-key-save api-key-test" id="apiKeyTestBtn">Probar conexión IA</button>
     </div>
     <div class="api-key-status no" id="apiKeyStatus">Sin clave configurada</div>
     <div class="settings-info" id="apiKeyTestStatus" style="display:none;margin-top:8px;font-size:12px"></div>
@@ -433,13 +440,13 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v0103202621:41h</span></div>
-    <button class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v0303202519:51h</span></div>
+    <button type="button" class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section">
     <h3>🔍 Revisión de incoherencias</h3>
     <div class="settings-info">Analiza toda la base de datos para detectar alérgenos que probablemente faltan o que parecen incorrectos. Usa reglas locales e inteligencia artificial.</div>
-    <button class="save-btn" id="auditRunBtn" style="background:var(--warm8)">Ejecutar revisión de incoherencias</button>
+    <button type="button" class="save-btn" id="auditRunBtn" style="background:var(--warm8)">Ejecutar revisión de incoherencias</button>
     <div id="auditLastRun" style="font-size:11px;color:var(--text2);margin-top:8px;display:none"></div>
   </div>
   <div class="settings-section">
@@ -448,11 +455,11 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <div id="appStatus"></div>
     <div id="logContainer"></div>
     <div class="btn-row">
-      <button class="save-btn" id="copyLogsBtn">📋 Copiar diagnóstico completo</button>
-      <button class="save-btn" id="clearLogsBtn" style="background:var(--warm8-40)">🗑️ Limpiar registro</button>
+      <button type="button" class="save-btn" id="copyLogsBtn">📋 Copiar diagnóstico completo</button>
+      <button type="button" class="save-btn" id="clearLogsBtn" style="background:var(--warm8-40)">🗑️ Limpiar registro</button>
     </div>
   </div>
-  <button class="logout-btn" id="logoutBtn">Cerrar sesión</button>
+  <button type="button" class="logout-btn" id="logoutBtn">Cerrar sesión</button>
 </div></div>
 
 <script>
@@ -993,7 +1000,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.4-020320262154',
+    version:'1.0.4-030320251951',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -1747,9 +1754,15 @@ function updateSyncStatusUI() {
   const decision = localStorage.getItem('last_sync_decision') || '—';
   const pendingCount=getPendingSyncCount();
   const pending = pendingCount>0 ? `<span style="color:var(--red)">⚠ ${pendingCount} pendiente${pendingCount!==1?'s':''}</span>` : '<span style="color:green">✓ Sincronizado</span>';
+  const folderId = localStorage.getItem('gdrive_folder_id');
+  const fileId = localStorage.getItem('gdrive_file_id') || localStorage.getItem('remote_file_id');
+  const locFolder = folderId ? `<a href="https://drive.google.com/drive/folders/${folderId}" target="_blank" rel="noopener" style="color:var(--warm8);text-decoration:underline">Abrir carpeta</a>` : '—';
+  const locFile = fileId ? `<a href="https://drive.google.com/file/d/${fileId}/view" target="_blank" rel="noopener" style="color:var(--warm8);text-decoration:underline">Abrir archivo</a>` : '—';
 
   el.innerHTML = `
     <div class="sync-status-grid">
+      <div><b>Ubicación carpeta:</b> ${locFolder}</div>
+      <div><b>Archivo productos.json:</b> ${locFile}</div>
       <div><b>Productos locales:</b> ${localCount}</div>
       <div><b>Última actualización local:</b> ${localTs ? new Date(parseInt(localTs)).toLocaleString('es-ES') : '—'}</div>
       <div><b>Productos remotos (última lectura):</b> ${remoteCount}</div>
@@ -2445,7 +2458,7 @@ function updateCancelReviewUI(){
   btn.style.display = pending>0 ? 'flex' : 'none';
 }
 
-(function(){let h='<button class="ftag-sin" id="sinBtn">✓ SIN</button>';AL.forEach(a=>{h+=`<button class="ftag" data-f="${a}" title="${a}"><img src="${IC[a]}" alt="${a}"></button>`});h+='<button class="ftag-clear" id="clearFilters">✕</button>';fl.innerHTML=h;const sinBtn=document.getElementById('sinBtn'),clearBtn=document.getElementById('clearFilters');fl.querySelectorAll('.ftag[data-f]').forEach(b=>{b.addEventListener('click',()=>{const a=b.dataset.f;if(af.has(a)){af.delete(a);b.classList.remove('active')}else{af.add(a);b.classList.add('active')}uc();render()})});sinBtn.addEventListener('click',()=>{sinMode=!sinMode;sinBtn.classList.toggle('active',sinMode);render()});clearBtn.addEventListener('click',()=>{af.clear();sinMode=false;fl.querySelectorAll('.ftag,.ftag-sin').forEach(b=>b.classList.remove('active'));uc();render()});function uc(){clearBtn.classList.toggle('show',af.size>0||sinMode)}})();
+(function(){let h='<button type="button" class="ftag-sin" id="sinBtn">✓ SIN</button>';AL.forEach(a=>{h+=`<button type="button" class="ftag" data-f="${a}" title="${a}"><img src="${IC[a]}" alt="${a}"></button>`});h+='<button type="button" class="ftag-clear" id="clearFilters">✕</button>';fl.innerHTML=h;const sinBtn=document.getElementById('sinBtn'),clearBtn=document.getElementById('clearFilters');fl.querySelectorAll('.ftag[data-f]').forEach(b=>{b.addEventListener('click',()=>{const a=b.dataset.f;if(af.has(a)){af.delete(a);b.classList.remove('active')}else{af.add(a);b.classList.add('active')}uc();render()})});sinBtn.addEventListener('click',()=>{sinMode=!sinMode;sinBtn.classList.toggle('active',sinMode);render()});clearBtn.addEventListener('click',()=>{af.clear();sinMode=false;fl.querySelectorAll('.ftag,.ftag-sin').forEach(b=>b.classList.remove('active'));uc();render()});function uc(){clearBtn.classList.toggle('show',af.size>0||sinMode)}})();
 
 let renderLimit=150;
 let currentFiltered=[];
@@ -2653,7 +2666,7 @@ function closeModal(){
 function openModal(){
   navPush('add');
   modalBg.classList.add('open');
-  document.getElementById('modalTitle').innerHTML=(editMode?'Editar producto':'Añadir producto')+' <button class="modal-close" id="mc2">&times;</button>';
+  document.getElementById('modalTitle').innerHTML=(editMode?'Editar producto':'Añadir producto')+' <button type="button" class="modal-close" id="mc2">&times;</button>';
   document.getElementById('mc2').addEventListener('click',closeModal);
   document.getElementById('methodsRow').style.display=editMode?'none':'grid';
   document.getElementById('editBtns').style.display=editMode?'flex':'none';
