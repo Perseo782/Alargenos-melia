@@ -228,7 +228,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button type="button" class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v0303202521:16h</div>
+    <div class="login-version">v0303202521:30h</div>
   </div>
 </div>
 
@@ -442,7 +442,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v0303202521:16h</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v0303202521:30h</span></div>
     <button type="button" class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section">
@@ -814,7 +814,7 @@ function startPhotoAnalysis(origin, nPhotos, imageMeta){
       n_photos: nPhotos,
       image_meta: imageMeta || null,
       prompt_id: 'AI_PROMPT',
-      model: typeof GEMINI_MODEL!=='undefined' ? GEMINI_MODEL : 'gemini-2.5-flash',
+      model: typeof GEMINI_MODEL!=='undefined' ? GEMINI_MODEL : 'gemini-2.5-flash-lite',
       provider: 'google',
       network_online: navigator.onLine
     },
@@ -1005,7 +1005,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.4-030320252116',
+    version:'1.0.4-030320252130',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -1082,7 +1082,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 function normalizeApiKey(s){if(typeof s!=='string')return '';return s.replace(/\s/g,'').replace(/\u200B|\uFEFF/g,'').trim()}
 function getApiKey(){return normalizeApiKey(localStorage.getItem('alerg_apikey')||'')}
 function getVisionApiKey(){return normalizeApiKey(localStorage.getItem('gdrive_api_key')||'')}
-const GEMINI_MODEL='gemini-2.5-flash';
+const GEMINI_MODEL='gemini-2.5-flash-lite';
 const GEMINI_GENERATE_URL=`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 function buildGeminiHeaders(apiKey){
   return {'Content-Type':'application/json','x-goog-api-key':normalizeApiKey(apiKey||'')};
