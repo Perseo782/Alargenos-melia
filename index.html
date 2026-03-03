@@ -228,7 +228,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button type="button" class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v0303202521:30h</div>
+    <div class="login-version">v0303202523:25h</div>
   </div>
 </div>
 
@@ -442,7 +442,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v0303202521:30h</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v0303202523:25h</span></div>
     <button type="button" class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section">
@@ -744,7 +744,7 @@ const ERROR_CODES={
 
 let diagnosticLogs=[];
 const MAX_LOGS=250;
-const LOG_RETENTION_DAYS=10;
+const LOG_RETENTION_DAYS=1;
 
 // Cargar logs persistidos
 try {
@@ -773,7 +773,7 @@ function persistLogs(){
 
 // Registro de análisis de fotos (ciclo completo por analysis_id)
 const MAX_ANALYSES = 500;
-const ANALYSIS_RETENTION_DAYS = 10;
+const ANALYSIS_RETENTION_DAYS = 1;
 let diagnosticAnalyses = [];
 try {
   const storedA = localStorage.getItem('app_analyses');
@@ -1005,7 +1005,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.4-030320252130',
+    version:'1.0.4-030320252325',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -1551,10 +1551,16 @@ setTimeout(() => {
     local_last_update: localStorage.getItem('local_last_update') || null
   });
 }, 0);
+const MAX_QUEUE_PHOTOS=10;
 let photoQueue=[];try{const s=localStorage.getItem('alergenos_queue');if(s)photoQueue=JSON.parse(s)}catch(e){}
+if(!Array.isArray(photoQueue))photoQueue=[];
+if(photoQueue.length>MAX_QUEUE_PHOTOS){photoQueue=photoQueue.slice(0,MAX_QUEUE_PHOTOS);try{localStorage.setItem('alergenos_queue',JSON.stringify(photoQueue))}catch(e){}}
 let queuePendingReview=[];
 let isProcessing=false;
-function saveQueue(){try{localStorage.setItem('alergenos_queue',JSON.stringify(photoQueue))}catch(e){}}
+function saveQueue(){
+  if(photoQueue.length>MAX_QUEUE_PHOTOS)photoQueue=photoQueue.slice(0,MAX_QUEUE_PHOTOS);
+  try{localStorage.setItem('alergenos_queue',JSON.stringify(photoQueue))}catch(e){}
+}
 // (Sistema de logs unificado definido más arriba)
 
 // ============================================================
@@ -3057,9 +3063,11 @@ MISMO ALÉRGENO EN VARIOS IDIOMAS: Si ves "apio", "celery", "céleri", "Sellerie
 PASO 3 — VERIFICACIÓN
 Revisa que no hayas omitido ningún alérgeno o traza que SÍ aparezca escrito en la imagen. Inclúyelos todos en hallazgos_texto, mapeo, alergenos y/o trazas.
 
-NOMBRE DEL PRODUCTO: Usa el nombre tal como aparece en el envase (título principal en español). Respeta mayúsculas de la primera letra de cada palabra significativa (ej.: "Salteado rústico - Mezcla de verduras"). No inventes ni reordenes.
-- Si detectas dos posibles títulos entre fotos, elige SOLO el título principal más claro. No concatenes títulos con "y".
-- El campo "nombre" debe ser único, canónico y breve (máximo 80 caracteres).
+NOMBRE DEL PRODUCTO — SIEMPRE EN ESPAÑOL:
+El campo "nombre" debe estar SIEMPRE en español, sea cual sea el formato de la etiqueta.
+ETIQUETAS CON VARIOS IDIOMAS: Identifica la versión en español (por marcadores como ES, Español, Spanish, versión española, o por el propio texto). Usa SIEMPRE el nombre en español cuando exista. No uses italiano, portugués, francés, inglés u otro idioma aunque aparezca antes o más destacado.
+ETIQUETAS EN UN SOLO IDIOMA (distinto del español): Traduce el nombre del producto al español.
+Prioriza la variante española sin importar el orden. Respeta mayúsculas. Máximo 80 caracteres. No concatenes títulos con "y".
 
 ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
 - Incluye SOLO lo que esté EXPLÍCITAMENTE escrito (ingredientes, "puede contener", "presencia fortuita", etc.).
@@ -3108,9 +3116,11 @@ MISMO ALÉRGENO EN VARIOS IDIOMAS: Si ves "apio", "celery", "céleri", "Sellerie
 PASO 3 — VERIFICACIÓN
 Revisa que no hayas omitido ningún alérgeno o traza que SÍ aparezca escrito en el texto. Inclúyelos todos en hallazgos_texto, mapeo, alergenos y/o trazas.
 
-NOMBRE DEL PRODUCTO: Usa el nombre tal como aparece en el envase (título principal en español). Respeta mayúsculas de la primera letra de cada palabra significativa (ej.: "Salteado rústico - Mezcla de verduras"). No inventes ni reordenes.
-- Si detectas dos posibles títulos en bloques OCR distintos, elige SOLO el título principal más claro. No concatenes títulos con "y".
-- El campo "nombre" debe ser único, canónico y breve (máximo 80 caracteres).
+NOMBRE DEL PRODUCTO — SIEMPRE EN ESPAÑOL:
+El campo "nombre" debe estar SIEMPRE en español, sea cual sea el formato de la etiqueta.
+ETIQUETAS CON VARIOS IDIOMAS: Identifica la versión en español (por marcadores como ES, Español, Spanish, versión española, o por el propio texto: albahaca, aceite vs basilico, olio, etc.). Usa SIEMPRE el nombre en español cuando exista. No uses italiano, portugués, francés, inglés u otro idioma aunque aparezca antes o más destacado.
+ETIQUETAS EN UN SOLO IDIOMA (distinto del español): Traduce el nombre del producto al español.
+Prioriza la variante española sin importar el orden en el OCR. Respeta mayúsculas. Máximo 80 caracteres. No concatenes títulos con "y".
 
 ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
 - Incluye SOLO lo que esté EXPLÍCITAMENTE escrito (ingredientes, "puede contener", "presencia fortuita", etc.).
@@ -4643,7 +4653,7 @@ async function gdriveSmartSync(trigger = 'manual') {
       remote_last_update: remoteState.remoteLastUpdate
     });
 
-    // PASO 3: comparar y decidir
+    // PASO 3: comparar y decidir — regla "último que guarde gana"
     let decision;
     let reason;
 
@@ -4651,20 +4661,29 @@ async function gdriveSmartSync(trigger = 'manual') {
       decision = 'upload';
       reason = 'No existe archivo remoto';
     } else if(remoteState.remoteLastUpdate > localLastUpdate) {
-      // Protección: no sobrescribir más datos locales con menos datos remotos (evitar pérdida de registros)
+      // Remoto más nuevo → gana remoto (download), salvo si local tiene más registros (evitar pérdida)
       if(remoteState.remoteCount < localCount) {
         decision = 'upload';
-        reason = `Remoto más nuevo pero tiene menos productos (${remoteState.remoteCount}) que local (${localCount}). Se sube local para no perder registros.`;
+        reason = 'Remoto más nuevo pero local tiene más productos; subir para no perder registros';
       } else {
         decision = 'download';
-        reason = `Remoto más nuevo: ${new Date(remoteState.remoteLastUpdate).toLocaleString('es-ES')} vs local: ${new Date(localLastUpdate).toLocaleString('es-ES')}`;
+        reason = 'Remoto más nuevo';
       }
     } else if(localLastUpdate > remoteState.remoteLastUpdate) {
       decision = 'upload';
-      reason = `Local más nuevo: ${new Date(localLastUpdate).toLocaleString('es-ES')} vs remoto: ${new Date(remoteState.remoteLastUpdate).toLocaleString('es-ES')}`;
+      reason = 'Local más nuevo';
     } else {
-      decision = 'none';
-      reason = 'Mismo timestamp. Sin cambios.';
+      // Empate de timestamp: preferir el que tenga más productos para no perder datos
+      if(remoteState.remoteCount > localCount) {
+        decision = 'download';
+        reason = 'Mismo timestamp; remoto tiene más productos';
+      } else if(localCount > remoteState.remoteCount) {
+        decision = 'upload';
+        reason = 'Mismo timestamp; local tiene más productos';
+      } else {
+        decision = 'none';
+        reason = 'Sin cambios';
+      }
     }
 
     addLog('SYNC_COMPARE', {
@@ -4757,7 +4776,7 @@ async function gdriveSmartSync(trigger = 'manual') {
           remote_count_after: verifyState.remoteCount,
           remote_last_update_after: verifyState.remoteLastUpdate
         });
-        showToast('✓ Datos subidos a Google Drive', 'info');
+        showToast('✓ Sincronizado', 'info');
         finishSyncSession(session, 'upload', 'ok', `Subido y verificado: ${localCount} productos`);
       }
 
@@ -4767,13 +4786,13 @@ async function gdriveSmartSync(trigger = 'manual') {
       render();
       clearSyncOutbox();
       addLog('SYNC_DOWNLOAD_APPLIED', { sync_session_id: session.sync_session_id, trigger, remote_count: remoteState.remoteCount, reason });
-      showToast(`✓ Descargado desde Drive: ${remoteState.remoteCount} productos`, 'info');
+      showToast('✓ Sincronizado', 'info');
       session.remote_count_after = remoteState.remoteCount;
       finishSyncSession(session, 'download', 'ok', `Descargado: ${remoteState.remoteCount} productos`);
 
     } else {
       addLog('SYNC_NO_CHANGES', { sync_session_id: session.sync_session_id, trigger, reason });
-      if(trigger === 'manual') showToast('✓ Sin cambios. Todo actualizado.', 'info');
+      if(trigger === 'manual') showToast('✓ Sincronizado', 'info');
       clearSyncOutbox();
       finishSyncSession(session, 'none', 'ok', 'Sin cambios necesarios');
     }
