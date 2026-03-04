@@ -63,6 +63,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 .hdr-chip-btn:active{background:var(--warm8-20)}
 .hdr-chip-btn:disabled{opacity:.6;cursor:not-allowed}
 .hdr-chip-icon{font-size:14px;line-height:1}
+.fixes-count{min-width:20px;height:18px;padding:0 6px;border-radius:999px;background:var(--red);color:#fff;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center}
 .pending-view-indicator{font-size:11px;color:var(--text2);margin-bottom:8px;padding:0 2px;letter-spacing:0.2px}
 .search{position:relative;margin-bottom:12px}
 .search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--warm8-60);pointer-events:none}
@@ -175,6 +176,10 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 .cam-input{display:none}
 .ai-status{font-size:12px;color:var(--text2);padding:12px;border-radius:var(--radius);background:var(--warm8-10);margin-bottom:14px;display:none;line-height:1.5}
 .ai-status.show{display:block}
+.ai-status.auto-error{display:flex!important;align-items:center;gap:12px;cursor:pointer;border:1px solid var(--warm8-40);transition:background .15s}
+.ai-status.auto-error:hover{background:var(--warm8-20)}
+.ai-status .auto-thumb{width:56px;height:56px;border-radius:8px;flex-shrink:0;background-size:cover;background-position:center;border:1px solid var(--warm8-40)}
+.ai-status .auto-msg{flex:1;min-width:0}
 .spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--warm8-40);border-top-color:var(--warm8);border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
 @keyframes spin{to{transform:rotate(360deg)}}
 .ai-result{display:none}.ai-result.show{display:block}
@@ -230,7 +235,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button type="button" class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v0403202612:13h</div>
+    <div class="login-version">v0503202613:34h</div>
   </div>
 </div>
 
@@ -250,6 +255,11 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
         </button>
       </div>
       <div class="hdr-counters-right">
+        <button type="button" class="hdr-chip-btn" id="fixesBtn" style="display:none" title="Errores a solucionar">
+          <span class="hdr-chip-icon" aria-hidden="true">⚠</span>
+          <span>Errores</span>
+          <span class="fixes-count">0</span>
+        </button>
         <button type="button" class="hdr-chip-btn" id="syncBtn" title="Sincronización forzada">
           <span class="hdr-chip-icon" aria-hidden="true">⟳</span>
           <span>Sync</span>
@@ -373,6 +383,13 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <button type="button" class="save-btn" id="errorModalOk">Aceptar</button>
 </div></div>
 
+<!-- PENDING FIXES MODAL (errores a solucionar) -->
+<div class="modal-bg" id="fixesModalBg" style="z-index:10001"><div class="modal" style="border-radius:12px;max-width:480px;margin:auto;padding:24px 20px;max-height:80vh;overflow-y:auto">
+  <h2 style="justify-content:space-between;margin-bottom:16px">Errores a solucionar <button type="button" class="modal-close" id="fixesModalClose">&times;</button></h2>
+  <div id="fixesList" style="display:flex;flex-direction:column;gap:10px"></div>
+  <p id="fixesEmpty" style="text-align:center;color:var(--text2);font-size:14px;padding:20px;display:none">No hay errores pendientes</p>
+</div></div>
+
 <!-- BATCH SUMMARY MODAL (con miniaturas) -->
 <div class="modal-bg" id="batchSummaryBg" style="z-index:10002"><div class="modal" style="border-radius:12px;max-width:480px;margin:auto;padding:24px 20px;max-height:80vh;overflow-y:auto">
   <h2 style="justify-content:center;margin-bottom:16px">📊 Resumen del lote</h2>
@@ -448,7 +465,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v0403202612:13h</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v0403202612:46h</span></div>
     <button type="button" class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section">
@@ -607,6 +624,57 @@ function closeSettings(){
 }
 document.getElementById('gearBtn').addEventListener('click',()=>openSettings());
 document.getElementById('settingsClose').addEventListener('click',()=>closeSettings());
+
+// ─── PENDING FIXES (errores a solucionar) ───
+function openFixesModal(){
+  const list=document.getElementById('fixesList'),empty=document.getElementById('fixesEmpty');
+  const fixes=loadPendingFixes();
+  list.innerHTML='';list.style.display=fixes.length?'flex':'none';empty.style.display=fixes.length?'none':'block';
+  fixes.forEach(f=>{
+    const card=document.createElement('div');
+    card.className='settings-section';
+    card.style.cursor='default';
+    const thumb=f.dataUrl?`<div style="width:56px;height:56px;border-radius:8px;background:url(${f.dataUrl}) center/cover;flex-shrink:0"></div>`:'';
+    card.innerHTML=`<div style="display:flex;gap:12px;align-items:flex-start">
+      ${thumb}
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:2px">${(f.type||'error').replace(/_/g,' ')}</div>
+        <div style="font-size:14px;font-weight:500;margin-bottom:4px">${(f.motivo||f.reason||'Sin motivo').slice(0,80)}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+          <button type="button" class="save-btn" style="font-size:12px;padding:6px 10px" data-action="rehacer" data-id="${f.id}">Rehacer</button>
+          <button type="button" class="save-btn" style="font-size:12px;padding:6px 10px;background:var(--warm8-20);color:var(--text)" data-action="omitir" data-id="${f.id}">Omitir</button>
+          ${f.dataUrl?'<button type="button" class="save-btn" style="font-size:12px;padding:6px 10px;background:var(--warm8-80)" data-action="revisar" data-id="'+f.id+'">Revisar</button>':''}
+        </div>
+      </div>
+    </div>`;
+    list.appendChild(card);
+  });
+  list.querySelectorAll('[data-action]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const id=btn.dataset.id,action=btn.dataset.action;
+      const fix=fixes.find(x=>x.id===id);if(!fix)return;
+      if(action==='omitir'){removePendingFix(id);openFixesModal();updateFixesBadge();return;}
+      if(action==='rehacer'){
+        removePendingFix(id);
+        closeFixesModal();
+        if(fix.dataUrl&&autoMode!==true){openModal();activateMethod('camera');setTimeout(()=>{photos[0]=fix.dataUrl;img1.src=fix.dataUrl;img1.style.display='block';slot1.classList.add('filled');analyzePhotos([fix.dataUrl]);},150);}
+        else if(fix.dataUrl){autoProcessPhoto(fix.dataUrl);}
+        updateFixesBadge();return;
+      }
+      if(action==='revisar'&&fix.dataUrl){
+        removePendingFix(id);closeFixesModal();
+        openModal();activateMethod('camera');setTimeout(()=>{photos[0]=fix.dataUrl;img1.src=fix.dataUrl;img1.style.display='block';slot1.classList.add('filled');analyzePhotos([fix.dataUrl]);},150);
+        updateFixesBadge();return;
+      }
+    });
+  });
+  document.getElementById('fixesModalBg').classList.add('open');
+}
+function closeFixesModal(){document.getElementById('fixesModalBg').classList.remove('open');}
+document.getElementById('fixesBtn').addEventListener('click',openFixesModal);
+document.getElementById('fixesModalClose').addEventListener('click',closeFixesModal);
+document.getElementById('fixesModalBg').addEventListener('click',e=>{if(e.target.id==='fixesModalBg')closeFixesModal();});
+updateFixesBadge();
 
 // ─── FORCE SYNC ───
 document.getElementById('syncBtn').addEventListener('click',async()=>{
@@ -1012,7 +1080,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.4-040320261213',
+    version:'1.0.4-040320261246',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -1632,6 +1700,39 @@ function finishSyncSession(session, decision, status, summary, errorDetail = nul
 // Estado de sync visible en Ajustes
 const DRIVE_OUTBOX_KEY='alergenos_drive_outbox_v1';
 const DRIVE_OUTBOX_LIMIT=500;
+const PENDING_FIXES_KEY='alergenos_pending_fixes_v1';
+const AUTO_SCAN_QUEUE_KEY='alergenos_auto_scan_queue_v1';
+
+function loadPendingFixes(){
+  try{
+    const raw=localStorage.getItem(PENDING_FIXES_KEY);
+    if(!raw) return [];
+    const parsed=JSON.parse(raw);
+    return Array.isArray(parsed)?parsed.filter(x=>x&&x.id):[];
+  }catch(_){return [];}
+}
+function savePendingFixes(arr){
+  try{localStorage.setItem(PENDING_FIXES_KEY,JSON.stringify(arr||[]));updateFixesBadge();}catch(_){}
+}
+function addPendingFix(item){
+  const arr=loadPendingFixes();
+  arr.push({...item,id:item.id||`pf_${Date.now()}_${Math.random().toString(36).slice(2,9)}`});
+  savePendingFixes(arr);return arr[arr.length-1];
+}
+function removePendingFix(id){
+  const arr=loadPendingFixes().filter(x=>x.id!==id);
+  savePendingFixes(arr);return arr;
+}
+function updateFixesBadge(){
+  const n=loadPendingFixes().length;
+  const el=document.getElementById('fixesBtn');
+  if(el){el.style.display=n>0?'inline-flex':'none';el.querySelector('.fixes-count').textContent=n;el.title=`${n} error${n!==1?'es':''} a solucionar`;}
+}
+
+function loadAutoScanQueue(){
+  try{const raw=localStorage.getItem(AUTO_SCAN_QUEUE_KEY);if(!raw)return[];const p=JSON.parse(raw);return Array.isArray(p)?p:[];}catch(_){return [];}
+}
+function saveAutoScanQueue(arr){try{localStorage.setItem(AUTO_SCAN_QUEUE_KEY,JSON.stringify(arr||[]));}catch(_){}}
 
 function loadDriveOutbox(){
   try{
@@ -2301,11 +2402,17 @@ function buildProductName(res){const n=(res.nombre||'').toString().trim();const 
 function normalizeAIPhotoResult(obj){
   const out={...obj};
   out.nombre=(out.nombre||'').toString().trim();
-  out.peso_unidades=(String(out.peso_unidades||'').trim()).slice(0,22);
+  let pu=(String(out.peso_unidades||'').trim()).replace(/\bmle\b/gi,'ml').replace(/\bge\b/gi,'g');
+  out.peso_unidades=pu.slice(0,22);
   out.hallazgos_texto=Array.isArray(out.hallazgos_texto)?out.hallazgos_texto.map(x=>String(x||'').trim()).filter(Boolean):[];
-  out.mapeo=Array.isArray(out.mapeo)?out.mapeo.map(m=>({texto:String((m&&m.texto)||'').trim(),alergeno:normalizeAllergen((m&&m.alergeno)||'')})).filter(m=>m.texto||m.alergeno):[];
+  out.mapeo=Array.isArray(out.mapeo)?out.mapeo.map(m=>({texto:String((m&&m.texto)||'').trim(),alergeno:normalizeAllergen((m&&m.alergeno)||'')})).filter(m=>m.texto||m.alergeno).filter(m=>{const t=norm(m.texto);if(/\b(?:sin\s+gluten|gluten[\s-]?free|libre\s+de\s+gluten)\b/i.test(t)&&m.alergeno==='CEREALES')return false;if(/\b(?:sin\s+lactosa|lactose[\s-]?free)\b/i.test(t)&&m.alergeno==='LÁCTEO')return false;if(/\b(?:sin\s+huevo|egg[\s-]?free)\b/i.test(t)&&m.alergeno==='HUEVO')return false;if(/\b(?:sin\s+cacahuete|peanut[\s-]?free)\b/i.test(t)&&m.alergeno==='CACAHUETES')return false;return true;}):[];
   out.alergenos=[...new Set((Array.isArray(out.alergenos)?out.alergenos:[]).map(normalizeAllergen).filter(Boolean))];
   out.trazas=[...new Set((Array.isArray(out.trazas)?out.trazas:[]).map(normalizeAllergen).filter(Boolean))];
+  const txt=(out.hallazgos_texto||[]).join(' ');
+  if(/\b(?:sin\s+gluten|gluten[\s-]?free|libre\s+de\s+gluten)\b/i.test(txt)){out.alergenos=out.alergenos.filter(a=>a!=='CEREALES');out.trazas=out.trazas.filter(a=>a!=='CEREALES');}
+  if(/\b(?:sin\s+lactosa|lactose[\s-]?free)\b/i.test(txt)){out.alergenos=out.alergenos.filter(a=>a!=='LÁCTEO');out.trazas=out.trazas.filter(a=>a!=='LÁCTEO');}
+  if(/\b(?:sin\s+huevo|egg[\s-]?free)\b/i.test(txt)){out.alergenos=out.alergenos.filter(a=>a!=='HUEVO');out.trazas=out.trazas.filter(a=>a!=='HUEVO');}
+  if(/\b(?:sin\s+cacahuete|peanut[\s-]?free)\b/i.test(txt)){out.alergenos=out.alergenos.filter(a=>a!=='CACAHUETES');out.trazas=out.trazas.filter(a=>a!=='CACAHUETES');}
   out.notas=String(out.notas||'').trim();
   out.warning=localizeWarningMessage(String(out.warning||'').trim());
   return out;
@@ -2313,7 +2420,9 @@ function normalizeAIPhotoResult(obj){
 function applyPhotoReviewValidation(result,rawText,source='photo'){
   const alergSet=new Set([...(result.alergenos||[]),...(result.trazas||[])].map(normalizeAllergen));
   const mapeoDiff=[];
+  const esNegacion=t=>(/\b(?:sin\s+gluten|gluten[\s-]?free|libre\s+de\s+gluten|sin\s+lactosa|lactose[\s-]?free)\b/i.test(t));
   result.hallazgos_texto.forEach(txt=>{
+    if(esNegacion(txt))return;
     const key=norm(txt);
     const exact=result.mapeo.filter(m=>norm(m.texto)===key).map(m=>m.alergeno).filter(Boolean);
     const byContains=result.mapeo.filter(m=>key.includes(norm(m.texto))||norm(m.texto).includes(key)).map(m=>m.alergeno).filter(Boolean);
@@ -2325,9 +2434,14 @@ function applyPhotoReviewValidation(result,rawText,source='photo'){
   if(mapeoDiff.length) addLog('WARN','PHOTO_MAPEO_DIFF','PHOTO_MAPEO_DIFF',{source,diff:mapeoDiff});
   const textForCheck=(result.hallazgos_texto.join(' ')||String(rawText||''));
   const keywordAlerts=[];
+  const negacionCereales=/\b(?:sin\s+gluten|gluten[\s-]?free|libre\s+de\s+gluten)\b/i.test(textForCheck);
+  const negacionLacteo=/\b(?:sin\s+lactosa|lactose[\s-]?free)\b/i.test(textForCheck);
   PHOTO_KEYWORD_RULES.forEach(rule=>{
     const hit=rule.rx.find(rx=>rx.test(textForCheck));
-    if(hit && !alergSet.has(rule.allergen)) keywordAlerts.push({allergen:rule.allergen,level:rule.level,pattern:hit.toString()});
+    if(!hit||alergSet.has(rule.allergen))return;
+    if(rule.allergen==='CEREALES'&&negacionCereales)return;
+    if(rule.allergen==='LÁCTEO'&&negacionLacteo)return;
+    keywordAlerts.push({allergen:rule.allergen,level:rule.level,pattern:hit.toString()});
   });
   if(keywordAlerts.length) addLog('WARN','PHOTO_KEYWORD_ALERT','PHOTO_KEYWORD_ALERT',{source,alerts:keywordAlerts});
   result.review_alerts={mapeo:mapeoDiff,keywords:keywordAlerts};
@@ -2779,6 +2893,10 @@ function openEdit(idx){editMode=true;editIdx=idx;openModal()}
 function activateMethod(method='manual'){
   const isCamera=method==='camera';
   const isBatch=method==='batch';
+  if(autoMode&&scanSession.photosTaken>0){
+    const s=scanSession,saved=s.productsSaved,fail=s.failedPhotos.length,missing=s.photosTaken-saved-fail;
+    if(missing>0) showToast(`${s.photosTaken} fotos · ${saved} guardadas · ${fail} pendiente(s) · ${missing} sin registrar`,'info');
+  }
   document.querySelectorAll('.method-btn').forEach(btn=>{
     btn.classList.toggle('active',btn.dataset.method===method && method!=='manual');
   });
@@ -3103,6 +3221,8 @@ Extrae TODOS los términos detectados y mapea SIEMPRE a los 14 nombres oficiales
 ALTRAMUZ, APIO, CACAHUETES, CEREALES, CRUSTÁCEOS, FRUTOS SECOS, HUEVO, LÁCTEO, MOLUSCO, MOSTAZA, PESCADO, SÉSAMO, SOJA, SULFITOS
 FORMATO OBLIGATORIO: en "mapeo[].alergeno", "alergenos[]" y "trazas[]" usa SOLO uno de esos 14 nombres exactos (en mayúsculas). Nunca pongas texto libre como "contiene ..." o palabras sueltas.
 
+NEGACIÓN: "SIN GLUTEN", "gluten-free", "sin lactosa", "lactose-free", "sin huevo", etc. = el producto NO contiene ese alérgeno. NO lo incluyas en alergenos ni trazas.
+
 Conversión obligatoria (ejemplos):
 gluten/trigo/cebada/avena/centeno/sémola de trigo -> CEREALES
 leche/lácteos/nata/suero/caseína/mantequilla -> LÁCTEO
@@ -3134,6 +3254,7 @@ PESO_UNIDADES (opcional, breve):
 Si la etiqueta indica cantidad/peso/volumen que ayude a identificar el producto, extrae UNA indicación corta (máx. 20 caracteres). Ejemplos: "6 x 80 g 480g", "5 kg escurrido", "500 ml", "8 unidades". Prioridad: multipack (6 x 80 g) > peso escurrido > peso bruto. Si hay varios pesos, elige solo el más útil. Si no hay nada claro, déjalo vacío.
 
 ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
+- NEGACIÓN: "SIN GLUTEN", "gluten-free", "sin lactosa", etc. = NO incluyas ese alérgeno.
 - Incluye SOLO lo que esté EXPLÍCITAMENTE escrito (ingredientes, "puede contener", "presencia fortuita", etc.).
 - Si en la etiqueta solo pone "Presencia fortuita de apio" (o apio/celery/céleri en varios idiomas), trazas debe contener SOLO APIO. No añadas SULFITOS, SOJA ni ningún otro alérgeno que no aparezca escrito.
 - Si en la etiqueta pone "trazas de HUEVO y SOJA", debes incluir HUEVO y SOJA en trazas. No dejes fuera lo que sí está escrito.
@@ -3158,6 +3279,8 @@ PASO 2 — HALLAZGOS Y MAPEO
 Extrae TODOS los términos detectados y mapea SIEMPRE a los 14 nombres oficiales:
 ALTRAMUZ, APIO, CACAHUETES, CEREALES, CRUSTÁCEOS, FRUTOS SECOS, HUEVO, LÁCTEO, MOLUSCO, MOSTAZA, PESCADO, SÉSAMO, SOJA, SULFITOS
 FORMATO OBLIGATORIO: en "mapeo[].alergeno", "alergenos[]" y "trazas[]" usa SOLO uno de esos 14 nombres exactos (en mayúsculas). Nunca pongas texto libre como "contiene ..." o palabras sueltas.
+
+NEGACIÓN: "SIN GLUTEN", "gluten-free", "sin lactosa", "lactose-free", "sin huevo", etc. = el producto NO contiene ese alérgeno. NO lo incluyas en alergenos ni trazas.
 
 Conversión obligatoria (ejemplos):
 gluten/trigo/cebada/avena/centeno/sémola de trigo -> CEREALES
@@ -3190,6 +3313,7 @@ PESO_UNIDADES (opcional, breve):
 Si la etiqueta indica cantidad/peso/volumen que ayude a identificar el producto, extrae UNA indicación corta (máx. 20 caracteres). Ejemplos: "6 x 80 g 480g", "5 kg escurrido", "500 ml", "8 unidades". Prioridad: multipack > peso escurrido > peso bruto. Si no hay nada claro, déjalo vacío.
 
 ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
+- NEGACIÓN: "SIN GLUTEN", "gluten-free", "sin lactosa", etc. = NO incluyas ese alérgeno.
 - Incluye SOLO lo que esté EXPLÍCITAMENTE escrito (ingredientes, "puede contener", "presencia fortuita", etc.).
 - Si en la etiqueta solo pone "Presencia fortuita de apio" (o apio/celery/céleri en varios idiomas), trazas debe contener SOLO APIO. No añadas SULFITOS, SOJA ni ningún otro alérgeno que no aparezca escrito.
 - Si en la etiqueta pone "trazas de HUEVO y SOJA", debes incluir HUEVO y SOJA en trazas. No dejes fuera lo que sí está escrito.
@@ -3713,6 +3837,8 @@ document.getElementById('queueAction').addEventListener('click',processQueue);
 window.addEventListener('online',()=>{
   document.getElementById('offlineBanner').classList.remove('show');
   if(photoQueue.length&&getApiKey())processQueue();
+  const autoQ=loadAutoScanQueue();
+  if(autoQ.length&&navigator.onLine){showToast(autoQ.length+' foto(s) encoladas. Abre Modo automático para procesarlas.','info');}
   if(gdriveToken && getPendingSyncCount()>0) setTimeout(()=>gdriveSmartSync('online_reconnect'),800);
   updatePendingSyncChip();
 });
@@ -3733,122 +3859,221 @@ btnAutoFlow.style.background='var(--green)';
 btnAutoFlow.style.color='#fff';
 document.querySelector('.cam-btns').after(btnAutoFlow);
 
+let scanSession={photosTaken:0,productsSaved:0,failedPhotos:[],startedAt:null};
+
+function resetScanSession(){scanSession={photosTaken:0,productsSaved:0,failedPhotos:[],startedAt:Date.now()};}
+
+async function analyzePhotoPipelineForAuto(dataUrl){
+  const visionKey=getVisionApiKey(),geminiKey=getApiKey();
+  if(!visionKey){return {error:'config',motivo:'Vision sin API Key',errorCode:ERROR_CODES.CONFIG_MISSING};}
+  if(!geminiKey){return {error:'config',motivo:'Gemini sin API Key',errorCode:ERROR_CODES.CONFIG_MISSING};}
+  if(!navigator.onLine){
+    const q=loadAutoScanQueue();q.push({dataUrl,ts:Date.now()});saveAutoScanQueue(q);
+    return {error:'offline',motivo:'Sin conexión; foto encolada',queued:true};
+  }
+  const compressed=await compressPhotoForAI(dataUrl);
+  const imgData=(compressed.dataUrl||compressed).split(',')[1];
+  if(!imgData){return {error:'vision',motivo:'No se pudo preparar la imagen',errorCode:ERROR_CODES.PHOTO_UNREADABLE};}
+  const metadata={dimensions:(compressed.width&&compressed.height)?[{w:compressed.width,h:compressed.height}]:[]};
+  const {analysisId}=startPhotoAnalysis('automático',1,metadata);
+  addAnalysisSection(analysisId,'B_input',{dimensions:metadata.dimensions});
+  try{
+    const body={requests:[{image:{content:imgData},features:[{type:'DOCUMENT_TEXT_DETECTION'}],imageContext:{languageHints:['es','en','fr','de']}}]};
+    const resp=await fetchWithDiagnostics('https://vision.googleapis.com/v1/images:annotate?key='+encodeURIComponent(visionKey),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},{service:'Cloud Vision',operation:'ocr auto',requestTag:'analyzePhotoPipelineForAuto',requireOnline:true});
+    if(!resp.ok){
+      let msg='Error Vision ('+resp.status+')';
+      try{const eb=await resp.json();if(eb&&eb.error&&eb.error.message)msg=eb.error.message;}catch(_){}
+      addAnalysisSection(analysisId,'F_decision',{decision:'error',error:msg});
+      finishPhotoAnalysis(analysisId,new Error(msg));
+      return {error:'vision',motivo:msg,analysisId,errorCode:ERROR_CODES.PHOTO_UNREADABLE};
+    }
+    const data=await resp.json();
+    const ocrText=extractTextFromVisionResponse(data);
+    if(!ocrText){
+      addAnalysisSection(analysisId,'F_decision',{decision:'no_guardar',motivo:'ocr_sin_texto'});
+      finishPhotoAnalysis(analysisId);
+      return {error:'vision',motivo:'No se detectó texto en la etiqueta',analysisId,errorCode:ERROR_CODES.PHOTO_UNREADABLE};
+    }
+    addAnalysisSection(analysisId,'C_raw_output',{raw_text:String(ocrText).slice(0,5000),length:ocrText.length});
+    const userText='--- TEXTO DE LA ETIQUETA ---\n'+String(ocrText).slice(0,4000);
+    const content=[{type:'text',text:userText}];
+    const iaResp=await apiCall(content,{systemInstruction:AI_PROMPT_FROM_OCR,maxOutputTokens:3000});
+    if(!iaResp||!iaResp.ok){
+      const errBody=await iaResp?.json().catch(()=>null);
+      const providerMsg=extractProviderErrorMessage(errBody)||`HTTP ${iaResp?.status||0}`;
+      const code=iaResp?.status===401?ERROR_CODES.API_AUTH_FAILED:iaResp?.status===429?ERROR_CODES.API_RATE_LIMIT:iaResp?.status>=500?ERROR_CODES.API_SERVER_ERROR:ERROR_CODES.API_INVALID_RESPONSE;
+      addAnalysisSection(analysisId,'F_decision',{decision:'error',error:providerMsg});
+      finishPhotoAnalysis(analysisId,new Error(providerMsg));
+      return {error:'gemini',motivo:providerMsg,analysisId,errorCode:code,status:iaResp?.status};
+    }
+    const iaData=await iaResp.json();
+    const text=iaData.choices?.[0]?.message?.content||'';
+    let result;
+    try{result=parseAndValidateAI(text,'auto_flow');}catch(e){
+      addAnalysisSection(analysisId,'F_decision',{decision:'error',error:'Respuesta no interpretable'});
+      finishPhotoAnalysis(analysisId,e);
+      return {error:'json',motivo:'Respuesta de IA no válida',analysisId,errorCode:ERROR_CODES.JSON_PARSE_ERROR};
+    }
+    const ocrLocal=normalizeAIPhotoResult(buildResultFromOcrText(ocrText));
+    const merged=mergeAIWithOcrFallback(result,ocrLocal);
+    result=applyPhotoReviewValidation(merged.result,text,'vision_merged');
+    if(merged.recovered.length) addLog('INFO','PHOTO_OCR_RECOVERY','PHOTO_OCR_RECOVERY',{analysis_id:analysisId,recovered:merged.recovered});
+    result.nombre=fixNombreFromOcr(result.nombre,ocrText);
+    result=normalizeAIPhotoResult(result);
+    addAnalysisSection(analysisId,'D_interpretation',{nombre:result.nombre,alergenos:result.alergenos||[],trazas:result.trazas||[]});
+    addAnalysisSection(analysisId,'E_validations',{review_alerts:result.review_alerts||null,requires_review:!!result.requires_review});
+    return {result,analysisId};
+  }catch(err){
+    const code=err?.code||ERROR_CODES.API_INVALID_RESPONSE;
+    addAnalysisSection(analysisId,'F_decision',{decision:'error',error:err?.message||'Error desconocido'});
+    finishPhotoAnalysis(analysisId,err);
+    if(code===ERROR_CODES.NETWORK_OFFLINE){
+      const q=loadAutoScanQueue();q.push({dataUrl,ts:Date.now()});saveAutoScanQueue(q);
+      return {error:'offline',motivo:'Sin conexión; foto encolada',queued:true,analysisId};
+    }
+    return {error:'unknown',motivo:err?.message||'Error',analysisId,errorCode:code};
+  }
+}
+
 btnAutoFlow.addEventListener('click',async()=>{
   if(!getApiKey()){
     addLog(LOG_LEVELS.ERROR,ERROR_CODES.CONFIG_MISSING,'Modo automatico no disponible: falta API Key Gemini',{service:'Gemini',operation:'autoModeStart'});
     showToast('Configura la clave API en Ajustes (⚙)','info');
     return;
   }
+  const vk=getVisionApiKey();
+  if(!vk){showToast('Configura la API Key de Google (Drive) en Ajustes para OCR','info');return;}
   autoMode=true;btnAutoFlow.style.display='none';
+  resetScanSession();
+  const autoQ=loadAutoScanQueue();
+  if(autoQ.length&&navigator.onLine){
+    const it=autoQ.shift();saveAutoScanQueue(autoQ);
+    if(it&&it.dataUrl){document.getElementById('aiStatus').innerHTML='<span class="spinner"></span> Procesando cola…';document.getElementById('aiStatus').classList.add('show');autoProcessPhoto(it.dataUrl);return;}
+  }
   document.getElementById('aiStatus').innerHTML='<span class="spinner"></span> Modo automático activo — Haz una foto';
   document.getElementById('aiStatus').classList.add('show');
   camInput.click();
 });
 
+function addPendingFixFromAuto(type,motivo,dataUrl,photoIndex){
+  const fix=addPendingFix({type,motivo,dataUrl,photoIndex,ts:Date.now()});
+  scanSession.failedPhotos.push({photoIndex,id:fix.id});
+  updateFixesBadge();
+  return fix;
+}
+function showAutoErrorInline(aiS,message,dataUrl){
+  aiS.classList.add('show','auto-error');
+  aiS.innerHTML=dataUrl
+    ?`<div class="auto-thumb" style="background-image:url(${dataUrl})"></div><div class="auto-msg">${message}<br><span style="font-size:11px;opacity:0.85">Toca para siguiente foto</span></div>`
+    :`<div class="auto-msg">${message}</div>`;
+  aiS.style.cursor='pointer';
+  aiS.onclick=()=>{aiS.classList.remove('auto-error');aiS.onclick=null;aiS.innerHTML='<span class="spinner"></span> Modo automático activo — Haz una foto';camInput.click();};
+}
+
 async function autoProcessPhoto(dataUrl){
   if(!autoMode)return;
   const aiS=document.getElementById('aiStatus');
+  scanSession.photosTaken++;
   aiS.innerHTML='<span class="spinner"></span> Analizando automáticamente…';
-  const { content, metadata }=await buildPhotoRequest([dataUrl]);
-  const { analysisId }=startPhotoAnalysis('automático',1,metadata);
-  addAnalysisSection(analysisId,'B_input',{ dimensions: metadata.dimensions });
-  try{
-    const resp=await apiCall(content,{ systemInstruction: metadata.systemPrompt || AI_PROMPT });
-    if(!resp.ok){
-      let errorCode,errorMsg;
-      if(resp.status===401){
-        errorCode=ERROR_CODES.API_AUTH_FAILED;
-        errorMsg='Clave API inválida';
-      }else if(resp.status===429){
-        errorCode=ERROR_CODES.API_RATE_LIMIT;
-        errorMsg='Límite de llamadas alcanzado';
-      }else if(resp.status>=500){
-        errorCode=ERROR_CODES.API_SERVER_ERROR;
-        errorMsg=`Error del servidor (${resp.status})`;
-      }else{
-        errorCode=ERROR_CODES.API_INVALID_RESPONSE;
-        errorMsg=`Error HTTP ${resp.status}`;
-      }
-      addAnalysisSection(analysisId,'F_decision',{decision:'error',error:errorMsg});
-      finishPhotoAnalysis(analysisId,new Error(errorMsg));
-      showErrorModal('Automático',errorMsg,dataUrl,errorCode);
-      const err=await resp.json().catch(()=>({}));
-      throw new Error(err.error?.message||errorMsg);
+  const pipeline=await analyzePhotoPipelineForAuto(dataUrl);
+  if(pipeline.error){
+    if(pipeline.queued){
+      aiS.innerHTML='Sin conexión — foto encolada. Vuelve a tener internet para procesarla.';
+      showToast('Foto encolada para cuando vuelva la conexión','info');
+      setTimeout(()=>camInput.click(),1500);
+      return;
     }
-    const data=await resp.json();const text=data.choices?.[0]?.message?.content||'';
-    const possibleTruncated=String(text).length>=2990;
-    addAnalysisSection(analysisId,'C_raw_output',{ raw_text: String(text).slice(0,5000), length: text.length, markdown_like: /```/.test(text), possible_truncated: possibleTruncated });
-    let result;
-    try{
-      result=parseAndValidateAI(text,'auto_flow');
-    }catch(e){
-      addAnalysisSection(analysisId,'F_decision',{decision:'error',error:'Respuesta no interpretable'});
-      finishPhotoAnalysis(analysisId,e);
-      showErrorModal('Automático','Respuesta de IA no válida',dataUrl,ERROR_CODES.JSON_PARSE_ERROR);
-      throw new Error('parse');
+    if(pipeline.errorCode===ERROR_CODES.API_AUTH_FAILED){
+      addPendingFixFromAuto('api_auth','Clave API inválida',dataUrl,scanSession.photosTaken);
+      showAutoErrorInline(aiS,'Clave API inválida — Foto en Errores. Revisa Ajustes.',dataUrl);
+      showToast('Verifica la clave API en Ajustes','info');
+      return;
     }
-    addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, alergenos: result.alergenos||[], trazas: result.trazas||[], normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
-    addAnalysisSection(analysisId,'E_validations',{ review_alerts: result.review_alerts||null, requires_review: !!result.requires_review });
-    if(result.nombre)result.nombre=autoCorrectName(result.nombre);
-    const allA=sortAllergens([...new Set([...(result.alergenos||[]),...(result.trazas||[])])].filter(a=>AL.includes(a)));
-    if(result.warning){
-      showPhotoWarning(result.nombre||'Producto automático',result.warning);
-      addLog(LOG_LEVELS.WARN,ERROR_CODES.PHOTO_QUALITY,`Auto - Calidad: ${result.nombre||'Desconocido'}`,{warning:result.warning});
+    if(pipeline.errorCode===ERROR_CODES.API_RATE_LIMIT){
+      addPendingFixFromAuto('rate_limit','Límite de llamadas alcanzado',dataUrl,scanSession.photosTaken);
+      showAutoErrorInline(aiS,'Límite alcanzado — Esta foto en Errores.',dataUrl);
+      showToast('Reintenta más tarde o revisa en Errores','info');
+      return;
     }
-    if(result.nombre){
-      const displayName=buildProductName(result);
-      if(isAutoOk(result)){
-        const match=findMatch(displayName);
-        const ts=new Date().toISOString();
-        if(match){
-          const r=mergeProduct(match.index,displayName,allA,{analysisId,analysisTimestamp:ts});
-          addAnalysisSection(analysisId,'F_decision',{decision:'actualizar',motivo:'auto_guardar',product_name:displayName});
-          addAnalysisSection(analysisId,'G_saved_result',{product_index:match.index,product_name:displayName,alergenos:P[match.index].a,timestamp:ts,declarable:true});
-          finishPhotoAnalysis(analysisId);
-          render();updateAppStatus();
-          showToast(r.added.length?`⚡ \"${match.product.n}\" actualizado +${r.added.length}`:`⚡ \"${match.product.n}\" verificado`,'update');
-          addLog(LOG_LEVELS.INFO,'AUTO_UPDATED',`Auto - Actualizado: ${match.product.n}`,{added:r.added.length});
-        }else{
-          addNewProduct(displayName,allA,{analysisId,analysisTimestamp:ts});
-          const idx=P.findIndex(x=>norm(x.n)===norm(displayName));
-          if(idx>=0){
-            addAnalysisSection(analysisId,'F_decision',{decision:'crear',motivo:'auto_guardar',product_name:displayName});
-            addAnalysisSection(analysisId,'G_saved_result',{product_index:idx,product_name:displayName,alergenos:P[idx].a,timestamp:ts,declarable:true});
-            finishPhotoAnalysis(analysisId);
-          }
-          render();updateAppStatus();
-          showToast(`⚡ \"${displayName}\" añadido`,'new');
-          addLog(LOG_LEVELS.INFO,'AUTO_SAVED',`Auto - Guardado: ${displayName}`,{allergens:allA.length});
-        }
-        aiS.innerHTML='✓ Guardado — Puedes hacer otra foto';
-        setTimeout(()=>camInput.click(),1500);
-      }else{
-        addAnalysisSection(analysisId,'F_decision',{decision:'bloquear_revision',motivo:buildReviewReason(result)});
-        finishPhotoAnalysis(analysisId);
-        aiS.innerHTML='⚠️ Revisión necesaria: '+buildReviewReason(result);
-        aiS.style.color='#c05621';
-        window.__lastAIPhotoAnalysis=result;
-        document.getElementById('aiName').value=displayName;
-        setSelected('aiAllergens',allA);
-        let warn='';if(result.trazas&&result.trazas.length)warn='Trazas: '+result.trazas.join(', ');if(result.notas)warn+=(warn?' · ':'')+result.notas;
-        document.getElementById('aiWarn').textContent=warn;
-        if(result.nombre){const match=findMatch(displayName);aiCurrentMatch=match;if(match){showMatch('aiMatch',match);document.getElementById('aiSave').textContent='Actualizar existente'}else document.getElementById('aiSave').textContent='Guardar producto nuevo'}
-        document.getElementById('aiResult').classList.add('show');
-        document.getElementById('aiSave').disabled=false;
-        updateSave('aiAllergens');
-      }
-    }else{
-      addAnalysisSection(analysisId,'F_decision',{decision:'no_guardar',motivo:'sin_nombre'});
+    if(pipeline.errorCode===ERROR_CODES.API_SERVER_ERROR){
+      addPendingFixFromAuto('server_error','Error del servidor',dataUrl,scanSession.photosTaken);
+      showAutoErrorInline(aiS,'Error del servidor — Esta foto en Errores.',dataUrl);
+      return;
+    }
+    if(pipeline.error==='vision'||pipeline.error==='json'){
+      addPendingFixFromAuto(pipeline.error,pipeline.motivo||'Error',dataUrl,scanSession.photosTaken);
+      showAutoErrorInline(aiS,(pipeline.motivo||'Error')+' — Esta foto en Errores.',dataUrl);
+      return;
+    }
+    addPendingFixFromAuto('unknown',pipeline.motivo||'Error',dataUrl,scanSession.photosTaken);
+    showAutoErrorInline(aiS,'Error: '+(pipeline.motivo||'Desconocido')+' — Esta foto en Errores.',dataUrl);
+    return;
+  }
+  const {result,analysisId}=pipeline;
+  if(result.nombre)result.nombre=autoCorrectName(result.nombre);
+  const allA=sortAllergens([...new Set([...(result.alergenos||[]),...(result.trazas||[])])].filter(a=>AL.includes(a)));
+  if(result.warning){
+    showPhotoWarning(result.nombre||'Producto automático',result.warning);
+    addLog(LOG_LEVELS.WARN,ERROR_CODES.PHOTO_QUALITY,`Auto - Calidad: ${result.nombre||'Desconocido'}`,{warning:result.warning});
+  }
+  if(result.requires_review){
+    addPendingFixFromAuto('requires_review',buildReviewReason(result),dataUrl,scanSession.photosTaken);
+    finishPhotoAnalysis(analysisId);
+    aiS.innerHTML=dataUrl?`<div style="display:flex;align-items:center;gap:10px"><div class="auto-thumb" style="width:48px;height:48px;border-radius:6px;background:url(${dataUrl}) center/cover;flex-shrink:0"></div><div>Revisión necesaria — Revisa abajo o en Errores</div></div>`:'Revisión necesaria — Revisa abajo o en Errores';
+    aiS.classList.add('show');
+    window.__lastAIPhotoAnalysis=result;
+    document.getElementById('aiName').value=buildProductName(result);
+    setSelected('aiAllergens',allA);
+    let warn='';if(result.trazas&&result.trazas.length)warn='Trazas: '+result.trazas.join(', ');if(result.notas)warn+=(warn?' · ':'')+result.notas;
+    document.getElementById('aiWarn').textContent=warn;
+    const displayName=buildProductName(result);
+    const match=findMatch(displayName);aiCurrentMatch=match;
+    if(match){showMatch('aiMatch',match);document.getElementById('aiSave').textContent='Actualizar existente'}else document.getElementById('aiSave').textContent='Guardar producto nuevo';
+    document.getElementById('aiResult').classList.add('show');
+    document.getElementById('aiSave').disabled=false;
+    updateSave('aiAllergens');
+    return;
+  }
+  if(result.nombre){
+    const displayName=buildProductName(result);
+    const match=findMatch(displayName);
+    const ts=new Date().toISOString();
+    if(match){
+      const r=mergeProduct(match.index,displayName,allA,{analysisId,analysisTimestamp:ts});
+      addAnalysisSection(analysisId,'F_decision',{decision:'actualizar',motivo:'auto_guardar',product_name:displayName});
+      addAnalysisSection(analysisId,'G_saved_result',{product_index:match.index,product_name:displayName,alergenos:P[match.index].a,timestamp:ts,declarable:true});
       finishPhotoAnalysis(analysisId);
-      showErrorModal('Automático','No se detectó nombre del producto',dataUrl,ERROR_CODES.PHOTO_NO_NAME);
+      lastSavedName=displayName;
+      scanSession.productsSaved++;
+      render();updateAppStatus();
+      showToast(r.added.length?`⚡ "${match.product.n}" actualizado +${r.added.length}`:`⚡ "${match.product.n}" verificado`,'update');
+      addLog(LOG_LEVELS.INFO,'AUTO_UPDATED',`Auto - Actualizado: ${match.product.n}`,{added:r.added.length});
+    }else{
+      addNewProduct(displayName,allA,{analysisId,analysisTimestamp:ts});
+      const idx=P.findIndex(x=>norm(x.n)===norm(displayName));
+      if(idx>=0){
+        addAnalysisSection(analysisId,'F_decision',{decision:'crear',motivo:'auto_guardar',product_name:displayName});
+        addAnalysisSection(analysisId,'G_saved_result',{product_index:idx,product_name:displayName,alergenos:P[idx].a,timestamp:ts,declarable:true});
+        finishPhotoAnalysis(analysisId);
+      }
+      lastSavedName=displayName;
+      scanSession.productsSaved++;
+      render();updateAppStatus();
+      showToast(`⚡ "${displayName}" añadido`,'new');
+      addLog(LOG_LEVELS.INFO,'AUTO_SAVED',`Auto - Guardado: ${displayName}`,{allergens:allA.length});
     }
-  }catch(err){
-    aiS.innerHTML='Error: '+err.message+' — Haz clic para reintentar';
-    aiS.style.cursor='pointer';
-    aiS.onclick=()=>camInput.click();
-    addLog(LOG_LEVELS.ERROR,ERROR_CODES.API_INVALID_RESPONSE,`Auto - Error: ${err.message}`,{});
-    const ax=(typeof diagnosticAnalyses!=='undefined'&&diagnosticAnalyses||[]).find(x=>x.analysis_id===analysisId);
-    if(ax&&!ax.finished_at){ addAnalysisSection(analysisId,'F_decision',{decision:'error',error:err.message}); finishPhotoAnalysis(analysisId,err); }
+    const pending=scanSession.photosTaken-scanSession.productsSaved-scanSession.failedPhotos.length;
+    if(pending>0){
+      const msg=`${scanSession.photosTaken} fotos · ${scanSession.productsSaved} guardadas · ${scanSession.failedPhotos.length} pendiente${scanSession.failedPhotos.length!==1?'s':''}`;
+      if(scanSession.failedPhotos.length) showToast(msg,'info');
+    }
+    aiS.innerHTML='✓ Guardado — Puedes hacer otra foto';
+    setTimeout(()=>camInput.click(),1500);
+  }else{
+    addAnalysisSection(analysisId,'F_decision',{decision:'no_guardar',motivo:'sin_nombre'});
+    finishPhotoAnalysis(analysisId);
+    addPendingFixFromAuto('sin_nombre','No se detectó nombre del producto',dataUrl,scanSession.photosTaken);
+    showAutoErrorInline(aiS,'Sin nombre detectado — Esta foto en Errores.',dataUrl);
   }
 }
 
