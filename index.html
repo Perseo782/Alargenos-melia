@@ -132,19 +132,16 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 .toast-update{background:var(--warm8)}.toast-new{background:var(--green)}.toast-queue{background:#5d4d44}.toast-info{background:var(--text)}
 .modal-bg{position:fixed;inset:0;background:rgba(58,54,50,.35);z-index:100;display:none;align-items:flex-end;justify-content:center}
 .modal-bg.open{display:flex}
-.modal{background:var(--white);border-radius:12px 12px 0 0;width:100%;max-width:500px;max-height:92vh;overflow-y:auto;padding:24px 16px 32px;animation:slideUp .25s ease}
+.modal{background:var(--white);border-radius:12px 12px 0 0;width:100%;max-width:500px;max-height:95vh;overflow-y:auto;padding:20px 14px 28px;animation:slideUp .25s ease}
 @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
 .modal h2{font-family:var(--serif);font-size:22px;font-weight:400;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;color:var(--text);letter-spacing:-0.3px}
 .modal-close{width:28px;height:28px;border-radius:50%;background:var(--warm8-10);border:none;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--warm8)}
-.methods{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px}
-.method-btn{padding:16px 10px;border-radius:var(--radius);border:1px solid var(--warm8-40);background:var(--white);cursor:pointer;text-align:center;font-family:var(--sans);transition:all .15s}
-.method-btn.active{border-color:var(--warm8);background:var(--warm8-10)}
-.method-btn .m-icon{font-size:22px;margin-bottom:6px}
-.method-btn .m-label{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:0.5px;text-transform:uppercase}
-.method-btn .m-desc{font-size:10px;color:var(--text3);margin-top:4px;line-height:1.3}
+.add-modal-sections{display:flex;flex-direction:column;gap:16px}
+.section-label{font-size:11px;font-weight:600;color:var(--warm8);letter-spacing:0.5px;margin-bottom:10px;display:block}
+#modalBg.edit-mode #secCamera,#modalBg.edit-mode #secBatch{display:none!important}
 .form-section{display:none}.form-section.show{display:block}
-#secManual .save-btn{margin-bottom:18px}
-#secCamera.show,#secBatch.show{margin-top:20px}
+#secManual .save-btn{margin-bottom:12px}
+.form-section+.form-section{margin-top:4px}
 .form-label{font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px;display:block;letter-spacing:0.5px;text-transform:uppercase}
 .form-input{width:100%;padding:11px 12px;border:1px solid var(--warm8-40);border-radius:var(--radius);font-size:14px;font-family:var(--sans);color:var(--text);outline:none;margin-bottom:14px}
 .form-input:focus{border-color:var(--warm8)}
@@ -163,15 +160,16 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 .match-name{font-size:13px;font-weight:500;margin-bottom:2px}
 .match-detail{font-size:11px;color:var(--text2);line-height:1.5}
 .cam-area{text-align:center}
-.photo-pair{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
-.photo-slot{aspect-ratio:3/4;border-radius:var(--radius);border:1.5px dashed var(--warm8-40);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;position:relative;background:var(--warm8-10)}
+.photo-pair{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+.photo-slot{aspect-ratio:1;max-height:95px;border-radius:var(--radius);border:1.5px dashed var(--warm8-40);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;position:relative;background:var(--warm8-10)}
 .photo-slot.filled{border-style:solid;border-color:var(--warm8-60)}
 .photo-slot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:calc(var(--radius) - 2px)}
-.photo-slot .slot-label{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;z-index:1}
-.photo-slot .slot-icon{font-size:20px;margin-bottom:4px;z-index:1}
+.photo-slot .slot-label{font-size:9px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;z-index:1}
+.photo-slot .slot-icon{font-size:16px;margin-bottom:2px;z-index:1}
 .photo-slot.filled .slot-label,.photo-slot.filled .slot-icon{display:none}
-.cam-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
-.cam-btn{padding:14px;border-radius:var(--radius);border:1px solid var(--warm8-40);background:var(--white);font-family:var(--sans);font-size:12px;font-weight:600;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
+.cam-btns{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+.cam-btn{padding:10px;border-radius:var(--radius);border:1px solid var(--warm8-40);background:var(--white);font-family:var(--sans);font-size:11px;font-weight:600;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px}
+.cam-btn-main{width:100%;margin-bottom:10px;padding:12px;font-size:12px;background:var(--warm8-10);border-color:var(--warm8-60)}
 .cam-btn:active{background:var(--warm8-10)}
 .photo-source-target{font-size:12px;color:var(--text2);margin-bottom:12px}
 .cam-input{display:none}
@@ -236,7 +234,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button type="button" class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v05032602:24h</div>
+    <div class="login-version">v05032612:10h</div>
   </div>
 </div>
 
@@ -286,19 +284,9 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 <!-- ADD/EDIT MODAL -->
 <div class="modal-bg" id="modalBg"><div class="modal">
   <h2 id="modalTitle">Añadir producto <button type="button" class="modal-close" id="modalClose">&times;</button></h2>
-  <div class="methods" id="methodsRow">
-    <button type="button" class="method-btn" data-method="camera">
-      <div class="m-icon">📷</div>
-      <div class="m-label">Fotografía</div>
-      <div class="m-desc">Analizar y revisar antes de guardar</div>
-    </button>
-    <button type="button" class="method-btn" data-method="batch">
-      <div class="m-icon">🖼️</div>
-      <div class="m-label">Lote</div>
-      <div class="m-desc">Procesar hasta 10 fotos de golpe</div>
-    </button>
-  </div>
+  <div class="add-modal-sections">
   <div class="form-section show" id="secManual">
+    <div class="section-label">① Agregado manual</div>
     <label class="form-label">Nombre del producto</label>
     <input class="form-input" id="manualName" placeholder="Ej: Galletas integrales" autocomplete="off" lang="es" spellcheck="true">
     <div class="match-box" id="manualMatch"><div class="match-title">Producto similar encontrado</div><div class="match-name" id="manualMatchName"></div><div class="match-detail" id="manualMatchDetail"></div></div>
@@ -308,13 +296,14 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <div id="auditDismissRow" style="display:none"><button type="button" class="audit-dismiss-btn" id="auditDismissBtn">👁 No mostrar más esta advertencia</button></div>
     <div class="btn-row" id="editBtns" style="display:none"><button type="button" class="btn-delete" id="deleteBtn">Eliminar producto</button></div>
   </div>
-  <div class="form-section" id="secCamera">
+  <div class="form-section show" id="secCamera">
+    <div class="section-label">② Agregado por foto</div>
     <div class="cam-area">
+      <button type="button" class="cam-btn cam-btn-main" id="btnPhotoSource">📷 Cámara o Galería</button>
       <div class="photo-pair">
         <div class="photo-slot" id="slot1"><span class="slot-icon">📦</span><span class="slot-label">Envase</span><img id="img1" style="display:none"></div>
         <div class="photo-slot" id="slot2"><span class="slot-icon">🏷️</span><span class="slot-label">Etiquetado</span><img id="img2" style="display:none"></div>
       </div>
-      <div class="cam-btns"><button type="button" class="cam-btn" id="btnCapture">📷 Hacer foto</button><button type="button" class="cam-btn" id="btnGallery">🖼️ Galería</button></div>
       <input type="file" accept="image/*" capture="environment" class="cam-input" id="camInput">
       <input type="file" accept="image/*" class="cam-input" id="galInput">
       <div class="ai-status" id="aiStatus"></div>
@@ -333,13 +322,15 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
       </div>
     </div>
   </div>
-  <div class="form-section" id="secBatch">
+  <div class="form-section show" id="secBatch">
+    <div class="section-label">③ Lote (hasta 10 fotos)</div>
     <div class="cam-area">
       <input type="file" accept="image/*" multiple class="cam-input" id="batchInput">
       <button type="button" class="save-btn" id="batchSelectBtn" style="margin-bottom:14px">Seleccionar hasta 10 fotos</button>
       <div class="ai-status" id="batchStatus"></div>
       <div id="batchPreview" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px"></div>
     </div>
+  </div>
   </div>
 </div></div>
 
@@ -468,7 +459,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v05032602:24h</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v05032612:10h</span></div>
     <button type="button" class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section">
@@ -1083,7 +1074,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.4-0503260224',
+    version:'1.0.4-0503261210',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -2443,6 +2434,24 @@ function localizeWarningMessage(msg){
 }
 
 function buildProductName(res){const n=(res.nombre||'').toString().trim();const p=(String(res.peso_unidades||'').trim()).slice(0,22);return p?n+'. '+p:n;}
+/** Traduce unidades de medida de idiomas comunes (EN,FR,DE,IT,PT,NL) a español. */
+function unitsToSpanish(s){
+  if(!s||typeof s!=='string')return s;
+  return String(s)
+    .replace(/\blitres\b/gi,'litros').replace(/\blitre\b/gi,'litro').replace(/\bliters\b/gi,'litros').replace(/\bliter\b/gi,'litro')  // EN,FR
+    .replace(/\blitri\b/gi,'litros').replace(/\blitro\b/gi,'litro')  // IT (litri/litro)
+    .replace(/\bmillilitres\b/gi,'ml').replace(/\bmillilitre\b/gi,'ml').replace(/\bmilliliters\b/gi,'ml').replace(/\bmilliliter\b/gi,'ml')  // EN,FR
+    .replace(/\bmillilitri\b/gi,'ml').replace(/\bml\b/gi,'ml')
+    .replace(/\bkilogrammes\b/gi,'kg').replace(/\bkilogramme\b/gi,'kg').replace(/\bkilograms\b/gi,'kg').replace(/\bkilogram\b/gi,'kg')  // EN,FR
+    .replace(/\bkilogrammi\b/gi,'kg').replace(/\bchilogrammi\b/gi,'kg')  // IT
+    .replace(/\bgrammes\b/gi,'g').replace(/\bgramme\b/gi,'g').replace(/\bgrams\b/gi,'g').replace(/\bgram\b/gi,'g')  // EN,FR
+    .replace(/\bounces\b/gi,'onzas').replace(/\bounce\b/gi,'onza').replace(/\boz\b/gi,'onza')  // EN
+    .replace(/\bpounds\b/gi,'libras').replace(/\bpound\b/gi,'libra').replace(/\blb\b/gi,'libra')  // EN
+    .replace(/\bunzen\b/gi,'onzas').replace(/\bunze\b/gi,'onza')  // DE
+    .replace(/\bpfund\b/gi,'libras')  // DE
+    .replace(/\bonces\b/gi,'onzas').replace(/\bonce\b/gi,'onza')  // FR
+    .replace(/\bgrammi\b/gi,'g').replace(/\bgrammo\b/gi,'g');  // IT
+}
 /** Ortografía española: mayúsculas solo cuando proceda (inicio de texto y nombres propios). */
 function toSpanishOrthography(str){
   if(!str||typeof str!=='string')return str;
@@ -2478,9 +2487,9 @@ function normalizeAIPhotoResult(obj){
     const n=parseFloat(raw.replace(',','.'));
     if(n>=0.01&&n<=999){out.peso_unidades=`${raw} kg`;nom=nom.replace(/\s+\d+(?:[.,]\d+)?\s*k(?:g|ilos?)?\b\s*$/i,'').trim();}
   }
-  if(nom) nom=toSpanishOrthography(nom);
+  if(nom) nom=unitsToSpanish(toSpanishOrthography(nom));
   out.nombre=nom;
-  let pu=(String(out.peso_unidades||'').trim()).replace(/\bmle\b/gi,'ml').replace(/\bge\b/gi,'g');
+  let pu=unitsToSpanish((String(out.peso_unidades||'').trim())).replace(/\bmle\b/gi,'ml').replace(/\bge\b/gi,'g');
   pu=pu.replace(/(\d+(?:[.,]\d+)?)\s*(kilos?|kilo)\b/gi,'$1 kg').replace(/(\d+(?:[.,]\d+)?)\s*k\b(?!g)/gi,'$1 kg');
   if(pu&&!/\b(kgs?|g\b|ml|unidades?)\b|\d+\s*x\s*\d+/i.test(pu)&&/^\d{1,5}\.?\d*\s*$/.test(pu))pu='';
   out.peso_unidades=pu.slice(0,22);
@@ -2937,7 +2946,7 @@ function openModal(){
   modalBg.classList.add('open');
   document.getElementById('modalTitle').innerHTML=(editMode?'Editar producto':'Añadir producto')+' <button type="button" class="modal-close" id="mc2">&times;</button>';
   document.getElementById('mc2').addEventListener('click',closeModal);
-  document.getElementById('methodsRow').style.display=editMode?'none':'grid';
+  modalBg.classList.toggle('edit-mode',editMode);
   document.getElementById('editBtns').style.display=editMode?'flex':'none';
   activateMethod('manual');
   resetCameraUI();
@@ -2978,21 +2987,20 @@ function activateMethod(method='manual'){
     const s=scanSession,saved=s.productsSaved,fail=s.failedPhotos.length,missing=s.photosTaken-saved-fail;
     if(missing>0) showToast(`${s.photosTaken} fotos · ${saved} guardadas · ${fail} pendiente(s) · ${missing} sin registrar`,'info');
   }
-  document.querySelectorAll('.method-btn').forEach(btn=>{
-    btn.classList.toggle('active',btn.dataset.method===method && method!=='manual');
-  });
   document.getElementById('secManual').classList.add('show');
-  document.getElementById('secCamera').classList.toggle('show',isCamera);
-  document.getElementById('secBatch').classList.toggle('show',isBatch);
+  if(editMode){
+    document.getElementById('secCamera').classList.remove('show');
+    document.getElementById('secBatch').classList.remove('show');
+  }else{
+    document.getElementById('secCamera').classList.add('show');
+    document.getElementById('secBatch').classList.add('show');
+  }
   if(autoMode){if(typeof btnAutoFlow!=='undefined')btnAutoFlow.style.display=isBatch?'none':'';if(typeof btnTerminarAuto!=='undefined')btnTerminarAuto.style.display='none';}
   autoMode=false;
   if(typeof btnAutoFlow!=='undefined' && btnAutoFlow){
     btnAutoFlow.style.display=isBatch?'none':'';
   }
 }
-document.querySelectorAll('.method-btn').forEach(btn=>{
-  btn.addEventListener('click',()=>activateMethod(btn.dataset.method));
-});
 function buildGrid(id){const c=document.getElementById(id);let h='';(AL_GRID_ORDER||AL).forEach(a=>{if(IC[a])h+=`<div class="ag-item" data-a="${a}" title="${a}"><img src="${IC[a]}" alt="${a}"></div>`});c.innerHTML=h;c.querySelectorAll('.ag-item').forEach(item=>item.addEventListener('click',()=>{item.classList.toggle('sel');updateSave(id)}))}
 function getSelected(id){return[...document.getElementById(id).querySelectorAll('.ag-item.sel')].map(i=>i.dataset.a)}
 function setSelected(id,arr){document.getElementById(id).querySelectorAll('.ag-item').forEach(i=>i.classList.toggle('sel',arr.includes(i.dataset.a)))}
@@ -3211,8 +3219,7 @@ const analyzeBtn=document.getElementById('analyzeBtn');
 function resetCameraUI(){photos=[null,null];currentSlot=0;pendingPhotoSlot=null;if(photoSourceBg)photoSourceBg.classList.remove('open');img1.style.display='none';img2.style.display='none';slot1.classList.remove('filled');slot2.classList.remove('filled');analyzeBtn.style.display='none';document.getElementById('aiStatus').classList.remove('show');document.getElementById('aiResult').classList.remove('show');document.getElementById('aiWarn').textContent='';hideMatch('aiMatch')}
 slot1.addEventListener('click',()=>openPhotoSourceChooser(0));
 slot2.addEventListener('click',()=>openPhotoSourceChooser(1));
-document.getElementById('btnCapture').addEventListener('click',()=>{currentSlot=photos[0]?1:0;camInput.click()});
-document.getElementById('btnGallery').addEventListener('click',()=>{currentSlot=photos[0]?1:0;galInput.click()});
+document.getElementById('btnPhotoSource').addEventListener('click',()=>{openPhotoSourceChooser(photos[0]?1:0)});
 camInput.addEventListener('change',handleImg);galInput.addEventListener('change',handleImg);
 function handleImg(e){
   const file=e.target.files[0];
@@ -3338,6 +3345,7 @@ Extrae el PESO NETO del envase (total del paquete). Busca junto a "Peso Neto", "
 REGLA CRÍTICA — NUNCA uses "100 g" como peso del envase: En etiquetas europeas, "100 g" aparece SIEMPRE en la tabla nutricional como referencia ("por 100 g", "per 100 g", "per 100g of product", "edi per 100 g di prodotto", "valeurs pour 100 g", etc.). Eso es la unidad de referencia nutricional, NO el peso del paquete. Si el único peso que ves es "100 g" en contexto nutricional, deja peso_unidades vacío.
 
 Formato europeo: la COMA es separador decimal: "2,50 kg" = 2,50 kilogramos, NUNCA 250g. Usa el formato de la etiqueta ("2,50 kg" o "2.50 kg"). Ejemplos válidos: "2 kg", "2,50 kg", "500 g", "1,50 kg escurrido".
+Unidades SIEMPRE en español: litro/litros, kg, g, ml, onza/onzas, libra/libras. Si la etiqueta está en inglés, francés, alemán, italiano, portugués u otro idioma, traduce las unidades (litre→litro, Liter→litro, grammes→g, ounces→onzas, pound→libra, etc.).
 
 ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
 - NEGACIÓN: "SIN GLUTEN", "gluten-free", "sin lactosa", etc. = NO incluyas ese alérgeno.
@@ -3401,6 +3409,7 @@ Extrae el PESO NETO del envase (total del paquete). Busca junto a "Peso Neto", "
 REGLA CRÍTICA — NUNCA uses "100 g" como peso del envase: En etiquetas europeas, "100 g" aparece SIEMPRE en la tabla nutricional como referencia ("por 100 g", "per 100 g", "per 100g of product", "edi per 100 g di prodotto", "valeurs pour 100 g", etc.). Eso es la unidad de referencia nutricional, NO el peso del paquete. Si el único peso que ves es "100 g" en contexto nutricional, deja peso_unidades vacío.
 
 Formato europeo: la COMA es separador decimal: "2,50 kg" = 2,50 kilogramos, NUNCA 250g. Usa el formato de la etiqueta ("2,50 kg" o "2.50 kg"). Ejemplos válidos: "2 kg", "2,50 kg", "500 g", "1,50 kg escurrido".
+Unidades SIEMPRE en español: litro/litros, kg, g, ml, onza/onzas, libra/libras. Si la etiqueta está en inglés, francés, alemán, italiano, portugués u otro idioma, traduce las unidades (litre→litro, Liter→litro, grammes→g, ounces→onzas, pound→libra, etc.).
 
 ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
 - NEGACIÓN: "SIN GLUTEN", "gluten-free", "sin lactosa", etc. = NO incluyas ese alérgeno.
