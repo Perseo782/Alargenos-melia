@@ -50,6 +50,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 .hdr-row-top{margin-bottom:8px}
 .hdr-row-counters{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}
 .hdr-counters-left{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.hdr-counters-aux{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .hdr-counters-right{display:flex;gap:8px;align-items:center;margin-left:auto;flex-shrink:0}
 .hdr h1{font-family:var(--serif);font-size:26px;font-weight:400;letter-spacing:-0.3px;color:var(--text)}
 .hdr-chip{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;background:var(--white);border:1px solid var(--warm8-40);font-size:13px;color:var(--text2);font-weight:500;letter-spacing:0.1px;white-space:nowrap}
@@ -235,7 +236,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button type="button" class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v0503202613:34h</div>
+    <div class="login-version">v05032601:27h</div>
   </div>
 </div>
 
@@ -249,17 +250,19 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <div class="hdr-row hdr-row-counters">
       <div class="hdr-counters-left">
         <span class="hdr-chip" id="cnt">0 En la nube</span>
-        <button class="hdr-chip hdr-chip-pending" id="pendingChip" hidden type="button" title="Filtrar pendientes">
-          <span class="pending-warn" id="pendingWarnIcon" aria-hidden="true">⚠︎</span>
-          <span id="pendingCountLabel">0 Pendientes</span>
-        </button>
+        <div class="hdr-counters-aux">
+          <button class="hdr-chip hdr-chip-pending" id="pendingChip" hidden type="button" title="Filtrar pendientes">
+            <span class="pending-warn" id="pendingWarnIcon" aria-hidden="true">⚠︎</span>
+            <span id="pendingCountLabel">0 Pendientes</span>
+          </button>
+          <button type="button" class="hdr-chip-btn" id="fixesBtn" style="display:none" title="Errores a solucionar">
+            <span class="hdr-chip-icon" aria-hidden="true">⚠</span>
+            <span>Errores</span>
+            <span class="fixes-count">0</span>
+          </button>
+        </div>
       </div>
       <div class="hdr-counters-right">
-        <button type="button" class="hdr-chip-btn" id="fixesBtn" style="display:none" title="Errores a solucionar">
-          <span class="hdr-chip-icon" aria-hidden="true">⚠</span>
-          <span>Errores</span>
-          <span class="fixes-count">0</span>
-        </button>
         <button type="button" class="hdr-chip-btn" id="syncBtn" title="Sincronización forzada">
           <span class="hdr-chip-icon" aria-hidden="true">⟳</span>
           <span>Sync</span>
@@ -465,7 +468,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v0403202612:46h</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v05032601:27h</span></div>
     <button type="button" class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section">
@@ -1080,7 +1083,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.4-040320261246',
+    version:'1.0.4-0503260127',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -1475,9 +1478,16 @@ function buildResultFromOcrText(rawText){
   let peso_unidades='';
   const fullText=lines.join(' ');
   const multipack=fullText.match(/(\d+)\s*x\s*(\d+)\s*(g|kg|ml)/i);
-  const pesoSimple=fullText.match(/(\d+(?:[.,]\d+)?)\s*(kgs?|g|ml)\s*escurrido/i)||fullText.match(/(\d+(?:[.,]\d+)?)\s*(kgs?|g|ml)/i);
+  const pesoSimple=fullText.match(/(\d+(?:[.,]\d+)?)\s*(kgs?|g|ml)\s*escurrido/i)
+    ||fullText.match(/(\d+(?:[.,]\d+)?)\s*(kgs?|g|ml)/i)
+    ||fullText.match(/(\d+(?:[.,]\d+)?)\s*(kilos?|kilo)\b/i)
+    ||fullText.match(/(\d+(?:[.,]\d+)?)\s*(k)\b/i);
   if(multipack)peso_unidades=`${multipack[1]} x ${multipack[2]} ${multipack[3]}`.slice(0,22);
-  else if(pesoSimple)peso_unidades=`${pesoSimple[1]} ${pesoSimple[2]}`.slice(0,22);
+  else if(pesoSimple){
+    const u=(pesoSimple[2]||'').toLowerCase();
+    const unit=/\bk(?:g|ilo)?/i.test(u)||u==='k'?'kg':(u||'g');
+    peso_unidades=`${pesoSimple[1]} ${unit}`.slice(0,22);
+  }
   return{
     nombre,
     peso_unidades,
@@ -1555,6 +1565,19 @@ function fixNombreFromOcr(nombre, ocrText){
   n=n.replace(/\s+/g,' ').replace(/^[\-–—:;,. ]+|[\-–—:;,. ]+$/g,'').trim();
   if(n.length>90) n=n.slice(0,90).trim();
   return n;
+}
+/** Corrige peso cuando la IA confunde formato europeo: "2,50 kg" (coma decimal) NO es 250g. Soporta "5,00k"=5 kg. */
+function fixPesoFromOcr(aiPeso,ocrText){
+  const ocr=String(ocrText||'').trim();
+  if(!ocr) return aiPeso;
+  const m=ocr.match(/(\d+)[.,](\d+)\s*(kg|kilos?|k)\b/i);
+  if(!m) return aiPeso;
+  const ocrPeso=`${m[1]},${m[2]} kg`;
+  const aiNum=String(aiPeso||'').replace(/\s*(kg|g|ml)\s*$/i,'');
+  if(/^\d+$/.test(aiNum)&&m[1]+m[2]===aiNum&&/\bg\b/i.test(aiPeso)) return ocrPeso;
+  const n=parseFloat(aiNum.replace(',','.'));
+  if(n>=100&&n<=9999&&/\bg\b/i.test(aiPeso)&&parseInt(m[1])<10) return ocrPeso;
+  return aiPeso;
 }
 const ACCENT_MAP={
   'rucula':'Rúcula','sesamo':'Sésamo','atun':'Atún','jamon':'Jamón','salmon':'Salmón',
@@ -2399,10 +2422,46 @@ function localizeWarningMessage(msg){
 }
 
 function buildProductName(res){const n=(res.nombre||'').toString().trim();const p=(String(res.peso_unidades||'').trim()).slice(0,22);return p?n+'. '+p:n;}
+/** Ortografía española: mayúsculas solo cuando proceda (inicio de texto y nombres propios). */
+function toSpanishOrthography(str){
+  if(!str||typeof str!=='string')return str;
+  const s=String(str).trim();
+  if(!s)return s;
+  const low=s.toLowerCase();
+  const nombresPropios=/^(maría|martín|españa|francia|italia|josé|juan|carlos|ana|luis|paula|roberto|pablo)$/i;
+  const palabras=low.split(/(\s+)/);
+  let primera=true;
+  const res=palabras.map((p)=>{
+    if(/^\s+$/.test(p))return p;
+    const pal=p.replace(/^[^a-záéíóúñ]*|[^a-záéíóúñ]*$/g,'');
+    const soloPalabra=pal.toLowerCase().replace(/[,;.:!?]+$/,'');
+    let out=p;
+    if(primera&&/[a-záéíóúñ]/.test(p)){
+      out=p.charAt(0).toUpperCase()+p.slice(1);
+      primera=false;
+    }else if(nombresPropios.test(soloPalabra)){
+      const idx=p.search(/[a-záéíóúñ]/);
+      if(idx>=0)out=p.slice(0,idx)+p.charAt(idx).toUpperCase()+p.slice(idx+1).toLowerCase();
+    }
+    return out;
+  });
+  return res.join('');
+}
 function normalizeAIPhotoResult(obj){
   const out={...obj};
-  out.nombre=(out.nombre||'').toString().trim();
+  let nom=(out.nombre||'').toString().trim();
+  nom=nom.replace(/\.\s*\d{1,4}\s*$/,'').trim();
+  const pesoAlFinal=nom.match(/\s+(\d+[.,]\d+)\s*k\b\s*$/i)||nom.match(/\s+(\d+(?:[.,]\d+)?)\s*(?:kg|kilos?)\b\s*$/i);
+  if(pesoAlFinal&&!(out.peso_unidades||'').trim()){
+    const raw=pesoAlFinal[1];
+    const n=parseFloat(raw.replace(',','.'));
+    if(n>=0.01&&n<=999){out.peso_unidades=`${raw} kg`;nom=nom.replace(/\s+\d+(?:[.,]\d+)?\s*k(?:g|ilos?)?\b\s*$/i,'').trim();}
+  }
+  if(nom) nom=toSpanishOrthography(nom);
+  out.nombre=nom;
   let pu=(String(out.peso_unidades||'').trim()).replace(/\bmle\b/gi,'ml').replace(/\bge\b/gi,'g');
+  pu=pu.replace(/(\d+(?:[.,]\d+)?)\s*(kilos?|kilo)\b/gi,'$1 kg').replace(/(\d+(?:[.,]\d+)?)\s*k\b(?!g)/gi,'$1 kg');
+  if(pu&&!/\b(kgs?|g\b|ml|unidades?)\b|\d+\s*x\s*\d+/i.test(pu)&&/^\d{1,5}\.?\d*\s*$/.test(pu))pu='';
   out.peso_unidades=pu.slice(0,22);
   out.hallazgos_texto=Array.isArray(out.hallazgos_texto)?out.hallazgos_texto.map(x=>String(x||'').trim()).filter(Boolean):[];
   out.mapeo=Array.isArray(out.mapeo)?out.mapeo.map(m=>({texto:String((m&&m.texto)||'').trim(),alergeno:normalizeAllergen((m&&m.alergeno)||'')})).filter(m=>m.texto||m.alergeno).filter(m=>{const t=norm(m.texto);if(/\b(?:sin\s+gluten|gluten[\s-]?free|libre\s+de\s+gluten)\b/i.test(t)&&m.alergeno==='CEREALES')return false;if(/\b(?:sin\s+lactosa|lactose[\s-]?free)\b/i.test(t)&&m.alergeno==='LÁCTEO')return false;if(/\b(?:sin\s+huevo|egg[\s-]?free)\b/i.test(t)&&m.alergeno==='HUEVO')return false;if(/\b(?:sin\s+cacahuete|peanut[\s-]?free)\b/i.test(t)&&m.alergeno==='CACAHUETES')return false;return true;}):[];
@@ -2835,6 +2894,7 @@ document.getElementById('modalClose').addEventListener('click',closeModal);
 modalBg.addEventListener('click',e=>{if(e.target===modalBg)closeModal()});
 function closeModal(){
   analysisAborted=true;
+  if(autoMode){if(typeof btnAutoFlow!=='undefined')btnAutoFlow.style.display='';if(typeof btnTerminarAuto!=='undefined')btnTerminarAuto.style.display='none';}
   autoMode=false;
   if(typeof getNavStack==='function'&&getNavStack().length>1) navBack();
   else {
@@ -2903,6 +2963,7 @@ function activateMethod(method='manual'){
   document.getElementById('secManual').classList.add('show');
   document.getElementById('secCamera').classList.toggle('show',isCamera);
   document.getElementById('secBatch').classList.toggle('show',isBatch);
+  if(autoMode){if(typeof btnAutoFlow!=='undefined')btnAutoFlow.style.display=isBatch?'none':'';if(typeof btnTerminarAuto!=='undefined')btnTerminarAuto.style.display='none';}
   autoMode=false;
   if(typeof btnAutoFlow!=='undefined' && btnAutoFlow){
     btnAutoFlow.style.display=isBatch?'none':'';
@@ -3248,10 +3309,10 @@ NOMBRE DEL PRODUCTO — SIEMPRE EN ESPAÑOL:
 El campo "nombre" debe estar SIEMPRE en español, sea cual sea el formato de la etiqueta.
 ETIQUETAS CON VARIOS IDIOMAS: Identifica la versión en español (por marcadores como ES, Español, Spanish, versión española, o por el propio texto). Usa SIEMPRE el nombre en español cuando exista. No uses italiano, portugués, francés, inglés u otro idioma aunque aparezca antes o más destacado.
 ETIQUETAS EN UN SOLO IDIOMA (distinto del español): Traduce el nombre del producto al español.
-Prioriza la variante española sin importar el orden. Respeta mayúsculas. Máximo 80 caracteres. No concatenes títulos con "y".
+Prioriza la variante española sin importar el orden. Máximo 80 caracteres. No concatenes títulos con "y". NUNCA incluyas números sueltos en el nombre (códigos de lote, porcentajes); solo el nombre del producto.
 
 PESO_UNIDADES (opcional, breve):
-Si la etiqueta indica cantidad/peso/volumen que ayude a identificar el producto, extrae UNA indicación corta (máx. 20 caracteres). Ejemplos: "6 x 80 g 480g", "5 kg escurrido", "500 ml", "8 unidades". Prioridad: multipack (6 x 80 g) > peso escurrido > peso bruto. Si hay varios pesos, elige solo el más útil. Si no hay nada claro, déjalo vacío.
+Extrae SIEMPRE el peso si aparece. En etiquetas europeas la COMA es separador decimal: "2,50 kg" = 2,50 kilogramos, NUNCA 250g. Usa el formato de la etiqueta ("2,50 kg" o "2.50 kg"). Ejemplos: "2,50 kg", "500 g", "1,50 kg escurrido". NUNCA interpretes 2,50 como 250.
 
 ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
 - NEGACIÓN: "SIN GLUTEN", "gluten-free", "sin lactosa", etc. = NO incluyas ese alérgeno.
@@ -3307,10 +3368,10 @@ NOMBRE DEL PRODUCTO — SIEMPRE EN ESPAÑOL:
 El campo "nombre" debe estar SIEMPRE en español, sea cual sea el formato de la etiqueta.
 ETIQUETAS CON VARIOS IDIOMAS: Identifica la versión en español (por marcadores como ES, Español, Spanish, versión española, o por el propio texto: albahaca, aceite vs basilico, olio, etc.). Usa SIEMPRE el nombre en español cuando exista. No uses italiano, portugués, francés, inglés u otro idioma aunque aparezca antes o más destacado.
 ETIQUETAS EN UN SOLO IDIOMA (distinto del español): Traduce el nombre del producto al español.
-Prioriza la variante española sin importar el orden en el OCR. Respeta mayúsculas. Máximo 80 caracteres. No concatenes títulos con "y".
+Prioriza la variante española sin importar el orden en el OCR. Máximo 80 caracteres. No concatenes títulos con "y". NUNCA incluyas números sueltos en el nombre (códigos de lote, porcentajes); solo el nombre del producto.
 
 PESO_UNIDADES (opcional, breve):
-Si la etiqueta indica cantidad/peso/volumen que ayude a identificar el producto, extrae UNA indicación corta (máx. 20 caracteres). Ejemplos: "6 x 80 g 480g", "5 kg escurrido", "500 ml", "8 unidades". Prioridad: multipack > peso escurrido > peso bruto. Si no hay nada claro, déjalo vacío.
+Extrae SIEMPRE el peso si aparece. En etiquetas europeas la COMA es separador decimal: "2,50 kg" = 2,50 kilogramos, NUNCA 250g. Usa el formato de la etiqueta ("2,50 kg" o "2.50 kg"). Ejemplos: "2,50 kg", "500 g", "1,50 kg escurrido". NUNCA interpretes 2,50 como 250.
 
 ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
 - NEGACIÓN: "SIN GLUTEN", "gluten-free", "sin lactosa", etc. = NO incluyas ese alérgeno.
@@ -3569,6 +3630,7 @@ async function analyzePhotos(photoList, opts={}){
             addLog('INFO','PHOTO_OCR_RECOVERY','PHOTO_OCR_RECOVERY',{analysis_id:analysisId,recovered:merged.recovered});
           }
           result.nombre=fixNombreFromOcr(result.nombre,ocrText);
+          result.peso_unidades=fixPesoFromOcr(result.peso_unidades,ocrText);
           result=normalizeAIPhotoResult(result);
         }else{
           const errBody=await iaResp.json().catch(()=>null);
@@ -3587,6 +3649,7 @@ async function analyzePhotos(photoList, opts={}){
     }
 
     result.nombre=fixNombreFromOcr(result.nombre||'',ocrText);
+    result.peso_unidades=fixPesoFromOcr(result.peso_unidades,ocrText);
     addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, alergenos: result.alergenos||[], trazas: result.trazas||[] });
     window.__lastAnalysisId=analysisId;
 
@@ -3858,6 +3921,14 @@ btnAutoFlow.style.gridColumn='1 / -1';
 btnAutoFlow.style.background='var(--green)';
 btnAutoFlow.style.color='#fff';
 document.querySelector('.cam-btns').after(btnAutoFlow);
+const btnTerminarAuto=document.createElement('button');
+btnTerminarAuto.className='cam-btn';
+btnTerminarAuto.textContent='Terminar';
+btnTerminarAuto.style.gridColumn='1 / -1';
+btnTerminarAuto.style.background='var(--red)';
+btnTerminarAuto.style.color='#fff';
+btnTerminarAuto.style.display='none';
+document.querySelector('.cam-btns').after(btnTerminarAuto);
 
 let scanSession={photosTaken:0,productsSaved:0,failedPhotos:[],startedAt:null};
 
@@ -3919,6 +3990,7 @@ async function analyzePhotoPipelineForAuto(dataUrl){
     result=applyPhotoReviewValidation(merged.result,text,'vision_merged');
     if(merged.recovered.length) addLog('INFO','PHOTO_OCR_RECOVERY','PHOTO_OCR_RECOVERY',{analysis_id:analysisId,recovered:merged.recovered});
     result.nombre=fixNombreFromOcr(result.nombre,ocrText);
+    result.peso_unidades=fixPesoFromOcr(result.peso_unidades,ocrText);
     result=normalizeAIPhotoResult(result);
     addAnalysisSection(analysisId,'D_interpretation',{nombre:result.nombre,alergenos:result.alergenos||[],trazas:result.trazas||[]});
     addAnalysisSection(analysisId,'E_validations',{review_alerts:result.review_alerts||null,requires_review:!!result.requires_review});
@@ -3943,7 +4015,7 @@ btnAutoFlow.addEventListener('click',async()=>{
   }
   const vk=getVisionApiKey();
   if(!vk){showToast('Configura la API Key de Google (Drive) en Ajustes para OCR','info');return;}
-  autoMode=true;btnAutoFlow.style.display='none';
+  autoMode=true;btnAutoFlow.style.display='none';if(btnTerminarAuto)btnTerminarAuto.style.display='block';
   resetScanSession();
   const autoQ=loadAutoScanQueue();
   if(autoQ.length&&navigator.onLine){
@@ -3953,6 +4025,15 @@ btnAutoFlow.addEventListener('click',async()=>{
   document.getElementById('aiStatus').innerHTML='<span class="spinner"></span> Modo automático activo — Haz una foto';
   document.getElementById('aiStatus').classList.add('show');
   camInput.click();
+});
+btnTerminarAuto.addEventListener('click',()=>{
+  autoMode=false;
+  btnAutoFlow.style.display='';
+  btnTerminarAuto.style.display='none';
+  const s=scanSession,saved=s.productsSaved,fail=s.failedPhotos.length;
+  const msg=fail>0?`${saved} guardadas · ${fail} en Errores para revisar`:`${saved} guardadas`;
+  showToast(msg,'info');
+  closeModal();
 });
 
 function addPendingFixFromAuto(type,motivo,dataUrl,photoIndex){
@@ -4019,19 +4100,7 @@ async function autoProcessPhoto(dataUrl){
   if(result.requires_review){
     addPendingFixFromAuto('requires_review',buildReviewReason(result),dataUrl,scanSession.photosTaken);
     finishPhotoAnalysis(analysisId);
-    aiS.innerHTML=dataUrl?`<div style="display:flex;align-items:center;gap:10px"><div class="auto-thumb" style="width:48px;height:48px;border-radius:6px;background:url(${dataUrl}) center/cover;flex-shrink:0"></div><div>Revisión necesaria — Revisa abajo o en Errores</div></div>`:'Revisión necesaria — Revisa abajo o en Errores';
-    aiS.classList.add('show');
-    window.__lastAIPhotoAnalysis=result;
-    document.getElementById('aiName').value=buildProductName(result);
-    setSelected('aiAllergens',allA);
-    let warn='';if(result.trazas&&result.trazas.length)warn='Trazas: '+result.trazas.join(', ');if(result.notas)warn+=(warn?' · ':'')+result.notas;
-    document.getElementById('aiWarn').textContent=warn;
-    const displayName=buildProductName(result);
-    const match=findMatch(displayName);aiCurrentMatch=match;
-    if(match){showMatch('aiMatch',match);document.getElementById('aiSave').textContent='Actualizar existente'}else document.getElementById('aiSave').textContent='Guardar producto nuevo';
-    document.getElementById('aiResult').classList.add('show');
-    document.getElementById('aiSave').disabled=false;
-    updateSave('aiAllergens');
+    showAutoErrorInline(aiS,'Revisión necesaria — Foto en Errores. Revisa en Errores cuando termines.',dataUrl);
     return;
   }
   if(result.nombre){
@@ -4508,6 +4577,31 @@ let gisLoaded=false;
 let googleApisLoadingPromise=null;
 let tokenClient;
 
+function gdriveRefreshAccessToken(){
+  return new Promise((resolve,reject)=>{
+    const cfg=getGdriveConfig();
+    if(!cfg.clientId||!cfg.scopes){reject(new Error('Configuración Google Drive incompleta'));return;}
+    if(typeof google==='undefined'||!google.accounts||!google.accounts.oauth2){
+      reject(new Error('Google Identity Services no cargado'));
+      return;
+    }
+    const client=google.accounts.oauth2.initTokenClient({
+      client_id:cfg.clientId,
+      scope:cfg.scopes,
+      callback:(response)=>{
+        if(response&&response.access_token){
+          gdriveToken=response.access_token;
+          localStorage.setItem('gdrive_token',gdriveToken);
+          if(typeof gapi!=='undefined'&&gapi.client)gapi.client.setToken({access_token:gdriveToken});
+          resolve(gdriveToken);
+        }else{
+          reject(new Error(response&&response.error_description?response.error_description:response&&response.error?response.error:'No se pudo renovar el token'));
+        }
+      }
+    });
+    try{client.requestAccessToken({prompt:'none'});}catch(e){reject(e);}
+  });
+}
 function getGdriveAuthErrorMessage(response){
   const err=String((response&&response.error)||'').trim();
   const provider=String((response&&response.error_description)||'').trim();
@@ -4903,7 +4997,7 @@ async function gdriveReadRemoteState() {
   return { found: true, fileId, remoteCount, remoteLastUpdate, products: consolidated.products };
 }
 
-async function gdriveSmartSync(trigger = 'manual') {
+async function gdriveSmartSync(trigger = 'manual', opts = {}) {
   if(!gdriveToken || syncInProgress) return;
   syncInProgress = true;
 
@@ -5110,6 +5204,19 @@ async function gdriveSmartSync(trigger = 'manual') {
       status: err && err.status ? err.status : null,
       probable_cause: classifyHttpFailure((err&&err.status)||0, (err&&err.message)||'')
     });
+    if(err.status === 401 && !opts.retriedAfter401) {
+      try {
+        await gdriveRefreshAccessToken();
+        return gdriveSmartSync(trigger, { retriedAfter401: true });
+      } catch(refreshErr) {
+        finishSyncSession(session, 'error', 'error', 'Error: ' + err.message, err.message);
+        localStorage.removeItem('gdrive_token');
+        gdriveToken = null;
+        updateGDriveUI();
+        showToast('Sesión Google Drive expirada. Reconecta.', 'info');
+        return;
+      }
+    }
     finishSyncSession(session, 'error', 'error', 'Error: ' + err.message, err.message);
     if(err.status === 401 || err.status === 403) {
       localStorage.removeItem('gdrive_token');
@@ -5187,20 +5294,21 @@ async function gdriveUpload(){
   const delimiter="\r\n--"+boundary+"\r\n";
   const close_delim="\r\n--"+boundary+"--";
 
-  const metadata={
-    name:GDRIVE_CONFIG.fileName,
-    mimeType:'application/json',
-    parents:[folderId]
-  };
+  // PATCH: no incluir parents (Drive no lo permite en actualizaciones)
+  const metadataPatch={name:GDRIVE_CONFIG.fileName,mimeType:'application/json'};
+  const multipartRequestBodyPatch=
+    delimiter+'Content-Type: application/json\r\n\r\n'+
+    JSON.stringify(metadataPatch)+
+    delimiter+'Content-Type: application/json\r\n\r\n'+
+    content+close_delim;
 
-  const multipartRequestBody=
-    delimiter+
-    'Content-Type: application/json\r\n\r\n'+
-    JSON.stringify(metadata)+
-    delimiter+
-    'Content-Type: application/json\r\n\r\n'+
-    content+
-    close_delim;
+  // POST: sí incluir parents para crear en la carpeta
+  const metadataCreate={name:GDRIVE_CONFIG.fileName,mimeType:'application/json',parents:[folderId]};
+  const multipartRequestBodyCreate=
+    delimiter+'Content-Type: application/json\r\n\r\n'+
+    JSON.stringify(metadataCreate)+
+    delimiter+'Content-Type: application/json\r\n\r\n'+
+    content+close_delim;
 
   async function patchFile(targetFileId){
     const upResp = await fetchWithDiagnostics(`https://www.googleapis.com/upload/drive/v3/files/${targetFileId}?uploadType=multipart`,{
@@ -5209,7 +5317,7 @@ async function gdriveUpload(){
         'Authorization':`Bearer ${gdriveToken}`,
         'Content-Type':`multipart/related; boundary="${boundary}"`
       },
-      body:multipartRequestBody
+      body:multipartRequestBodyPatch
     },{
       service:'Google Drive',
       operation:'subida PATCH productos.json',
@@ -5233,7 +5341,7 @@ async function gdriveUpload(){
         'Authorization':`Bearer ${gdriveToken}`,
         'Content-Type':`multipart/related; boundary="${boundary}"`
       },
-      body:multipartRequestBody
+      body:multipartRequestBodyCreate
     },{
       service:'Google Drive',
       operation:'creacion archivo productos.json',
