@@ -1513,7 +1513,7 @@ function buildResultFromOcrText(rawText){
 
   let peso_unidades='';
   const fullText=lines.join(' ');
-  const multipack=fullText.match(/(\d+)\s*x\s*(\d+)\s*(g|kg|ml)/i);
+  const multipack=fullText.match(/(\d+)\s*(?:u\.?|uds?\.?|unidades?)?\s*x\s*(\d+)\s*(g|kg|ml)/i)||fullText.match(/(\d+)\s*x\s*(\d+)\s*(g|kg|ml)/i);
   const pesoNetoRx=/(?:peso\s+neto|net\s+weight|poids?\s+net|peso\s+netto|nettogewicht|peso\s+liquido)[\s:]*(\d+(?:[.,]\d+)?)\s*(kg|kilos?|k\b|g\b)/i;
   const pesoNetoMatch=fullText.match(pesoNetoRx);
   const pesoSimple=fullText.match(/(\d+(?:[.,]\d+)?)\s*(kgs?|g|ml)\s*escurrido/i)
@@ -1610,10 +1610,12 @@ function fixNombreFromOcr(nombre, ocrText){
   if(n.length>90) n=n.slice(0,90).trim();
   return n;
 }
-/** Corrige peso cuando la IA confunde formato europeo: "2,50 kg" (coma decimal) NO es 250g. Soporta "5,00k"=5 kg. Si la IA no devolvió peso, intenta extraerlo del OCR (evitando "100 g" de tabla nutricional). */
+/** Corrige peso cuando la IA confunde formato europeo: "2,50 kg" (coma decimal) NO es 250g. Soporta "5,00k"=5 kg. Si la IA no devolvió peso, intenta extraerlo del OCR (evitando "100 g" de tabla nutricional). Prioriza formato multipack (15 x 100 g) cuando exista. */
 function fixPesoFromOcr(aiPeso,ocrText){
   const ocr=String(ocrText||'').trim();
   if(!ocr) return aiPeso;
+  const multipack=ocr.match(/(\d+)\s*(?:u\.?|uds?\.?|unidades?)?\s*x\s*(\d+)\s*(g|kg|ml)/i)||ocr.match(/(\d+)\s*x\s*(\d+)\s*(g|kg|ml)/i);
+  if(multipack){const u=(multipack[3]||'g').toLowerCase();const unit=/\bkg\b/i.test(u)?'kg':(u||'g');return `${multipack[1]} x ${multipack[2]} ${unit}`.slice(0,22);}
   const m=ocr.match(/(\d+)[.,](\d+)\s*(kg|kilos?|k)\b/i);
   if(m){
     const ocrPeso=`${m[1]},${m[2]} kg`;
@@ -2609,7 +2611,9 @@ function mergeAIWithOcrFallback(aiResult,ocrResult){
   const ocr=normalizeAIPhotoResult(ocrResult||{});
   const merged={...ocr,...ai};
   merged.nombre=ai.nombre||ocr.nombre;
-  merged.peso_unidades=(ai.peso_unidades||ocr.peso_unidades||'').trim().slice(0,22);
+  const aiPeso=(ai.peso_unidades||'').trim().slice(0,22);
+  const ocrPeso=(ocr.peso_unidades||'').trim().slice(0,22);
+  merged.peso_unidades=(ocrPeso&&/\d+\s*x\s*\d+/.test(ocrPeso))?ocrPeso:(aiPeso||ocrPeso);
   merged.hallazgos_texto=[...new Set([...(ocr.hallazgos_texto||[]),...(ai.hallazgos_texto||[])].map(x=>String(x||'').trim()).filter(Boolean))];
   const map=new Map();
   [...(ocr.mapeo||[]),...(ai.mapeo||[])].forEach(entry=>{
@@ -3424,11 +3428,12 @@ Prioriza la variante española sin importar el orden. Máximo 80 caracteres. No 
 NOMBRE ÚNICO: Si la etiqueta tiene varias variantes (ej. "Delicias de pollo Kentucky / American crispy halal"), usa SOLO el nombre principal en español, la primera parte. No concatenar variantes con / ni -.
 
 PESO_UNIDADES (opcional, breve):
-Extrae el PESO NETO del envase (total del paquete). Busca junto a "Peso Neto", "Net Weight", "Poids Net", "Peso Netto", "Nettogewicht", "Peso Liquido", etc.
+Extrae el PESO NETO del envase (total del paquete). Busca junto a "Peso Neto", "Net Weight", "Poids Net", "Peso Netto", "Nettogewicht", "Peso Liquido", "Cantidad neta", etc.
+MULTIPACK: Si la etiqueta indica formato multipack (ej. "1,5 Kg (15 u x 100g)" o "15 uds x 100 g"), usa ESE formato: "15 x 100 g". Prioriza multipack sobre el peso total cuando ambos aparezcan.
 
-REGLA CRÍTICA — NUNCA uses "100 g" como peso del envase: En etiquetas europeas, "100 g" aparece SIEMPRE en la tabla nutricional como referencia ("por 100 g", "per 100 g", "per 100g of product", "edi per 100 g di prodotto", "valeurs pour 100 g", etc.). Eso es la unidad de referencia nutricional, NO el peso del paquete. Si el único peso que ves es "100 g" en contexto nutricional, deja peso_unidades vacío.
+REGLA CRÍTICA — NUNCA uses "100 g" como peso del envase: En etiquetas europeas, "100 g" aparece SIEMPRE en la tabla nutricional como referencia ("por 100 g", "per 100 g", "per 100g of product", "edi per 100 g di prodotto", "valeurs pour 100 g", etc.). Eso es la unidad de referencia nutricional, NO el peso del paquete. EXCEPCIÓN: "15 u x 100g" SÍ es válido (multipack). Si el único peso que ves es "100 g" en contexto nutricional, deja peso_unidades vacío.
 
-Formato europeo: la COMA es separador decimal: "2,50 kg" = 2,50 kilogramos, NUNCA 250g. Usa el formato de la etiqueta ("2,50 kg" o "2.50 kg"). Ejemplos válidos: "2 kg", "2,50 kg", "500 g", "1,50 kg escurrido".
+Formato europeo: la COMA es separador decimal: "2,50 kg" = 2,50 kilogramos, NUNCA 250g. Usa el formato de la etiqueta ("2,50 kg" o "2.50 kg"). Ejemplos válidos: "2 kg", "2,50 kg", "500 g", "1,50 kg escurrido", "15 x 100 g".
 Unidades SIEMPRE en español: litro/litros, kg, g, ml, onza/onzas, libra/libras. Si la etiqueta está en inglés, francés, alemán, italiano, portugués u otro idioma, traduce las unidades (litre→litro, Liter→litro, grammes→g, ounces→onzas, pound→libra, etc.).
 
 ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
@@ -3496,11 +3501,12 @@ Prioriza la variante española sin importar el orden en el OCR. Máximo 80 carac
 NOMBRE ÚNICO: Si el OCR tiene varias variantes (ej. "Delicias de pollo Kentucky / American crispy halal"), usa SOLO el nombre principal en español, la primera parte. No concatenar variantes con / ni -.
 
 PESO_UNIDADES (opcional, breve):
-Extrae el PESO NETO del envase (total del paquete). Busca junto a "Peso Neto", "Net Weight", "Poids Net", "Peso Netto", "Nettogewicht", "Peso Liquido", etc.
+Extrae el PESO NETO del envase (total del paquete). Busca junto a "Peso Neto", "Net Weight", "Poids Net", "Peso Netto", "Nettogewicht", "Peso Liquido", "Cantidad neta", etc.
+MULTIPACK: Si el OCR indica formato multipack (ej. "1,5 Kg (15 u x 100g)" o "15 uds x 100 g"), usa ESE formato: "15 x 100 g". Prioriza multipack sobre el peso total cuando ambos aparezcan.
 
-REGLA CRÍTICA — NUNCA uses "100 g" como peso del envase: En etiquetas europeas, "100 g" aparece SIEMPRE en la tabla nutricional como referencia ("por 100 g", "per 100 g", "per 100g of product", "edi per 100 g di prodotto", "valeurs pour 100 g", etc.). Eso es la unidad de referencia nutricional, NO el peso del paquete. Si el único peso que ves es "100 g" en contexto nutricional, deja peso_unidades vacío.
+REGLA CRÍTICA — NUNCA uses "100 g" como peso del envase: En etiquetas europeas, "100 g" aparece SIEMPRE en la tabla nutricional como referencia ("por 100 g", "per 100 g", "per 100g of product", "edi per 100 g di prodotto", "valeurs pour 100 g", etc.). Eso es la unidad de referencia nutricional, NO el peso del paquete. EXCEPCIÓN: "15 u x 100g" SÍ es válido (multipack). Si el único peso que ves es "100 g" en contexto nutricional, deja peso_unidades vacío.
 
-Formato europeo: la COMA es separador decimal: "2,50 kg" = 2,50 kilogramos, NUNCA 250g. Usa el formato de la etiqueta ("2,50 kg" o "2.50 kg"). Ejemplos válidos: "2 kg", "2,50 kg", "500 g", "1,50 kg escurrido".
+Formato europeo: la COMA es separador decimal: "2,50 kg" = 2,50 kilogramos, NUNCA 250g. Usa el formato de la etiqueta ("2,50 kg" o "2.50 kg"). Ejemplos válidos: "2 kg", "2,50 kg", "500 g", "1,50 kg escurrido", "15 x 100 g".
 Unidades SIEMPRE en español: litro/litros, kg, g, ml, onza/onzas, libra/libras. Si la etiqueta está en inglés, francés, alemán, italiano, portugués u otro idioma, traduce las unidades (litre→litro, Liter→litro, grammes→g, ounces→onzas, pound→libra, etc.).
 
 ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
