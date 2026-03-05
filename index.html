@@ -1633,11 +1633,13 @@ function sanitizeProductList(list){
       const itemTs = item.last_analysis_timestamp ? Date.parse(item.last_analysis_timestamp) : 0;
       if(itemTs > prevTs && item.last_analysis_id != null){ prev.last_analysis_id = item.last_analysis_id; prev.last_analysis_timestamp = item.last_analysis_timestamp; }
       if(item._src) prev._src = item._src;
+      if(item._updated_at) prev._updated_at = item._updated_at;
     } else {
       const obj = { n:name, a:allergens };
       if(item.last_analysis_id != null) obj.last_analysis_id = item.last_analysis_id;
       if(item.last_analysis_timestamp != null) obj.last_analysis_timestamp = item.last_analysis_timestamp;
       if(item._src) obj._src = item._src;
+      if(item._updated_at) obj._updated_at = item._updated_at;
       map.set(key, obj);
     }
   });
@@ -1952,6 +1954,7 @@ function saveDB(options = {}) {
   if(!Array.isArray(P)) return;
   const skipAutoSync = options.skipAutoSync === true;
   try {
+    for(const p of P){ if(p._src==='app'&&!p._updated_at) p._updated_at=new Date().toISOString(); }
     P = sanitizeProductList(P);
     const prevJson = localStorage.getItem('alergenos_db_v3') || '';
     let prevList = [];
@@ -2674,6 +2677,7 @@ function mergeProduct(idx,nn,na,opts){
   if(nn.length>ex.n.length)ex.n=nn;
   ex.a=m;
   ex._src='app';
+  ex._updated_at=(opts&&opts.analysisTimestamp)||(opts&&opts.last_analysis_timestamp)||new Date().toISOString();
   if(opts&&opts.analysisId!= null){ ex.last_analysis_id=opts.analysisId; ex.last_analysis_timestamp=opts.analysisTimestamp||new Date().toISOString(); }
   saveDB({
     changeType:'edit_product',
@@ -2705,6 +2709,14 @@ function updateCancelReviewUI(){
 
 let renderLimit=150;
 let currentFiltered=[];
+
+function formatUpdatedAtLabel(p){
+  if(p._src!=='app')return '';
+  const ts=p._updated_at||p.last_analysis_timestamp;
+  const d=ts?new Date(ts):new Date();
+  const day=String(d.getDate()).padStart(2,'0'),month=String(d.getMonth()+1).padStart(2,'0'),year=d.getFullYear();
+  return '<span class="card-app-label">Actualizado '+day+'/'+month+'/'+year+'</span>';
+}
 
 function render(){
   const raw=q.value.trim(),query=norm(raw);
@@ -2764,7 +2776,7 @@ function renderProducts(){
       const badge=`<span class="audit-badge ${severity}">${severity==='high'?'Alta':'Media'}</span>`;
       const reviewBadge=p.requires_review?'<span class="audit-badge medium">Revisar IA</span>':'';
       const fromApp=p._src==='app'?' card-from-app':'';
-      const appLabel=p._src==='app'?'<span class="card-app-label">Actualizado en app</span>':'';
+      const appLabel=formatUpdatedAtLabel(p);
       h+=`<div class="card audit-${severity}${fromApp}" data-idx="${oi}"><div class="card-name">${nm}${badge}${reviewBadge}</div>${ic}${count}${appLabel}</div>`;
     });
     h+='<hr class="audit-separator">';
@@ -2776,7 +2788,7 @@ function renderProducts(){
     if(idxInNormal>=0&&idxInNormal>=renderLimit)renderLimit=Math.max(renderLimit,idxInNormal+1);
   }
   const show=normal.slice(0,renderLimit);
-  show.forEach(p=>{const oi=P.indexOf(p);let nm=esc(p.n);const query=norm(q.value.trim());if(query)nm=hi(nm,query);let ic='';if(!p.a.length)ic='<span class="safe">✓ Sin alérgenos</span>';else{ic='<div class="icons-row">';p.a.forEach(a=>{if(IC[a])ic+=`<img class="a-icon" src="${IC[a]}" alt="${a}" title="${a}">`});ic+='</div>'}const isHL=lastSavedName&&norm(p.n)===norm(lastSavedName);const fromApp=p._src==='app'?' card-from-app':'';const appLabel=p._src==='app'?'<span class="card-app-label">Actualizado en app</span>':'';const count=p.a.length?`<div class="a-count">${p.a.length} alérgeno${p.a.length>1?'s':''}</div>`:'';const reviewBadge=p.requires_review?'<span class="audit-badge medium">Revisar IA</span>':'';h+=`<div class="card${isHL?' highlight':''}${fromApp}" data-idx="${oi}"><div class="card-name">${nm}${reviewBadge}</div>${ic}${count}${appLabel}</div>`});
+  show.forEach(p=>{const oi=P.indexOf(p);let nm=esc(p.n);const query=norm(q.value.trim());if(query)nm=hi(nm,query);let ic='';if(!p.a.length)ic='<span class="safe">✓ Sin alérgenos</span>';else{ic='<div class="icons-row">';p.a.forEach(a=>{if(IC[a])ic+=`<img class="a-icon" src="${IC[a]}" alt="${a}" title="${a}">`});ic+='</div>'}const isHL=lastSavedName&&norm(p.n)===norm(lastSavedName);const fromApp=p._src==='app'?' card-from-app':'';const appLabel=formatUpdatedAtLabel(p);const count=p.a.length?`<div class="a-count">${p.a.length} alérgeno${p.a.length>1?'s':''}</div>`:'';const reviewBadge=p.requires_review?'<span class="audit-badge medium">Revisar IA</span>':'';h+=`<div class="card${isHL?' highlight':''}${fromApp}" data-idx="${oi}"><div class="card-name">${nm}${reviewBadge}</div>${ic}${count}${appLabel}</div>`});
   if(normal.length>renderLimit)h+=`<div class="empty" id="loadMore">Mostrando ${renderLimit} de ${normal.length} — Baja para cargar más</div>`;
   ls.innerHTML=h;
   updateCancelReviewUI();
@@ -3013,12 +3025,12 @@ let matchTimer,manualCurrentMatch=null;const manualNameInput=document.getElement
 manualNameInput.addEventListener('input',()=>{updateSave('manualAllergens');clearTimeout(matchTimer);matchTimer=setTimeout(()=>{if(editMode)return;const name=manualNameInput.value.trim();if(name.length<3){hideMatch('manualMatch');manualCurrentMatch=null;document.getElementById('manualSave').textContent='Guardar producto';return}const match=findMatch(name);manualCurrentMatch=match;if(match){showMatch('manualMatch',match);document.getElementById('manualSave').textContent='Actualizar existente'}else{hideMatch('manualMatch');document.getElementById('manualSave').textContent='Guardar producto nuevo'}},300)});
 manualNameInput.addEventListener('blur',()=>{const v=manualNameInput.value.trim();if(v){const c=autoCorrectName(v);if(c!==v){manualNameInput.value=c;showToast('Ortografía corregida','info')}}});
 
-document.getElementById('manualSave').addEventListener('click',()=>{let name=manualNameInput.value.trim();if(!name)return;name=autoCorrectName(name);const al=sortAllergens(getSelected('manualAllergens'));if(editMode&&editIdx>=0){const before={n:P[editIdx].n,a:[...P[editIdx].a]};P[editIdx].n=name;P[editIdx].a=al;P[editIdx]._src='app';saveDB({changeType:'edit_product',origin:'manualSave',recordKeys:[before.n,name]});clearFlagOnSave(name,before,{n:name,a:[...al]});lastSavedName=name;render();showToast(`✓ "${name}" actualizado`,'update')}else if(manualCurrentMatch){const r=mergeProduct(manualCurrentMatch.index,name,al);logAuditEvent('merge_save',{target:manualCurrentMatch.product.n, merged_name:name, added_allergens:r.added});lastSavedName=manualCurrentMatch.product.n;render();showToast(r.added.length?`✓ "${manualCurrentMatch.product.n}" · +${r.added.length} alérgeno${r.added.length>1?'s':''}`:`✓ "${manualCurrentMatch.product.n}" sin cambios`,'update')}else{addNewProduct(name,al);logAuditEvent('new_product',{product:name, allergens:al});lastSavedName=name;render();showToast(`✓ "${name}" añadido`,'new')}closeModal();if(window.__batchReviewCorrecting){window.__batchReviewCorrecting=false;const p=window.__batchPendingReview||[];p.shift();if(p.length>0){if(typeof navPush==='function')navPush('batchReview');showNextBatchPending()}else closeModal();}});
+document.getElementById('manualSave').addEventListener('click',()=>{let name=manualNameInput.value.trim();if(!name)return;name=autoCorrectName(name);const al=sortAllergens(getSelected('manualAllergens'));if(editMode&&editIdx>=0){const before={n:P[editIdx].n,a:[...P[editIdx].a]};P[editIdx].n=name;P[editIdx].a=al;P[editIdx]._src='app';P[editIdx]._updated_at=new Date().toISOString();saveDB({changeType:'edit_product',origin:'manualSave',recordKeys:[before.n,name]});clearFlagOnSave(name,before,{n:name,a:[...al]});lastSavedName=name;render();showToast(`✓ "${name}" actualizado`,'update')}else if(manualCurrentMatch){const r=mergeProduct(manualCurrentMatch.index,name,al);logAuditEvent('merge_save',{target:manualCurrentMatch.product.n, merged_name:name, added_allergens:r.added});lastSavedName=manualCurrentMatch.product.n;render();showToast(r.added.length?`✓ "${manualCurrentMatch.product.n}" · +${r.added.length} alérgeno${r.added.length>1?'s':''}`:`✓ "${manualCurrentMatch.product.n}" sin cambios`,'update')}else{addNewProduct(name,al);logAuditEvent('new_product',{product:name, allergens:al});lastSavedName=name;render();showToast(`✓ "${name}" añadido`,'new')}closeModal();if(window.__batchReviewCorrecting){window.__batchReviewCorrecting=false;const p=window.__batchPendingReview||[];p.shift();if(p.length>0){if(typeof navPush==='function')navPush('batchReview');showNextBatchPending()}else closeModal();}});
 function addNewProduct(name,al,opts){
   const nk=norm(name);
   let idx=P.findIndex(p=>norm(p.n)>nk);
   if(idx===-1)idx=P.length;
-  const obj={n:name,a:sortAllergens(al),_src:'app'};
+  const obj={n:name,a:sortAllergens(al),_src:'app',_updated_at:(opts&&opts.analysisTimestamp)||(opts&&opts.last_analysis_timestamp)||new Date().toISOString()};
   if(opts&&opts.analysisId!=null){ obj.last_analysis_id=opts.analysisId; obj.last_analysis_timestamp=opts.analysisTimestamp||new Date().toISOString(); }
   P.splice(idx,0,obj);
   saveDB({changeType:'create_product',origin:'addNewProduct',recordKey:name});updateAppStatus();
@@ -5519,7 +5531,7 @@ if(gdriveToken&&checkSession()){
 }
 
 // Init
-if(checkSession()){render();updateGDriveUI();updateSyncStatusUI();if(photoQueue.length&&navigator.onLine&&getApiKey())setTimeout(processQueue,1000)}
+if(checkSession()){if(Array.isArray(P)&&P.some(p=>p._src==='app'&&!p._updated_at))saveDB({changeType:'migration',origin:'init'});render();updateGDriveUI();updateSyncStatusUI();if(photoQueue.length&&navigator.onLine&&getApiKey())setTimeout(processQueue,1000)}
 </script>
 </body>
 </html>
