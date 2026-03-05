@@ -1610,7 +1610,7 @@ function fixNombreFromOcr(nombre, ocrText){
   if(n.length>90) n=n.slice(0,90).trim();
   return n;
 }
-/** Corrige peso cuando la IA confunde formato europeo: "2,50 kg" (coma decimal) NO es 250g. Soporta "5,00k"=5 kg. Si la IA no devolvió peso, intenta extraerlo del OCR (evitando "100 g" de tabla nutricional). Prioriza formato multipack (15 x 100 g) cuando exista. */
+/** Corrige peso cuando la IA confunde formato europeo. Prioriza formato multipack (N x M g) cuando exista en el OCR. Si la IA no devolvió peso, intenta extraerlo del OCR (evitando "100 g" de tabla nutricional). */
 function fixPesoFromOcr(aiPeso,ocrText){
   const ocr=String(ocrText||'').trim();
   if(!ocr) return aiPeso;
@@ -3425,15 +3425,15 @@ El campo "nombre" debe estar SIEMPRE en español, sea cual sea el formato de la 
 ETIQUETAS CON VARIOS IDIOMAS: Identifica la versión en español (por marcadores como ES, Español, Spanish, versión española, o por el propio texto). Usa SIEMPRE el nombre en español cuando exista. No uses italiano, portugués, francés, inglés u otro idioma aunque aparezca antes o más destacado.
 ETIQUETAS EN UN SOLO IDIOMA (distinto del español): Traduce el nombre del producto al español.
 Prioriza la variante española sin importar el orden. Máximo 80 caracteres. No concatenes títulos con "y". NUNCA incluyas números sueltos en el nombre (códigos de lote, porcentajes); solo el nombre del producto.
-NOMBRE ÚNICO: Si la etiqueta tiene varias variantes (ej. "Delicias de pollo Kentucky / American crispy halal"), usa SOLO el nombre principal en español, la primera parte. No concatenar variantes con / ni -.
+NOMBRE ÚNICO: Si la etiqueta tiene varias variantes (nombre en varios idiomas o formatos separados por / o -), usa SOLO el nombre principal en español, la primera parte. No concatenar variantes.
 
 PESO_UNIDADES (opcional, breve):
 Extrae el PESO NETO del envase (total del paquete). Busca junto a "Peso Neto", "Net Weight", "Poids Net", "Peso Netto", "Nettogewicht", "Peso Liquido", "Cantidad neta", etc.
-MULTIPACK: Si la etiqueta indica formato multipack (ej. "1,5 Kg (15 u x 100g)" o "15 uds x 100 g"), usa ESE formato: "15 x 100 g". Prioriza multipack sobre el peso total cuando ambos aparezcan.
+MULTIPACK: Si la etiqueta indica formato multipack (N unidades x M g/kg, con variantes como "u", "uds", "unidades" entre cifras y "x"), usa ESE formato (N x M g). Prioriza multipack sobre el peso total cuando ambos aparezcan.
 
-REGLA CRÍTICA — NUNCA uses "100 g" como peso del envase: En etiquetas europeas, "100 g" aparece SIEMPRE en la tabla nutricional como referencia ("por 100 g", "per 100 g", "per 100g of product", "edi per 100 g di prodotto", "valeurs pour 100 g", etc.). Eso es la unidad de referencia nutricional, NO el peso del paquete. EXCEPCIÓN: "15 u x 100g" SÍ es válido (multipack). Si el único peso que ves es "100 g" en contexto nutricional, deja peso_unidades vacío.
+REGLA CRÍTICA — NUNCA uses solo "100 g" como peso del envase: En etiquetas europeas, "100 g" aparece SIEMPRE en la tabla nutricional como referencia. Eso es la unidad de referencia nutricional, NO el peso del paquete. EXCEPCIÓN: formato multipack "N x 100 g" SÍ es válido. Si el único peso que ves es "100 g" en contexto nutricional, deja peso_unidades vacío.
 
-Formato europeo: la COMA es separador decimal: "2,50 kg" = 2,50 kilogramos, NUNCA 250g. Usa el formato de la etiqueta ("2,50 kg" o "2.50 kg"). Ejemplos válidos: "2 kg", "2,50 kg", "500 g", "1,50 kg escurrido", "15 x 100 g".
+Formato europeo: la COMA es separador decimal. Unidades en español: kg, g, ml. Si hay multipack (N x M unidad), usa ese formato.
 Unidades SIEMPRE en español: litro/litros, kg, g, ml, onza/onzas, libra/libras. Si la etiqueta está en inglés, francés, alemán, italiano, portugués u otro idioma, traduce las unidades (litre→litro, Liter→litro, grammes→g, ounces→onzas, pound→libra, etc.).
 
 ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
@@ -3498,15 +3498,15 @@ El campo "nombre" debe estar SIEMPRE en español, sea cual sea el formato de la 
 ETIQUETAS CON VARIOS IDIOMAS: Identifica la versión en español (por marcadores como ES, Español, Spanish, versión española, o por el propio texto: albahaca, aceite vs basilico, olio, etc.). Usa SIEMPRE el nombre en español cuando exista. No uses italiano, portugués, francés, inglés u otro idioma aunque aparezca antes o más destacado.
 ETIQUETAS EN UN SOLO IDIOMA (distinto del español): Traduce el nombre del producto al español.
 Prioriza la variante española sin importar el orden en el OCR. Máximo 80 caracteres. No concatenes títulos con "y". NUNCA incluyas números sueltos en el nombre (códigos de lote, porcentajes); solo el nombre del producto.
-NOMBRE ÚNICO: Si el OCR tiene varias variantes (ej. "Delicias de pollo Kentucky / American crispy halal"), usa SOLO el nombre principal en español, la primera parte. No concatenar variantes con / ni -.
+NOMBRE ÚNICO: Si el OCR tiene varias variantes (nombre en varios idiomas o formatos separados por / o -), usa SOLO el nombre principal en español, la primera parte. No concatenar variantes.
 
 PESO_UNIDADES (opcional, breve):
 Extrae el PESO NETO del envase (total del paquete). Busca junto a "Peso Neto", "Net Weight", "Poids Net", "Peso Netto", "Nettogewicht", "Peso Liquido", "Cantidad neta", etc.
-MULTIPACK: Si el OCR indica formato multipack (ej. "1,5 Kg (15 u x 100g)" o "15 uds x 100 g"), usa ESE formato: "15 x 100 g". Prioriza multipack sobre el peso total cuando ambos aparezcan.
+MULTIPACK: Si el OCR indica formato multipack (N unidades x M g/kg, con variantes como "u", "uds", "unidades" entre cifras y "x"), usa ESE formato (N x M g). Prioriza multipack sobre el peso total cuando ambos aparezcan.
 
-REGLA CRÍTICA — NUNCA uses "100 g" como peso del envase: En etiquetas europeas, "100 g" aparece SIEMPRE en la tabla nutricional como referencia ("por 100 g", "per 100 g", "per 100g of product", "edi per 100 g di prodotto", "valeurs pour 100 g", etc.). Eso es la unidad de referencia nutricional, NO el peso del paquete. EXCEPCIÓN: "15 u x 100g" SÍ es válido (multipack). Si el único peso que ves es "100 g" en contexto nutricional, deja peso_unidades vacío.
+REGLA CRÍTICA — NUNCA uses solo "100 g" como peso del envase: En etiquetas europeas, "100 g" aparece SIEMPRE en la tabla nutricional como referencia. Eso es la unidad de referencia nutricional, NO el peso del paquete. EXCEPCIÓN: formato multipack "N x 100 g" SÍ es válido. Si el único peso que ves es "100 g" en contexto nutricional, deja peso_unidades vacío.
 
-Formato europeo: la COMA es separador decimal: "2,50 kg" = 2,50 kilogramos, NUNCA 250g. Usa el formato de la etiqueta ("2,50 kg" o "2.50 kg"). Ejemplos válidos: "2 kg", "2,50 kg", "500 g", "1,50 kg escurrido", "15 x 100 g".
+Formato europeo: la COMA es separador decimal. Unidades en español: kg, g, ml. Si hay multipack (N x M unidad), usa ese formato.
 Unidades SIEMPRE en español: litro/litros, kg, g, ml, onza/onzas, libra/libras. Si la etiqueta está en inglés, francés, alemán, italiano, portugués u otro idioma, traduce las unidades (litre→litro, Liter→litro, grammes→g, ounces→onzas, pound→libra, etc.).
 
 ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
