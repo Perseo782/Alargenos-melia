@@ -136,7 +136,8 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
 .modal h2{font-family:var(--serif);font-size:22px;font-weight:400;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;color:var(--text);letter-spacing:-0.3px}
 .modal-close{width:28px;height:28px;border-radius:50%;background:var(--warm8-10);border:none;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--warm8)}
-.add-modal-sections{display:flex;flex-direction:column;gap:16px}
+.add-modal-sections{display:flex;flex-direction:column;gap:12px}
+.add-modal-sections .form-section{background:var(--warm8-05);border-radius:var(--card-radius);box-shadow:var(--card-shadow);border:1px solid var(--warm8-20);padding:16px 14px}
 .section-label{font-size:11px;font-weight:600;color:var(--warm8);letter-spacing:0.5px;margin-bottom:10px;display:block}
 #modalBg.edit-mode #secCamera,#modalBg.edit-mode #secBatch{display:none!important}
 .form-section{display:none}.form-section.show{display:block}
@@ -160,8 +161,8 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 .match-name{font-size:13px;font-weight:500;margin-bottom:2px}
 .match-detail{font-size:11px;color:var(--text2);line-height:1.5}
 .cam-area{text-align:center}
-.photo-pair{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
-.photo-slot{aspect-ratio:1;max-height:95px;border-radius:var(--radius);border:1.5px dashed var(--warm8-40);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;position:relative;background:var(--warm8-10)}
+.photo-pair{display:flex;justify-content:center;align-items:center;gap:6px;margin-bottom:10px}
+.photo-slot{width:110px;aspect-ratio:1;max-height:95px;flex-shrink:0;border-radius:var(--radius);border:1.5px dashed var(--warm8-40);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;position:relative;background:var(--warm8-10)}
 .photo-slot.filled{border-style:solid;border-color:var(--warm8-60)}
 .photo-slot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:calc(var(--radius) - 2px)}
 .photo-slot .slot-label{font-size:9px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;z-index:1}
@@ -286,7 +287,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <h2 id="modalTitle">Añadir producto <button type="button" class="modal-close" id="modalClose">&times;</button></h2>
   <div class="add-modal-sections">
   <div class="form-section show" id="secManual">
-    <div class="section-label">① Agregado manual</div>
+    <div class="section-label">Agregado manual</div>
     <label class="form-label">Nombre del producto</label>
     <input class="form-input" id="manualName" placeholder="Ej: Galletas integrales" autocomplete="off" lang="es" spellcheck="true">
     <div class="match-box" id="manualMatch"><div class="match-title">Producto similar encontrado</div><div class="match-name" id="manualMatchName"></div><div class="match-detail" id="manualMatchDetail"></div></div>
@@ -297,7 +298,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <div class="btn-row" id="editBtns" style="display:none"><button type="button" class="btn-delete" id="deleteBtn">Eliminar producto</button></div>
   </div>
   <div class="form-section show" id="secCamera">
-    <div class="section-label">② Agregado por foto</div>
+    <div class="section-label">Agregado por foto</div>
     <div class="cam-area">
       <button type="button" class="cam-btn cam-btn-main" id="btnPhotoSource">📷 Cámara o Galería</button>
       <div class="photo-pair">
@@ -323,7 +324,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     </div>
   </div>
   <div class="form-section show" id="secBatch">
-    <div class="section-label">③ Lote (hasta 10 fotos)</div>
+    <div class="section-label">Lote (hasta 10 fotos)</div>
     <div class="cam-area">
       <input type="file" accept="image/*" multiple class="cam-input" id="batchInput">
       <button type="button" class="save-btn" id="batchSelectBtn" style="margin-bottom:14px">Seleccionar hasta 10 fotos</button>
