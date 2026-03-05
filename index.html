@@ -235,7 +235,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button type="button" class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v05032519:06h</div>
+    <div class="login-version">v05032522:51h</div>
   </div>
 </div>
 
@@ -460,7 +460,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v05032519:06h</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v05032522:51h</span></div>
     <button type="button" class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section">
@@ -1075,7 +1075,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.4-0503251906',
+    version:'1.0.4-0503252251',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -1153,7 +1153,9 @@ function normalizeApiKey(s){if(typeof s!=='string')return '';return s.replace(/\
 function getApiKey(){return normalizeApiKey(localStorage.getItem('alerg_apikey')||'')}
 function getVisionApiKey(){return normalizeApiKey(localStorage.getItem('gdrive_api_key')||'')}
 const GEMINI_MODEL='gemini-2.5-flash-lite';
+const GEMINI_MODEL_CAREFUL='gemini-2.5-flash';
 const GEMINI_GENERATE_URL=`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+function getGeminiUrl(model){return `https://generativelanguage.googleapis.com/v1beta/models/${model||GEMINI_MODEL}:generateContent`;}
 function buildGeminiHeaders(apiKey){
   return {'Content-Type':'application/json','x-goog-api-key':normalizeApiKey(apiKey||'')};
 }
@@ -3482,7 +3484,7 @@ async function apiCall(content, options){
     ?options.maxOutputTokens
     :3000;
 
-  const url=GEMINI_GENERATE_URL;
+  const url=getGeminiUrl(options&&options.model);
   const body=JSON.stringify({
     systemInstruction:{ parts:[{ text: systemText }] },
     contents:[{role:'user',parts}],
@@ -3531,6 +3533,7 @@ async function apiCall(content, options){
 
 const PHOTO_MAX_SIZE=1120;
 const PHOTO_JPEG_QUALITY=0.85;
+const VISION_QUALITY_OPTS={maxSize:4096,quality:0.95};
 function compressPhotoForAI(dataUrl, opts=null){
   return new Promise((resolve,reject)=>{
     const img=new Image();
@@ -3579,7 +3582,6 @@ async function analyzePhotos(photoList, opts={}){
   analysisAborted=false;
   const aiS=document.getElementById('aiStatus'),aiR=document.getElementById('aiResult');
   const mode=(opts&&opts.mode)||'normal';
-  const compressOpts=(opts&&opts.compress)||null;
   aiS.innerHTML=`<span class="spinner"></span> Preparando imagen…`;aiS.classList.add('show');aiR.classList.remove('show');hideMatch('aiMatch');aiCurrentMatch=null;
   let analysisId=null;
 
@@ -3594,7 +3596,7 @@ async function analyzePhotos(photoList, opts={}){
   }
 
   try{
-    const compressed=await Promise.all(list.map(du=>compressPhotoForAI(du,compressOpts)));
+    const compressed=await Promise.all(list.map(du=>compressPhotoForAI(du,VISION_QUALITY_OPTS)));
     if(analysisAborted){aiS.innerHTML='❌ Análisis cancelado';benchStop('cancel', document.getElementById('aiName').value, {analysisId,mode});return;}
 
     const metadata={ dimensions: compressed.map(c=>c&&typeof c==='object'&&c.width!=null?{w:c.width,h:c.height}:null).filter(Boolean) };
@@ -4006,7 +4008,7 @@ async function analyzePhotoPipelineForAuto(dataUrl){
     const q=loadAutoScanQueue();q.push({dataUrl,ts:Date.now()});saveAutoScanQueue(q);
     return {error:'offline',motivo:'Sin conexión; foto encolada',queued:true};
   }
-  const compressed=await compressPhotoForAI(dataUrl);
+  const compressed=await compressPhotoForAI(dataUrl,VISION_QUALITY_OPTS);
   const imgData=(compressed.dataUrl||compressed).split(',')[1];
   if(!imgData){return {error:'vision',motivo:'No se pudo preparar la imagen',errorCode:ERROR_CODES.PHOTO_UNREADABLE};}
   const metadata={dimensions:(compressed.width&&compressed.height)?[{w:compressed.width,h:compressed.height}]:[]};
@@ -4032,7 +4034,7 @@ async function analyzePhotoPipelineForAuto(dataUrl){
     addAnalysisSection(analysisId,'C_raw_output',{raw_text:String(ocrText).slice(0,5000),length:ocrText.length});
     const userText='--- TEXTO DE LA ETIQUETA ---\n'+String(ocrText).slice(0,4000);
     const content=[{type:'text',text:userText}];
-    const iaResp=await apiCall(content,{systemInstruction:AI_PROMPT_FROM_OCR,maxOutputTokens:3000});
+    const iaResp=await apiCall(content,{systemInstruction:AI_PROMPT_FROM_OCR,maxOutputTokens:3000,model:GEMINI_MODEL_CAREFUL});
     if(!iaResp||!iaResp.ok){
       const errBody=await iaResp?.json().catch(()=>null);
       const providerMsg=extractProviderErrorMessage(errBody)||`HTTP ${iaResp?.status||0}`;
@@ -4453,6 +4455,12 @@ async function processBatch(){
     showToast('Configura la clave API en Ajustes (⚙)','info');
     return;
   }
+  const visionKey=getVisionApiKey();
+  if(!visionKey){
+    addLog(LOG_LEVELS.ERROR,ERROR_CODES.CONFIG_MISSING,'Lote no iniciado: falta API Key de Vision (Drive) en Ajustes',{service:'Cloud Vision',operation:'processBatch'});
+    showToast('Configura la API Key de Google (Drive) en Ajustes para OCR','info');
+    return;
+  }
   batchIsProcessing=true;
   batchSelectBtn.disabled=true;
   batchSelectBtn.style.opacity='0.65';
@@ -4465,62 +4473,77 @@ async function processBatch(){
   try{
   for(let i=0;i<totalToProcess;i++){
     const dataUrl=batchPhotos[i];
-    const { content, metadata }=await buildPhotoRequest([dataUrl]);
-    const { analysisId }=startPhotoAnalysis('lote',1,metadata);
-    addAnalysisSection(analysisId,'B_input',{ dimensions: metadata.dimensions });
+    const compressed=await compressPhotoForAI(dataUrl,VISION_QUALITY_OPTS);
+    const imgData=(compressed.dataUrl||compressed).split(',')[1];
+    const metadata={dimensions:(compressed.width&&compressed.height)?[{w:compressed.width,h:compressed.height}]:[]};
+    const {analysisId}=startPhotoAnalysis('lote',1,metadata);
+    addAnalysisSection(analysisId,'B_input',{dimensions:metadata.dimensions});
     let errorOccurred=false;
     let errorMsg='';
     let errorCode='';
     let productName='';
 
     try{
-      const resp=await apiCall(content,{ systemInstruction: metadata.systemPrompt || AI_PROMPT });
-      if(!resp.ok){
-        if(resp.status===401){
-          errorCode=ERROR_CODES.API_AUTH_FAILED;
-          errorMsg='Clave API inválida o expirada';
-        }else if(resp.status===429){
-          errorCode=ERROR_CODES.API_RATE_LIMIT;
-          errorMsg='Límite de llamadas alcanzado';
-        }else if(resp.status>=500){
-          errorCode=ERROR_CODES.API_SERVER_ERROR;
-          errorMsg=`Error del servidor Gemini (${resp.status})`;
-        }else{
-          errorCode=ERROR_CODES.API_INVALID_RESPONSE;
-          errorMsg=`Error HTTP ${resp.status}`;
-        }
+      if(!imgData){
+        errorCode=ERROR_CODES.PHOTO_UNREADABLE;
+        errorMsg='No se pudo preparar la imagen';
         addAnalysisSection(analysisId,'F_decision',{decision:'error',error:errorMsg});
         finishPhotoAnalysis(analysisId,new Error(errorMsg));
         throw new Error(errorMsg);
       }
-
+      const body={requests:[{image:{content:imgData},features:[{type:'DOCUMENT_TEXT_DETECTION'}],imageContext:{languageHints:['es','en','fr','de']}}]};
+      const visionResp=await fetchWithDiagnostics('https://vision.googleapis.com/v1/images:annotate?key='+encodeURIComponent(visionKey),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},{service:'Cloud Vision',operation:'ocr lote',requestTag:'processBatch',requireOnline:true});
+      if(!visionResp.ok){
+        const eb=await visionResp.json().catch(()=>({}));
+        errorMsg=eb&&eb.error&&eb.error.message?eb.error.message:'Error Vision ('+visionResp.status+')';
+        errorCode=ERROR_CODES.PHOTO_UNREADABLE;
+        addAnalysisSection(analysisId,'F_decision',{decision:'error',error:errorMsg});
+        finishPhotoAnalysis(analysisId,new Error(errorMsg));
+        throw new Error(errorMsg);
+      }
+      const visionData=await visionResp.json();
+      const ocrText=extractTextFromVisionResponse(visionData);
+      if(!ocrText){
+        errorCode=ERROR_CODES.PHOTO_UNREADABLE;
+        errorMsg='No se detectó texto en la etiqueta';
+        addAnalysisSection(analysisId,'F_decision',{decision:'no_guardar',motivo:'ocr_sin_texto'});
+        finishPhotoAnalysis(analysisId);
+        throw new Error(errorMsg);
+      }
+      addAnalysisSection(analysisId,'C_raw_output',{raw_text:String(ocrText).slice(0,5000),length:ocrText.length});
+      const userText='--- TEXTO DE LA ETIQUETA ---\n'+String(ocrText).slice(0,4000);
+      const content=[{type:'text',text:userText}];
+      const resp=await apiCall(content,{systemInstruction:AI_PROMPT_FROM_OCR,maxOutputTokens:3000,model:GEMINI_MODEL_CAREFUL});
+      if(!resp.ok){
+        const data=await resp.json().catch(()=>({}));
+        errorMsg=extractProviderErrorMessage(data)||`Error Gemini (${resp.status})`;
+        if(resp.status===401)errorCode=ERROR_CODES.API_AUTH_FAILED;
+        else if(resp.status===429)errorCode=ERROR_CODES.API_RATE_LIMIT;
+        else if(resp.status>=500)errorCode=ERROR_CODES.API_SERVER_ERROR;
+        else errorCode=ERROR_CODES.API_INVALID_RESPONSE;
+        addAnalysisSection(analysisId,'F_decision',{decision:'error',error:errorMsg});
+        finishPhotoAnalysis(analysisId,new Error(errorMsg));
+        throw new Error(errorMsg);
+      }
       const data=await resp.json();
       const text=data.choices?.[0]?.message?.content||'';
-      const possibleTruncated=String(text).length>=2990;
-      addAnalysisSection(analysisId,'C_raw_output',{ raw_text: String(text).slice(0,5000), length: text.length, markdown_like: /```/.test(text), possible_truncated: possibleTruncated });
       let result;
-      try{
-        result=parseAndValidateAI(text,'lote');
-      }catch(e){
+      try{result=parseAndValidateAI(text,'lote');}catch(e){
         errorCode=ERROR_CODES.JSON_PARSE_ERROR;
         errorMsg='Respuesta de IA no válida';
         addAnalysisSection(analysisId,'F_decision',{decision:'error',error:errorMsg});
         finishPhotoAnalysis(analysisId,e);
         throw new Error(errorMsg);
       }
-
-      const loteReview=evaluateBatchReviewForLote(result);
-      result.review_alerts=(loteReview.filtered_result&&loteReview.filtered_result.review_alerts)||result.review_alerts||null;
-      result.requires_review=!!loteReview.requires_review;
-      if(loteReview.ignored_safe_lines&&loteReview.ignored_safe_lines.length){
-        addLog(LOG_LEVELS.INFO,'BATCH_IGNORED_SAFE_UNMAPPED','Lote - sin_mapeo informativo ignorado para revisión',{
-          count:loteReview.ignored_safe_lines.length,
-          lines:loteReview.ignored_safe_lines.slice(0,6)
-        });
-      }
-
-      addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, alergenos: result.alergenos||[], trazas: result.trazas||[], normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
-      addAnalysisSection(analysisId,'E_validations',{ review_alerts: result.review_alerts||null, requires_review: !!result.requires_review, review_reason_lines: loteReview.risk_lines||[] });
+      const ocrLocal=normalizeAIPhotoResult(buildResultFromOcrText(ocrText));
+      const merged=mergeAIWithOcrFallback(result,ocrLocal);
+      result=applyPhotoReviewValidation(merged.result,text,'lote_vision');
+      if(merged.recovered.length)addLog(LOG_LEVELS.INFO,'PHOTO_OCR_RECOVERY','Lote - OCR recovery',{analysis_id:analysisId,recovered:merged.recovered});
+      result.nombre=fixNombreFromOcr(result.nombre,ocrText);
+      result.peso_unidades=fixPesoFromOcr(result.peso_unidades,ocrText);
+      result=normalizeAIPhotoResult(result);
+      addAnalysisSection(analysisId,'D_interpretation',{nombre:result.nombre,alergenos:result.alergenos||[],trazas:result.trazas||[]});
+      addAnalysisSection(analysisId,'E_validations',{review_alerts:result.review_alerts||null,requires_review:!!result.requires_review});
 
       if(result.nombre){
         result.nombre=autoCorrectName(result.nombre);
@@ -4534,12 +4557,9 @@ async function processBatch(){
       }
 
       const allA=sortAllergens([...new Set([...(result.alergenos||[]),...(result.trazas||[])])].filter(a=>AL.includes(a)));
+      if(result.warning){addLog(LOG_LEVELS.WARN,ERROR_CODES.PHOTO_QUALITY,`Calidad de foto: ${productName}`,{warning:result.warning});}
 
-      if(result.warning){
-        addLog(LOG_LEVELS.WARN,ERROR_CODES.PHOTO_QUALITY,`Calidad de foto: ${productName}`,{warning:result.warning});
-      }
-
-      if(!loteReview.requires_review){
+      if(!result.requires_review){
         const displayName=productName;
         const match=findMatch(displayName);
         const ts=new Date().toISOString();
@@ -4548,11 +4568,7 @@ async function processBatch(){
           addAnalysisSection(analysisId,'F_decision',{decision:'actualizar',motivo:'lote_auto',product_name:displayName});
           addAnalysisSection(analysisId,'G_saved_result',{product_index:match.index,product_name:displayName,alergenos:P[match.index].a,timestamp:ts,declarable:true});
           finishPhotoAnalysis(analysisId);
-          if(r.added.length){
-            successes.push(`${match.product.n} — +${r.added.join(', ')} · actualizado`);
-          }else{
-            successes.push(`${match.product.n} — ${allA.length?allA.join(', ')+' · ':''}verificado`);
-          }
+          successes.push(r.added.length?`${match.product.n} — +${r.added.join(', ')} · actualizado`:`${match.product.n} — ${allA.length?allA.join(', ')+' · ':''}verificado`);
         }else{
           addNewProduct(displayName,allA,{analysisId,analysisTimestamp:ts});
           const idx=P.findIndex(x=>norm(x.n)===norm(displayName));
@@ -4565,18 +4581,11 @@ async function processBatch(){
         }
         addLog(LOG_LEVELS.INFO,'PRODUCT_SAVED',`Producto guardado: ${displayName}`,{allergens:allA.length});
       }else{
-        const reviewReason=loteReview.reason||buildReviewReason(result);
+        const reviewReason=buildReviewReason(result);
         addAnalysisSection(analysisId,'F_decision',{decision:'bloquear_revision',motivo:reviewReason});
         finishPhotoAnalysis(analysisId);
-        pendingReview.push({
-          result,
-          allA,
-          dataUrl,
-          reason:reviewReason,
-          review_required:true,
-          review_reason_lines:loteReview.risk_lines||[]
-        });
-        addLog(LOG_LEVELS.INFO,'BATCH_PENDING_REVIEW',`Pendiente de revisión: ${productName}`,{reason:reviewReason,risk_lines:loteReview.risk_lines||[]});
+        pendingReview.push({result,allA,dataUrl,reason:reviewReason,review_required:true});
+        addLog(LOG_LEVELS.INFO,'BATCH_PENDING_REVIEW',`Pendiente de revisión: ${productName}`,{reason:reviewReason});
       }
 
     }catch(err){
