@@ -1513,14 +1513,14 @@ function buildResultFromOcrText(rawText){
 
   let peso_unidades='';
   const fullText=lines.join(' ');
-  const multipack=fullText.match(/(\d+)\s*(?:u\.?|uds?\.?|unidades?)?\s*x\s*(\d+)\s*(g|kg|ml)/i)||fullText.match(/(\d+)\s*x\s*(\d+)\s*(g|kg|ml)/i);
+  const multipack=fullText.match(/(\d+)\s*(?:u\.?|uds?\.?|unidades?)?\s*[x×*·]\s*(\d+)\s*(g|kg|ml|gr)?/i)||fullText.match(/(\d+)\s*[x×*·]\s*(\d+)\s*(g|kg|ml|gr)?/i)||fullText.match(/(\d+)[x×*·](\d+)\s*(g|kg|ml|gr)?/i);
   const pesoNetoRx=/(?:peso\s+neto|net\s+weight|poids?\s+net|peso\s+netto|nettogewicht|peso\s+liquido)[\s:]*(\d+(?:[.,]\d+)?)\s*(kg|kilos?|k\b|g\b)/i;
   const pesoNetoMatch=fullText.match(pesoNetoRx);
   const pesoSimple=fullText.match(/(\d+(?:[.,]\d+)?)\s*(kgs?|g|ml)\s*escurrido/i)
     ||fullText.match(/(\d+(?:[.,]\d+)?)\s*(kgs?|g|ml)/i)
     ||fullText.match(/(\d+(?:[.,]\d+)?)\s*(kilos?|kilo)\b/i)
     ||fullText.match(/(\d+(?:[.,]\d+)?)\s*(k)\b/i);
-  if(multipack)peso_unidades=`${multipack[1]} x ${multipack[2]} ${multipack[3]}`.slice(0,22);
+  if(multipack){const u=(multipack[3]||'g').toLowerCase().replace(/gr/,'g');const unit=/kg/i.test(u)?'kg':(u||'g');peso_unidades=`${multipack[1]} x ${multipack[2]} ${unit}`.slice(0,22);}
   else if(pesoNetoMatch){
     const raw=pesoNetoMatch[1], u=(pesoNetoMatch[2]||'').toLowerCase();
     const unit=/\bk(?:g|ilo)?/i.test(u)||u==='k'?'kg':(u||'g');
@@ -1614,8 +1614,8 @@ function fixNombreFromOcr(nombre, ocrText){
 function fixPesoFromOcr(aiPeso,ocrText){
   const ocr=String(ocrText||'').trim();
   if(!ocr) return aiPeso;
-  const multipack=ocr.match(/(\d+)\s*(?:u\.?|uds?\.?|unidades?)?\s*x\s*(\d+)\s*(g|kg|ml)/i)||ocr.match(/(\d+)\s*x\s*(\d+)\s*(g|kg|ml)/i);
-  if(multipack){const u=(multipack[3]||'g').toLowerCase();const unit=/\bkg\b/i.test(u)?'kg':(u||'g');return `${multipack[1]} x ${multipack[2]} ${unit}`.slice(0,22);}
+  const multipack=ocr.match(/(\d+)\s*(?:u\.?|uds?\.?|unidades?)?\s*[x×*·]\s*(\d+)\s*(g|kg|ml|gr)?/i)||ocr.match(/(\d+)\s*[x×*·]\s*(\d+)\s*(g|kg|ml|gr)?/i)||ocr.match(/(\d+)[x×*·](\d+)\s*(g|kg|ml|gr)?/i);
+  if(multipack){const u=(multipack[3]||'g').toLowerCase().replace(/gr/,'g');const unit=/kg/i.test(u)?'kg':(u||'g');return `${multipack[1]} x ${multipack[2]} ${unit}`.slice(0,22);}
   const m=ocr.match(/(\d+)[.,](\d+)\s*(kg|kilos?|k)\b/i);
   if(m){
     const ocrPeso=`${m[1]},${m[2]} kg`;
@@ -3429,7 +3429,7 @@ NOMBRE ÚNICO: Si la etiqueta tiene varias variantes (nombre en varios idiomas o
 
 PESO_UNIDADES (opcional, breve):
 Extrae el PESO NETO del envase (total del paquete). Busca junto a "Peso Neto", "Net Weight", "Poids Net", "Peso Netto", "Nettogewicht", "Peso Liquido", "Cantidad neta", etc.
-MULTIPACK: Si la etiqueta indica formato multipack (N unidades x M g/kg, con variantes como "u", "uds", "unidades" entre cifras y "x"), usa ESE formato (N x M g). Prioriza multipack sobre el peso total cuando ambos aparezcan.
+MULTIPACK: Si la etiqueta indica formato multipack (N unidades x M g/kg), usa ESE formato: "N x M g". Puede aparecer como: N x M g, NxMg, N u x M g, N uds x M g, N*Mg, N×M g, con o sin espacios. Prioriza multipack sobre el peso total cuando ambos aparezcan.
 
 REGLA CRÍTICA — NUNCA uses solo "100 g" como peso del envase: En etiquetas europeas, "100 g" aparece SIEMPRE en la tabla nutricional como referencia. Eso es la unidad de referencia nutricional, NO el peso del paquete. EXCEPCIÓN: formato multipack "N x 100 g" SÍ es válido. Si el único peso que ves es "100 g" en contexto nutricional, deja peso_unidades vacío.
 
