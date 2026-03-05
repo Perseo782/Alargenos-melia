@@ -218,6 +218,15 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 .sync-status-grid{display:grid;grid-template-columns:1fr;gap:2px}
 .sync-status-grid div{padding:4px 0;border-bottom:1px solid var(--warm8-10);font-size:12px}
 .sync-status-grid div:last-child{border-bottom:none}
+.history-list{max-height:280px;overflow-y:auto;margin-top:8px;background:var(--warm8-05);border-radius:var(--radius);border:1px solid var(--warm8-10);padding:8px}
+.history-item{display:flex;align-items:center;padding:10px 12px;margin-bottom:6px;background:var(--white);border-radius:var(--radius);border:1px solid var(--warm8-20);font-size:13px;font-family:var(--sans);color:var(--text);cursor:pointer;transition:background .15s,border-color .15s}
+.history-item:last-child{margin-bottom:0}
+.history-item:hover{background:var(--warm8-10);border-color:var(--warm8-40)}
+.history-item.deleted{cursor:default;color:var(--text2)}
+.history-item.deleted:hover{background:var(--white)}
+.history-item .history-name{font-weight:500;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.history-item.deleted .history-name{color:var(--text2)}
+.history-item .history-meta{font-size:11px;color:var(--text2);flex-shrink:0;margin-left:8px}
 </style>
 </head>
 <body>
@@ -235,7 +244,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button type="button" class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v05032522:51h</div>
+    <div class="login-version">v06032600:16h</div>
   </div>
 </div>
 
@@ -460,8 +469,13 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v05032522:51h</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v06032600:16h</span></div>
     <button type="button" class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
+  </div>
+  <div class="settings-section">
+    <h3>Historial de eventos</h3>
+    <div class="settings-info">Últimos 30 productos agregados, modificados o eliminados.</div>
+    <div id="historyList" class="history-list"></div>
   </div>
   <div class="settings-section">
     <h3>🔍 Revisión de incoherencias</h3>
@@ -608,6 +622,34 @@ function openSettings(){
       originWarn.textContent='⚠ Estás abriendo la app desde un archivo local (file://). Google rechaza la API key en ese caso. Abre la app desde la URL de GitHub Pages (https://perseo782.github.io/Alargenos-melia/) o desde un servidor local (http://localhost:5500/).';
       originWarn.style.display='block';
     }else{originWarn.style.display='none';}
+  }
+  const histList=document.getElementById('historyList');
+  if(histList){
+    const h=loadHistory();
+    if(!h.length){histList.innerHTML='<div class="settings-info" style="margin:0;color:var(--text2)">Sin historial aún</div>';}
+    else{
+      const rev=[...h].reverse();
+      histList.innerHTML=rev.map((item,i)=>{
+        const d=new Date(item.timestamp);
+        const dd=String(d.getDate()).padStart(2,'0'),mm=String(d.getMonth()+1).padStart(2,'0'),yy=d.getFullYear();
+        const hh=String(d.getHours()).padStart(2,'0'),min=String(d.getMinutes()).padStart(2,'0');
+        const fecha=`${dd}/${mm}/${yy} ${hh}:${min}`;
+        const lab=item.action==='added'?'agregado':item.action==='modified'?'modificado':'eliminado';
+        const cls=item.action==='deleted'?' history-item deleted':' history-item';
+        const raw=String(item.name||'');
+        const safe=raw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        return `<div class="${cls}" data-name="${safe}" data-action="${item.action}">`+
+          `<span class="history-name">${safe}</span>`+
+          `<span class="history-meta">${lab}: ${fecha}</span></div>`;
+      }).join('');
+      histList.querySelectorAll('.history-item:not(.deleted)').forEach(el=>{
+        el.addEventListener('click',()=>{
+          const name=el.dataset.name;
+          const idx=P.findIndex(p=>norm(p.n)===norm(name));
+          if(idx>=0){closeSettings();setTimeout(()=>{openEdit(idx);},150);}
+        });
+      });
+    }
   }
   navPush('settings');
   settingsBg.classList.add('open');
@@ -1075,7 +1117,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.4-0503252251',
+    version:'1.0.4-0603260016',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -1614,6 +1656,13 @@ function autoCorrectName(name){return name.split(/(\s+)/).map(p=>{if(/^\s+$/.tes
 function canonicalizeProductName(name){
   return autoCorrectName(String(name||'').trim().replace(/\s+/g,' '));
 }
+function canonicalizeProductNameForStorage(name){
+  let n=String(name||'').trim().replace(/\s+/g,' ');
+  const idx=Math.min(n.indexOf('/')>=0?n.indexOf('/'):999,n.indexOf(' - ')>=0?n.indexOf(' - '):999,n.indexOf(' | ')>=0?n.indexOf(' | '):999);
+  if(idx<999&&idx>5)n=n.slice(0,idx).trim();
+  if(n.length>80)n=n.slice(0,80).trim();
+  return n;
+}
 function sanitizeAllergenList(arr){
   const valid = new Set(AL);
   return sortAllergens([...(new Set((Array.isArray(arr)?arr:[]).map(a=>String(a||'').trim().toUpperCase()).filter(a=>valid.has(a))))]);
@@ -1742,6 +1791,18 @@ const DRIVE_OUTBOX_KEY='alergenos_drive_outbox_v1';
 const DRIVE_OUTBOX_LIMIT=500;
 const PENDING_FIXES_KEY='alergenos_pending_fixes_v1';
 const AUTO_SCAN_QUEUE_KEY='alergenos_auto_scan_queue_v1';
+const HISTORY_KEY='alergenos_history_v1';
+const HISTORY_MAX=30;
+
+function loadHistory(){try{const r=localStorage.getItem(HISTORY_KEY);if(!r)return [];const a=JSON.parse(r);return Array.isArray(a)?a:[];}catch(_){return [];}}
+function pushToHistory(name,action){
+  if(!name||typeof name!=='string')return;
+  const n=String(name).trim();if(!n)return;
+  const arr=loadHistory();
+  arr.push({name:n,action:action,timestamp:new Date().toISOString()});
+  const kept=arr.slice(-HISTORY_MAX);
+  try{localStorage.setItem(HISTORY_KEY,JSON.stringify(kept));}catch(_){}
+}
 
 function loadPendingFixes(){
   try{
@@ -2670,7 +2731,7 @@ function evaluateBatchReviewForLote(result){
 }
 function sortAllergens(arr){const uniq=[...new Set(arr)];return uniq.sort((a,b)=>AL.indexOf(a)-AL.indexOf(b) || a.localeCompare(b,'es'))}
 function similarity(a,b){const na=norm(a),nb=norm(b);if(na===nb)return 1;const ta=tokenize(a),tb=tokenize(b);if(!ta.length||!tb.length)return 0;if(Math.abs(ta.length-tb.length)>3)return 0;const sa=new Set(ta),sb=new Set(tb);const inter=new Set([...sa].filter(x=>sb.has(x)));const union=new Set([...sa,...sb]);const jaccard=inter.size/union.size;let sub=0;const smaller=Math.min(sa.size,sb.size);if(smaller>=2){const ss=sa.size<=sb.size?sa:sb;const bs=sa.size<=sb.size?sb:sa;if([...ss].every(t=>bs.has(t)))sub=smaller/Math.max(sa.size,sb.size)}return Math.max(jaccard,sub)}
-function findMatch(name,excludeIdx){let best=null,bs=0;for(let i=0;i<P.length;i++){if(i===excludeIdx)continue;const s=similarity(name,P[i].n);if(s>bs){bs=s;best={index:i,product:P[i],score:s}}}return(best&&bs>=0.70)?best:null}
+function findMatch(name,excludeIdx){let best=null,bs=0;const canName=canonicalizeProductNameForStorage(name);for(let i=0;i<P.length;i++){if(i===excludeIdx)continue;const s1=similarity(name,P[i].n);const s2=similarity(canName,canonicalizeProductNameForStorage(P[i].n));const s=Math.max(s1,s2);if(s>bs){bs=s;best={index:i,product:P[i],score:s}}}return(best&&bs>=0.70)?best:null}
 function mergeProduct(idx,nn,na,opts){
   const ex=P[idx],os=new Set(ex.a);
   const prevName=ex.n;
@@ -2681,6 +2742,7 @@ function mergeProduct(idx,nn,na,opts){
   ex._src='app';
   ex._updated_at=(opts&&opts.analysisTimestamp)||(opts&&opts.last_analysis_timestamp)||new Date().toISOString();
   if(opts&&opts.analysisId!= null){ ex.last_analysis_id=opts.analysisId; ex.last_analysis_timestamp=opts.analysisTimestamp||new Date().toISOString(); }
+  pushToHistory(ex.n,'modified');
   saveDB({
     changeType:'edit_product',
     origin:'mergeProduct',
@@ -3035,12 +3097,13 @@ function addNewProduct(name,al,opts){
   const obj={n:name,a:sortAllergens(al),_src:'app',_updated_at:(opts&&opts.analysisTimestamp)||(opts&&opts.last_analysis_timestamp)||new Date().toISOString()};
   if(opts&&opts.analysisId!=null){ obj.last_analysis_id=opts.analysisId; obj.last_analysis_timestamp=opts.analysisTimestamp||new Date().toISOString(); }
   P.splice(idx,0,obj);
+  pushToHistory(name,'added');
   saveDB({changeType:'create_product',origin:'addNewProduct',recordKey:name});updateAppStatus();
 }
 let deleteTarget=-1;const confirmBg=document.getElementById('confirmBg');
 document.getElementById('deleteBtn').addEventListener('click',()=>{if(editIdx<0)return;deleteTarget=editIdx;document.getElementById('confirmText').textContent=`"${P[editIdx].n}" se eliminará permanentemente.`;navPush('confirm');confirmBg.classList.add('open')});
 document.getElementById('confirmCancel').addEventListener('click',()=>{navBack()});
-document.getElementById('confirmDelete').addEventListener('click',()=>{if(deleteTarget>=0){const n=P[deleteTarget].n;P.splice(deleteTarget,1);saveDB({changeType:'delete_product',origin:'confirmDelete',recordKey:n});render();showToast(`"${n}" eliminado`,'info')}navReplace(['main']);applyNavStack(['main'])});
+document.getElementById('confirmDelete').addEventListener('click',()=>{if(deleteTarget>=0){const n=P[deleteTarget].n;pushToHistory(n,'deleted');P.splice(deleteTarget,1);saveDB({changeType:'delete_product',origin:'confirmDelete',recordKey:n});render();showToast(`"${n}" eliminado`,'info')}navReplace(['main']);applyNavStack(['main'])});
 
 // Warning modal
 const photoWarningBg=document.getElementById('photoWarningBg');
@@ -3358,6 +3421,7 @@ El campo "nombre" debe estar SIEMPRE en español, sea cual sea el formato de la 
 ETIQUETAS CON VARIOS IDIOMAS: Identifica la versión en español (por marcadores como ES, Español, Spanish, versión española, o por el propio texto). Usa SIEMPRE el nombre en español cuando exista. No uses italiano, portugués, francés, inglés u otro idioma aunque aparezca antes o más destacado.
 ETIQUETAS EN UN SOLO IDIOMA (distinto del español): Traduce el nombre del producto al español.
 Prioriza la variante española sin importar el orden. Máximo 80 caracteres. No concatenes títulos con "y". NUNCA incluyas números sueltos en el nombre (códigos de lote, porcentajes); solo el nombre del producto.
+NOMBRE ÚNICO: Si la etiqueta tiene varias variantes (ej. "Delicias de pollo Kentucky / American crispy halal"), usa SOLO el nombre principal en español, la primera parte. No concatenar variantes con / ni -.
 
 PESO_UNIDADES (opcional, breve):
 Extrae el PESO NETO del envase (total del paquete). Busca junto a "Peso Neto", "Net Weight", "Poids Net", "Peso Netto", "Nettogewicht", "Peso Liquido", etc.
@@ -3429,6 +3493,7 @@ El campo "nombre" debe estar SIEMPRE en español, sea cual sea el formato de la 
 ETIQUETAS CON VARIOS IDIOMAS: Identifica la versión en español (por marcadores como ES, Español, Spanish, versión española, o por el propio texto: albahaca, aceite vs basilico, olio, etc.). Usa SIEMPRE el nombre en español cuando exista. No uses italiano, portugués, francés, inglés u otro idioma aunque aparezca antes o más destacado.
 ETIQUETAS EN UN SOLO IDIOMA (distinto del español): Traduce el nombre del producto al español.
 Prioriza la variante española sin importar el orden en el OCR. Máximo 80 caracteres. No concatenes títulos con "y". NUNCA incluyas números sueltos en el nombre (códigos de lote, porcentajes); solo el nombre del producto.
+NOMBRE ÚNICO: Si el OCR tiene varias variantes (ej. "Delicias de pollo Kentucky / American crispy halal"), usa SOLO el nombre principal en español, la primera parte. No concatenar variantes con / ni -.
 
 PESO_UNIDADES (opcional, breve):
 Extrae el PESO NETO del envase (total del paquete). Busca junto a "Peso Neto", "Net Weight", "Poids Net", "Peso Netto", "Nettogewicht", "Peso Liquido", etc.
@@ -3715,6 +3780,7 @@ async function analyzePhotos(photoList, opts={}){
     }
 
     result.nombre=fixNombreFromOcr(result.nombre||'',ocrText);
+    result.nombre=canonicalizeProductNameForStorage(result.nombre);
     result.peso_unidades=fixPesoFromOcr(result.peso_unidades,ocrText);
     addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, alergenos: result.alergenos||[], trazas: result.trazas||[] });
     window.__lastAnalysisId=analysisId;
@@ -3879,7 +3945,7 @@ async function processQueue(){
         }
         addAnalysisSection(analysisId,'D_interpretation',{ nombre: result.nombre, alergenos: result.alergenos||[], trazas: result.trazas||[], normalizado_app: { alergenos: result.alergenos||[], trazas: result.trazas||[] } });
         addAnalysisSection(analysisId,'E_validations',{ review_alerts: result.review_alerts||null, requires_review: !!result.requires_review });
-        if(result.nombre)result.nombre=autoCorrectName(result.nombre);
+        if(result.nombre){result.nombre=canonicalizeProductNameForStorage(result.nombre);result.nombre=autoCorrectName(result.nombre);}
         if(result.warning){
           showPhotoWarning(result.nombre||'Producto en cola',result.warning);
           addLog(LOG_LEVELS.WARN,ERROR_CODES.PHOTO_QUALITY,`Cola - Calidad: ${result.nombre||'Desconocido'}`,{warning:result.warning});
@@ -4056,6 +4122,7 @@ async function analyzePhotoPipelineForAuto(dataUrl){
     result=applyPhotoReviewValidation(merged.result,text,'vision_merged');
     if(merged.recovered.length) addLog('INFO','PHOTO_OCR_RECOVERY','PHOTO_OCR_RECOVERY',{analysis_id:analysisId,recovered:merged.recovered});
     result.nombre=fixNombreFromOcr(result.nombre,ocrText);
+    result.nombre=canonicalizeProductNameForStorage(result.nombre);
     result.peso_unidades=fixPesoFromOcr(result.peso_unidades,ocrText);
     result=normalizeAIPhotoResult(result);
     addAnalysisSection(analysisId,'D_interpretation',{nombre:result.nombre,alergenos:result.alergenos||[],trazas:result.trazas||[]});
@@ -4170,6 +4237,7 @@ async function autoProcessPhoto(dataUrl){
     return;
   }
   if(result.nombre){
+    result.nombre=canonicalizeProductNameForStorage(result.nombre);
     const displayName=buildProductName(result);
     const match=findMatch(displayName);
     const ts=new Date().toISOString();
@@ -4546,6 +4614,7 @@ async function processBatch(){
       addAnalysisSection(analysisId,'E_validations',{review_alerts:result.review_alerts||null,requires_review:!!result.requires_review});
 
       if(result.nombre){
+        result.nombre=canonicalizeProductNameForStorage(result.nombre);
         result.nombre=autoCorrectName(result.nombre);
         productName=buildProductName(result);
       }else{
