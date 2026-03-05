@@ -3296,6 +3296,11 @@ analyzeBtn.addEventListener('click',()=>{
 let aiCurrentMatch=null;
 const AI_PROMPT=`Eres un sistema de lectura de etiquetas alimentarias. Tu tarea es extraer TODOS los alérgenos presentes en la imagen.
 
+REGLA PRIORITARIA — NOMBRE EN ESPAÑOL OBLIGATORIO:
+El campo "nombre" del JSON debe estar SIEMPRE en español. PROHIBIDO devolver nombres en francés, inglés, italiano, portugués o alemán.
+- Si la etiqueta tiene varios idiomas: busca y usa SOLO la versión en español. Prioriza española aunque aparezca después o en letra más pequeña.
+- Si la etiqueta está solo en otro idioma: traduce el nombre del producto al español.
+
 IMPORTANTE: Si recibes 2 fotos, son del MISMO producto (envase + etiquetado). La segunda suele mostrar el etiquetado completo (ingredientes, "puede contener trazas de..."). Combina ambas y extrae TODOS los alérgenos y trazas que estén ESCRITOS.
 NO trates cada foto como un producto distinto. Debes devolver UN SOLO nombre de producto.
 
@@ -3358,9 +3363,16 @@ ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
 Si la zona de alérgenos está cortada o la imagen está muy borrosa y no puedes leer el texto pequeño, indica "warning" y lista solo lo que sí puedas leer.
 
 Responde SOLO JSON (sin markdown ni bloques \`\`\`json). No incluyas texto antes o después del objeto.
+IMPORTANTE: El campo "nombre" SIEMPRE en español. En etiquetas multilingües usa la versión española; si no hay, traduce.
 {"nombre":"...","peso_unidades":"","hallazgos_texto":["..."],"mapeo":[{"texto":"...","alergeno":"..."}],"alergenos":["..."],"trazas":["..."],"notas":"","warning":""}`;
 
 const AI_PROMPT_FROM_OCR=`Eres un sistema de lectura de etiquetas alimentarias. A continuación se te da el TEXTO EXTRAÍDO de una etiqueta (OCR). No tienes imagen; solo este texto. Tu tarea es extraer el nombre del producto y TODOS los alérgenos presentes en el texto, con las MISMAS reglas que si tuvieras la imagen.
+
+REGLA PRIORITARIA — NOMBRE EN ESPAÑOL OBLIGATORIO:
+El campo "nombre" del JSON debe estar SIEMPRE en español. PROHIBIDO devolver nombres en francés, inglés, italiano, portugués o alemán.
+- Si el OCR tiene varios idiomas: busca y usa SOLO la versión en español. Prioriza española aunque aparezca después o en letra más pequeña.
+- Si el OCR está solo en otro idioma: traduce el nombre del producto al español.
+
 El OCR puede incluir varias fotos del MISMO producto y cada bloque vendrá marcado como "--- FOTO N ---". Son vistas del mismo artículo, NO productos diferentes.
 
 PASO 1 — LEE TODO EL TEXTO RELEVANTE
@@ -3422,6 +3434,7 @@ ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
 Si el texto está incompleto o no se ve la zona de alérgenos, indica "warning" y lista solo lo que sí puedas leer.
 
 Responde SOLO JSON (sin markdown ni bloques \`\`\`json). No incluyas texto antes o después del objeto.
+IMPORTANTE: El campo "nombre" SIEMPRE en español. En texto multilingüe usa la versión española; si no hay, traduce.
 {"nombre":"...","peso_unidades":"","hallazgos_texto":["..."],"mapeo":[{"texto":"...","alergeno":"..."}],"alergenos":["..."],"trazas":["..."],"notas":"","warning":""}`;
 
 async function apiCall(content, options){
