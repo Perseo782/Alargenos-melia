@@ -3433,6 +3433,8 @@ MULTIPACK: Si la etiqueta indica formato multipack (N unidades x M g/kg), usa ES
 
 REGLA CRÍTICA — NUNCA uses solo "100 g" como peso del envase: En etiquetas europeas, "100 g" aparece SIEMPRE en la tabla nutricional como referencia. Eso es la unidad de referencia nutricional, NO el peso del paquete. EXCEPCIÓN: formato multipack "N x 100 g" SÍ es válido. Si el único peso que ves es "100 g" en contexto nutricional, deja peso_unidades vacío.
 
+Si no localizas el peso neto o multipack con claridad, NUNCA lo inventes ni uses valores de la tabla nutricional (por 100 g, kcal, kJ, etc.). Deja peso_unidades vacío.
+
 Formato europeo: la COMA es separador decimal. Unidades en español: kg, g, ml. Si hay multipack (N x M unidad), usa ese formato.
 Unidades SIEMPRE en español: litro/litros, kg, g, ml, onza/onzas, libra/libras. Si la etiqueta está en inglés, francés, alemán, italiano, portugués u otro idioma, traduce las unidades (litre→litro, Liter→litro, grammes→g, ounces→onzas, pound→libra, etc.).
 
@@ -3502,9 +3504,11 @@ NOMBRE ÚNICO: Si el OCR tiene varias variantes (nombre en varios idiomas o form
 
 PESO_UNIDADES (opcional, breve):
 Extrae el PESO NETO del envase (total del paquete). Busca junto a "Peso Neto", "Net Weight", "Poids Net", "Peso Netto", "Nettogewicht", "Peso Liquido", "Cantidad neta", etc.
-MULTIPACK: Si el OCR indica formato multipack (N unidades x M g/kg, con variantes como "u", "uds", "unidades" entre cifras y "x"), usa ESE formato (N x M g). Prioriza multipack sobre el peso total cuando ambos aparezcan.
+MULTIPACK: Si el OCR indica formato multipack (N unidades x M g/kg), usa ESE formato: "N x M g". Puede aparecer como: N x M g, NxMg, N u x M g, N uds x M g, N*Mg, N×M g, con o sin espacios. Prioriza multipack sobre el peso total cuando ambos aparezcan.
 
 REGLA CRÍTICA — NUNCA uses solo "100 g" como peso del envase: En etiquetas europeas, "100 g" aparece SIEMPRE en la tabla nutricional como referencia. Eso es la unidad de referencia nutricional, NO el peso del paquete. EXCEPCIÓN: formato multipack "N x 100 g" SÍ es válido. Si el único peso que ves es "100 g" en contexto nutricional, deja peso_unidades vacío.
+
+Si no localizas el peso neto o multipack con claridad, NUNCA lo inventes ni uses valores de la tabla nutricional (por 100 g, kcal, kJ, etc.). Deja peso_unidades vacío.
 
 Formato europeo: la COMA es separador decimal. Unidades en español: kg, g, ml. Si hay multipack (N x M unidad), usa ese formato.
 Unidades SIEMPRE en español: litro/litros, kg, g, ml, onza/onzas, libra/libras. Si la etiqueta está en inglés, francés, alemán, italiano, portugués u otro idioma, traduce las unidades (litre→litro, Liter→litro, grammes→g, ounces→onzas, pound→libra, etc.).
