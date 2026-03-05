@@ -236,7 +236,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button type="button" class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v05032601:27h</div>
+    <div class="login-version">v05032602:24h</div>
   </div>
 </div>
 
@@ -468,7 +468,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v05032601:27h</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v05032602:24h</span></div>
     <button type="button" class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section">
@@ -1083,7 +1083,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.4-0503260127',
+    version:'1.0.4-0503260224',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -1478,15 +1478,23 @@ function buildResultFromOcrText(rawText){
   let peso_unidades='';
   const fullText=lines.join(' ');
   const multipack=fullText.match(/(\d+)\s*x\s*(\d+)\s*(g|kg|ml)/i);
+  const pesoNetoRx=/(?:peso\s+neto|net\s+weight|poids?\s+net|peso\s+netto|nettogewicht|peso\s+liquido)[\s:]*(\d+(?:[.,]\d+)?)\s*(kg|kilos?|k\b|g\b)/i;
+  const pesoNetoMatch=fullText.match(pesoNetoRx);
   const pesoSimple=fullText.match(/(\d+(?:[.,]\d+)?)\s*(kgs?|g|ml)\s*escurrido/i)
     ||fullText.match(/(\d+(?:[.,]\d+)?)\s*(kgs?|g|ml)/i)
     ||fullText.match(/(\d+(?:[.,]\d+)?)\s*(kilos?|kilo)\b/i)
     ||fullText.match(/(\d+(?:[.,]\d+)?)\s*(k)\b/i);
   if(multipack)peso_unidades=`${multipack[1]} x ${multipack[2]} ${multipack[3]}`.slice(0,22);
-  else if(pesoSimple){
+  else if(pesoNetoMatch){
+    const raw=pesoNetoMatch[1], u=(pesoNetoMatch[2]||'').toLowerCase();
+    const unit=/\bk(?:g|ilo)?/i.test(u)||u==='k'?'kg':(u||'g');
+    peso_unidades=`${raw.replace('.',',')} ${unit}`.slice(0,22);
+  }else if(pesoSimple){
     const u=(pesoSimple[2]||'').toLowerCase();
     const unit=/\bk(?:g|ilo)?/i.test(u)||u==='k'?'kg':(u||'g');
-    peso_unidades=`${pesoSimple[1]} ${unit}`.slice(0,22);
+    const cand=`${pesoSimple[1]} ${unit}`.slice(0,22);
+    const es100gTablaNutricional=(/^100\s*g$/i.test(cand)||/^100g$/i.test(cand))&&/per\s+100|por\s+100|pour\s+100|100\s*g\s*(?:of\s+)?(?:product|produit|prodotto)|valores?\s+.*100|nutritional.*100|edi\s+per\s+100\s*g/i.test(fullText);
+    if(!es100gTablaNutricional)peso_unidades=cand;
   }
   return{
     nombre,
@@ -1566,17 +1574,30 @@ function fixNombreFromOcr(nombre, ocrText){
   if(n.length>90) n=n.slice(0,90).trim();
   return n;
 }
-/** Corrige peso cuando la IA confunde formato europeo: "2,50 kg" (coma decimal) NO es 250g. Soporta "5,00k"=5 kg. */
+/** Corrige peso cuando la IA confunde formato europeo: "2,50 kg" (coma decimal) NO es 250g. Soporta "5,00k"=5 kg. Si la IA no devolvió peso, intenta extraerlo del OCR (evitando "100 g" de tabla nutricional). */
 function fixPesoFromOcr(aiPeso,ocrText){
   const ocr=String(ocrText||'').trim();
   if(!ocr) return aiPeso;
   const m=ocr.match(/(\d+)[.,](\d+)\s*(kg|kilos?|k)\b/i);
-  if(!m) return aiPeso;
-  const ocrPeso=`${m[1]},${m[2]} kg`;
-  const aiNum=String(aiPeso||'').replace(/\s*(kg|g|ml)\s*$/i,'');
-  if(/^\d+$/.test(aiNum)&&m[1]+m[2]===aiNum&&/\bg\b/i.test(aiPeso)) return ocrPeso;
-  const n=parseFloat(aiNum.replace(',','.'));
-  if(n>=100&&n<=9999&&/\bg\b/i.test(aiPeso)&&parseInt(m[1])<10) return ocrPeso;
+  if(m){
+    const ocrPeso=`${m[1]},${m[2]} kg`;
+    const aiNum=String(aiPeso||'').replace(/\s*(kg|g|ml)\s*$/i,'');
+    if(/^\d+$/.test(aiNum)&&m[1]+m[2]===aiNum&&/\bg\b/i.test(aiPeso)) return ocrPeso;
+    const n=parseFloat(aiNum.replace(',','.'));
+    if(n>=100&&n<=9999&&/\bg\b/i.test(aiPeso)&&parseInt(m[1])<10) return ocrPeso;
+  }
+  if(!(aiPeso||'').trim()){
+    const netRx=/(?:peso\s+neto|net\s+weight|poids?\s+net|nettogewicht)[\s:]*(\d+(?:[.,]\d+)?)\s*(kg|kilos?|k)\b/i;
+    const netM=ocr.match(netRx);
+    if(netM) return `${netM[1].replace('.',',')} kg`;
+    const intKg=ocr.match(/\b([1-9]\d?)\s*(kg|kilos?|k)\b/i);
+    if(intKg&&parseInt(intKg[1])<100) return `${intKg[1]} kg`;
+    const anyPeso=ocr.match(/\b(\d+(?:[.,]\d+)?)\s*(kg|kilos?|k)\b/i);
+    if(anyPeso){
+      const v=parseFloat(anyPeso[1].replace(',','.'));
+      if(v>=0.5&&v<=99) return `${anyPeso[1].replace('.',',')} kg`;
+    }
+  }
   return aiPeso;
 }
 const ACCENT_MAP={
@@ -3312,7 +3333,11 @@ ETIQUETAS EN UN SOLO IDIOMA (distinto del español): Traduce el nombre del produ
 Prioriza la variante española sin importar el orden. Máximo 80 caracteres. No concatenes títulos con "y". NUNCA incluyas números sueltos en el nombre (códigos de lote, porcentajes); solo el nombre del producto.
 
 PESO_UNIDADES (opcional, breve):
-Extrae SIEMPRE el peso si aparece. En etiquetas europeas la COMA es separador decimal: "2,50 kg" = 2,50 kilogramos, NUNCA 250g. Usa el formato de la etiqueta ("2,50 kg" o "2.50 kg"). Ejemplos: "2,50 kg", "500 g", "1,50 kg escurrido". NUNCA interpretes 2,50 como 250.
+Extrae el PESO NETO del envase (total del paquete). Busca junto a "Peso Neto", "Net Weight", "Poids Net", "Peso Netto", "Nettogewicht", "Peso Liquido", etc.
+
+REGLA CRÍTICA — NUNCA uses "100 g" como peso del envase: En etiquetas europeas, "100 g" aparece SIEMPRE en la tabla nutricional como referencia ("por 100 g", "per 100 g", "per 100g of product", "edi per 100 g di prodotto", "valeurs pour 100 g", etc.). Eso es la unidad de referencia nutricional, NO el peso del paquete. Si el único peso que ves es "100 g" en contexto nutricional, deja peso_unidades vacío.
+
+Formato europeo: la COMA es separador decimal: "2,50 kg" = 2,50 kilogramos, NUNCA 250g. Usa el formato de la etiqueta ("2,50 kg" o "2.50 kg"). Ejemplos válidos: "2 kg", "2,50 kg", "500 g", "1,50 kg escurrido".
 
 ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
 - NEGACIÓN: "SIN GLUTEN", "gluten-free", "sin lactosa", etc. = NO incluyas ese alérgeno.
@@ -3371,7 +3396,11 @@ ETIQUETAS EN UN SOLO IDIOMA (distinto del español): Traduce el nombre del produ
 Prioriza la variante española sin importar el orden en el OCR. Máximo 80 caracteres. No concatenes títulos con "y". NUNCA incluyas números sueltos en el nombre (códigos de lote, porcentajes); solo el nombre del producto.
 
 PESO_UNIDADES (opcional, breve):
-Extrae SIEMPRE el peso si aparece. En etiquetas europeas la COMA es separador decimal: "2,50 kg" = 2,50 kilogramos, NUNCA 250g. Usa el formato de la etiqueta ("2,50 kg" o "2.50 kg"). Ejemplos: "2,50 kg", "500 g", "1,50 kg escurrido". NUNCA interpretes 2,50 como 250.
+Extrae el PESO NETO del envase (total del paquete). Busca junto a "Peso Neto", "Net Weight", "Poids Net", "Peso Netto", "Nettogewicht", "Peso Liquido", etc.
+
+REGLA CRÍTICA — NUNCA uses "100 g" como peso del envase: En etiquetas europeas, "100 g" aparece SIEMPRE en la tabla nutricional como referencia ("por 100 g", "per 100 g", "per 100g of product", "edi per 100 g di prodotto", "valeurs pour 100 g", etc.). Eso es la unidad de referencia nutricional, NO el peso del paquete. Si el único peso que ves es "100 g" en contexto nutricional, deja peso_unidades vacío.
+
+Formato europeo: la COMA es separador decimal: "2,50 kg" = 2,50 kilogramos, NUNCA 250g. Usa el formato de la etiqueta ("2,50 kg" o "2.50 kg"). Ejemplos válidos: "2 kg", "2,50 kg", "500 g", "1,50 kg escurrido".
 
 ALÉRGENOS Y TRAZAS — REGLAS ESTRICTAS:
 - NEGACIÓN: "SIN GLUTEN", "gluten-free", "sin lactosa", etc. = NO incluyas ese alérgeno.
@@ -4148,27 +4177,31 @@ async function autoProcessPhoto(dataUrl){
 
 // ─── EXPORT EXCEL ───
 const AL_SORTED=[...AL].sort();
+const CENTER_S={alignment:{horizontal:'center',vertical:'center'}};
+function cellWithStyle(v){ return {v:v||'',t:'s',s:CENTER_S}; }
 document.getElementById('exportExcelBtn').addEventListener('click',async()=>{
   try{
-    if(!window.XLSX){
+    if(!window.XLSX||!window.XLSX.style_version){
+      const prev=document.querySelector('script[src*="xlsx"]');
+      if(prev) prev.remove();
+      delete window.XLSX;
       const script=document.createElement('script');
-      script.src='https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js';
+      script.src='https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js';
       document.head.appendChild(script);
-      await new Promise((resolve,reject)=>{
-        script.onload=resolve;
-        script.onerror=reject;
-      });
+      await new Promise((resolve,reject)=>{ script.onload=resolve; script.onerror=reject; });
     }
     const header=['Producto',...AL_SORTED];
-    const ws_data=[header];
+    const row1=header.map(h=>cellWithStyle(h));
+    const ws_data=[row1];
     P.forEach(p=>{
       const row=[p.n];
       AL_SORTED.forEach(al=>{
-        row.push(p.a.includes(al)?'X':'');
+        row.push(cellWithStyle(p.a.includes(al)?'X':''));
       });
       ws_data.push(row);
     });
     const ws=XLSX.utils.aoa_to_sheet(ws_data);
+    ws['!freeze']={xSplit:0,ySplit:1,topLeftCell:'A2',activePane:'bottomLeft'};
     const cols=[{wch:50}];
     AL_SORTED.forEach(()=>cols.push({wch:12}));
     ws['!cols']=cols;
@@ -4177,7 +4210,6 @@ document.getElementById('exportExcelBtn').addEventListener('click',async()=>{
     const d=new Date();
     const fname=`alergenos_melia_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.xlsx`;
     
-    // Generar el archivo como Blob y descargarlo
     const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
     const blob=new Blob([wbout],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     const url=URL.createObjectURL(blob);
@@ -4217,7 +4249,7 @@ importInput.addEventListener('change',async(e)=>{
   try{
     if(!window.XLSX){
       const script=document.createElement('script');
-      script.src='https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js';
+      script.src='https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js';
       document.head.appendChild(script);
       await new Promise((resolve,reject)=>{ script.onload=resolve; script.onerror=reject; });
     }
