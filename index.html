@@ -250,7 +250,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button type="button" class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v06032622:27h</div>
+    <div class="login-version">v06032622:35h</div>
   </div>
 </div>
 
@@ -483,7 +483,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v06032622:27h</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v06032622:35h</span></div>
     <button type="button" class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section">
@@ -1105,7 +1105,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.4-0603262227',
+    version:'1.0.4-0603262235',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -1786,6 +1786,19 @@ const HISTORY_KEY='alergenos_history_v1';
 const HISTORY_MAX=30;
 
 function loadHistory(){try{const r=localStorage.getItem(HISTORY_KEY);if(!r)return [];const a=JSON.parse(r);return Array.isArray(a)?a:[];}catch(_){return [];}}
+function mergeHistory(local,remote){
+  const seen=new Set();
+  const merged=[];
+  [...(Array.isArray(local)?local:[]),...(Array.isArray(remote)?remote:[])].forEach(item=>{
+    if(!item||typeof item!=='object'||!item.timestamp)return;
+    const key=`${String(item.name||'')}|${String(item.action||'')}|${item.timestamp}`;
+    if(seen.has(key))return;
+    seen.add(key);
+    merged.push(item);
+  });
+  merged.sort((a,b)=>(new Date(b.timestamp)).getTime()-(new Date(a.timestamp)).getTime());
+  return merged.slice(0,HISTORY_MAX);
+}
 function pushToHistory(name,action){
   if(!name||typeof name!=='string')return;
   const n=String(name).trim();if(!n)return;
@@ -3671,7 +3684,7 @@ const PHOTO_MAX_SIZE=1120;
 const PHOTO_JPEG_QUALITY=0.85;
 const VISION_QUALITY_OPTS={maxSize:4096,quality:0.95};
 const THUMB_MAX_SIZE=600;
-const THUMB_QUALITY=0.85;
+const THUMB_QUALITY=0.95;
 function compressThumbnail(dataUrl){
   return new Promise((resolve)=>{
     const img=new Image();
@@ -5450,7 +5463,8 @@ async function gdriveSmartSync(trigger = 'manual', opts = {}) {
     } else if(decision === 'download') {
       P = sanitizeProductList(remoteState.products);
       if(remoteState.history&&Array.isArray(remoteState.history)){
-        const kept=remoteState.history.slice(-HISTORY_MAX);
+        const local=loadHistory();
+        const kept=mergeHistory(local,remoteState.history);
         try{localStorage.setItem(HISTORY_KEY,JSON.stringify(kept));}catch(_){}
       }
       saveDB({ skipAutoSync: true });
@@ -5721,7 +5735,8 @@ async function gdriveDownload(){
     if(remoteTime>parseInt(localUpdate)){
       P=sanitizeProductList(data.products);
       if(data.history&&Array.isArray(data.history)){
-        const kept=data.history.slice(-HISTORY_MAX);
+        const local=loadHistory();
+        const kept=mergeHistory(local,data.history);
         try{localStorage.setItem(HISTORY_KEY,JSON.stringify(kept));}catch(_){}
       }
       saveDB({ skipAutoSync: true });  // NO lanzar upload tras descarga
