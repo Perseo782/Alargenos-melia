@@ -3020,6 +3020,7 @@ document.getElementById('modalClose').addEventListener('click',closeModal);
 modalBg.addEventListener('click',e=>{if(e.target===modalBg)closeModal()});
 function closeModal(){
   analysisAborted=true;
+  if(typeof setAnalysisPriority==='function')setAnalysisPriority(false);
   if(autoMode){if(typeof btnAutoFlow!=='undefined')btnAutoFlow.style.display='';if(typeof btnTerminarAuto!=='undefined')btnTerminarAuto.style.display='none';}
   autoMode=false;
   if(openedFromEventHistory){openedFromEventHistory=false;modalBg.classList.remove('open');setTimeout(()=>openSettings(),100);return;}
@@ -3149,6 +3150,7 @@ function choosePhotoSource(source){
   photoSourceBg.classList.remove('open');
   const stack=getNavStack();
   if(stack[stack.length-1]==='photoSource') navBack();
+  if(source==='camera'||source==='gallery'){if(typeof setAnalysisPriority==='function')setAnalysisPriority(true);}
   if(source==='camera') camInput.click();
   else galInput.click();
 }
@@ -3365,7 +3367,7 @@ function handleImg(e){
       (currentSlot===0?img1:img2).src=du;
       (currentSlot===0?img1:img2).style.display='block';
       (currentSlot===0?slot1:slot2).classList.add('filled');
-      if(photos[0]||photos[1]){analyzeBtn.style.display='block';}
+      if(photos[0]||photos[1]){analyzeBtn.style.display='block';if(typeof setAnalysisPriority==='function')setAnalysisPriority(true);}
       if(currentSlot===0&&!photos[1])currentSlot=1;
       setTimeout(()=>{if(analyzeBtn)analyzeBtn.scrollIntoView({behavior:'smooth',block:'end'});},150);
     }
@@ -3687,22 +3689,32 @@ function compressThumbnail(dataUrl){
 let thumbnailCompressionQueue=[];
 let thumbnailCompressionTimer=null;
 const THUMB_IDLE_DELAY_MS=15000;
+let analysisPriorityActive=false;
+function setAnalysisPriority(active){
+  analysisPriorityActive=active;
+  if(active){
+    if(thumbnailCompressionTimer){clearTimeout(thumbnailCompressionTimer);thumbnailCompressionTimer=null;}
+  }else if(thumbnailCompressionQueue.length>0&&!thumbnailCompressionTimer){
+    thumbnailCompressionTimer=setTimeout(()=>{thumbnailCompressionTimer=null;if(!analysisPriorityActive&&thumbnailCompressionQueue.length>0)runThumbnailCompression();},2000);
+  }
+}
+function runThumbnailCompression(){
+  if(analysisPriorityActive||thumbnailCompressionQueue.length===0)return;
+  const item=thumbnailCompressionQueue.shift();
+  compressThumbnail(item.dataUrl).then(thumb=>{
+    if(!thumb)return;
+    if(analysisPriorityActive){thumbnailCompressionQueue.unshift(item);return;}
+    const idx=P.findIndex(p=>norm(p.n)===norm(item.name));
+    if(idx>=0&&!P[idx]._thumb){P[idx]._thumb=thumb;saveDB({changeType:'edit_product',origin:'thumbnail_compression',recordKey:item.name});render();}
+    if(thumbnailCompressionQueue.length>0)setTimeout(runThumbnailCompression,800);
+  });
+}
 function scheduleThumbnailCompression(productName,dataUrl){
   if(!dataUrl||!productName)return;
   thumbnailCompressionQueue.push({name:productName,dataUrl});
-  const run=()=>{
-    thumbnailCompressionTimer=null;
-    if(thumbnailCompressionQueue.length===0)return;
-    const item=thumbnailCompressionQueue.shift();
-    compressThumbnail(item.dataUrl).then(thumb=>{
-      if(!thumb)return;
-      const idx=P.findIndex(p=>norm(p.n)===norm(item.name));
-      if(idx>=0&&!P[idx]._thumb){P[idx]._thumb=thumb;saveDB({changeType:'edit_product',origin:'thumbnail_compression',recordKey:item.name});render();}
-      if(thumbnailCompressionQueue.length>0)setTimeout(run,800);
-    });
-  };
+  if(analysisPriorityActive)return;
   if(thumbnailCompressionTimer)clearTimeout(thumbnailCompressionTimer);
-  thumbnailCompressionTimer=setTimeout(run,THUMB_IDLE_DELAY_MS);
+  thumbnailCompressionTimer=setTimeout(()=>{thumbnailCompressionTimer=null;if(!analysisPriorityActive&&thumbnailCompressionQueue.length>0)runThumbnailCompression();},THUMB_IDLE_DELAY_MS);
 }
 function compressPhotoForAI(dataUrl, opts=null){
   return new Promise((resolve,reject)=>{
@@ -3750,6 +3762,7 @@ async function buildPhotoRequest(photoList, compressOpts=null){
 
 async function analyzePhotos(photoList, opts={}){
   analysisAborted=false;
+  if(typeof setAnalysisPriority==='function')setAnalysisPriority(true);
   const aiS=document.getElementById('aiStatus'),aiR=document.getElementById('aiResult');
   const mode=(opts&&opts.mode)||'normal';
   aiS.innerHTML=`<span class="spinner"></span> Preparando imagen…`;aiS.classList.add('show');aiR.classList.remove('show');hideMatch('aiMatch');aiCurrentMatch=null;
@@ -4001,6 +4014,7 @@ const queueBar=document.getElementById('queueBar'),queueText=document.getElement
 function updateQueueBar(){if(!photoQueue.length){queueBar.classList.remove('show');return}queueBar.classList.add('show');queueText.textContent=isProcessing?`Procesando… ${photoQueue.length} restante${photoQueue.length>1?'s':''}`:`${photoQueue.length} foto${photoQueue.length>1?'s':''} en cola`;queueDot.classList.toggle('pulse',isProcessing)}
 async function processQueue(){
   if(isProcessing||!photoQueue.length)return;
+  if(typeof analysisPriorityActive!=='undefined'&&analysisPriorityActive){setTimeout(processQueue,1500);return;}
   if(!navigator.onLine){
     addLog(LOG_LEVELS.ERROR,ERROR_CODES.NETWORK_OFFLINE,'Cola IA detenida: sin conexion',{service:'Gemini',operation:'processQueue'});
     return;
@@ -4011,6 +4025,7 @@ async function processQueue(){
   }
   isProcessing=true;updateQueueBar();
   while(photoQueue.length>0&&navigator.onLine){
+    if(typeof analysisPriorityActive!=='undefined'&&analysisPriorityActive){isProcessing=false;updateQueueBar();setTimeout(processQueue,1500);return;}
     const item=photoQueue[0];const pl=item.photos||[item.dataUrl].filter(Boolean);
     let queueAnalysisId=null;
     let retries=0,success=false;
