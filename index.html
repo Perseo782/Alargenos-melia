@@ -63,6 +63,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 .hdr-chip-btn:hover{background:var(--warm8-10);border-color:var(--warm8-60)}
 .hdr-chip-btn:active{background:var(--warm8-20)}
 .hdr-chip-btn:disabled{opacity:.6;cursor:not-allowed}
+#settingsBg #settingsClose.hdr-chip-btn{min-width:32px;padding:0 10px;font-size:16px;line-height:1}
 .hdr-chip-icon{font-size:14px;line-height:1}
 .fixes-count{min-width:20px;height:18px;padding:0 6px;border-radius:999px;background:var(--red);color:#fff;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center}
 .pending-view-indicator{font-size:11px;color:var(--text2);margin-bottom:8px;padding:0 2px;letter-spacing:0.2px}
@@ -249,7 +250,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button type="button" class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v06032618:50h</div>
+    <div class="login-version">v06032621:10h</div>
   </div>
 </div>
 
@@ -264,9 +265,9 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
       <div class="hdr-counters-left">
         <span class="hdr-chip" id="cnt">0 En la nube</span>
         <div class="hdr-counters-aux">
-          <button class="hdr-chip hdr-chip-pending" id="pendingChip" hidden type="button" title="Filtrar pendientes">
+          <button class="hdr-chip hdr-chip-pending" id="pendingChip" hidden type="button" title="Filtrar pendientes de subida">
             <span class="pending-warn" id="pendingWarnIcon" aria-hidden="true">⚠︎</span>
-            <span id="pendingCountLabel">0 Pendientes</span>
+            <span id="pendingCountLabel">0 Pendientes de subida</span>
           </button>
           <button type="button" class="hdr-chip-btn" id="fixesBtn" style="display:none" title="Errores a solucionar">
             <span class="hdr-chip-icon" aria-hidden="true">⚠</span>
@@ -286,7 +287,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
         </button>
       </div>
     </div>
-    <div class="pending-view-indicator" id="pendingViewIndicator" hidden>Mostrando pendientes</div>
+    <div class="pending-view-indicator" id="pendingViewIndicator" hidden>Mostrando pendientes de subida</div>
     <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7.5"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="text" placeholder="Buscar producto…" autocomplete="off" autocorrect="on" spellcheck="false"><button type="button" class="x-btn" id="xb">&times;</button></div>
     <div class="filter-row" id="fl"></div>
   </div>
@@ -431,7 +432,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 
 <!-- SETTINGS MODAL -->
 <div class="modal-bg" id="settingsBg"><div class="modal">
-  <h2>Ajustes <button type="button" class="modal-close" id="settingsClose">&times;</button></h2>
+  <h2>Ajustes <button type="button" class="hdr-chip-btn" id="settingsClose" title="Cerrar">&times;</button></h2>
   <div class="settings-section">
     <h3>Cuenta</h3>
     <div class="settings-row"><span class="settings-label">Usuario</span><span class="settings-val" id="settingsUser">administrador</span></div>
@@ -482,7 +483,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v06032618:50h</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v06032621:10h</span></div>
     <button type="button" class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section">
@@ -1130,7 +1131,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.4-0603261850',
+    version:'1.0.4-0603262110',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -2396,8 +2397,8 @@ function updatePendingSyncChip(){
   pendingWarnIcon.hidden=!showWarn;
   pendingChip.classList.toggle('active',pendingFilterActive);
   const uniqueCount=getPendingUniqueProductCount();
-  pendingCountLabel.textContent=uniqueCount===1?'1 Pendiente':`${uniqueCount} Pendientes`;
-  pendingChip.title=pendingFilterActive?'Mostrando solo pendientes':(showWarn?'Pendientes sin conexión estable con Drive':'Filtrar registros pendientes');
+  pendingCountLabel.textContent=uniqueCount===1?'1 Pendiente de subida':`${uniqueCount} Pendientes de subida`;
+  pendingChip.title=pendingFilterActive?'Mostrando solo pendientes de subida':(showWarn?'Pendientes de subida sin conexión estable con Drive':'Filtrar registros pendientes de subida');
   updatePendingFilterIndicator();
 }
 
@@ -2875,7 +2876,7 @@ function renderProducts(){
   if(normal.length>renderLimit)h+=`<div class="empty" id="loadMore">Mostrando ${renderLimit} de ${normal.length} — Baja para cargar más</div>`;
   ls.innerHTML=h;
   updateCancelReviewUI();
-  if(lastSavedName){const el=ls.querySelector('.card.highlight');if(el){el.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>el.classList.remove('highlight'),2500)}lastSavedName=null}else if(renderLimit===150&&!window.__scrollTourActive)ls.scrollTop=0;
+  if(lastSavedName){const nameToScroll=lastSavedName;lastSavedName=null;setTimeout(()=>{const idx=P.findIndex(p=>norm(p.n)===norm(nameToScroll));if(idx>=0){const el=ls.querySelector(`.card[data-idx="${idx}"]`);if(el){el.classList.add('highlight');el.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>el.classList.remove('highlight'),3000)}}},400)}else if(renderLimit===150&&!window.__scrollTourActive)ls.scrollTop=0;
   ls.querySelectorAll('.card[data-idx]').forEach(c=>{c.addEventListener('click',e=>{if(e.target.closest('.card-thumb')){e.preventDefault();e.stopPropagation();const idx=parseInt(c.dataset.idx);if(idx>=0&&P[idx]&&P[idx]._thumb)openPhotoViewer(P[idx]._thumb);return}openEdit(parseInt(c.dataset.idx))})});
 }
 
@@ -3665,8 +3666,8 @@ async function apiCall(content, options){
 const PHOTO_MAX_SIZE=1120;
 const PHOTO_JPEG_QUALITY=0.85;
 const VISION_QUALITY_OPTS={maxSize:4096,quality:0.95};
-const THUMB_MAX_SIZE=420;
-const THUMB_QUALITY=0.72;
+const THUMB_MAX_SIZE=600;
+const THUMB_QUALITY=0.85;
 function compressThumbnail(dataUrl){
   return new Promise((resolve)=>{
     const img=new Image();
