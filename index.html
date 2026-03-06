@@ -108,8 +108,13 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 .audit-running-box p{font-size:14px;color:var(--text);margin:0}
 .audit-spinner{width:32px;height:32px;border:3px solid var(--warm8-20);border-top-color:var(--warm8);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
 @keyframes spin{to{transform:rotate(360deg)}}
+.card-body{display:flex;align-items:flex-start;gap:10px}
+.card-content{flex:1;min-width:0}
 .card-name{font-size:14px;font-weight:500;line-height:1.4;margin-bottom:6px;color:var(--text);letter-spacing:-0.1px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
 .card-name mark{background:var(--warm8-20);color:var(--text);border-radius:2px;padding:0 2px}
+.card-thumb{width:48px;height:48px;flex-shrink:0;border-radius:6px;overflow:hidden;cursor:pointer;background:var(--warm8-10);border:1px solid var(--warm8-20)}
+.card-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.card-thumb:active{opacity:.9}
 .icons-row{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
 .a-icon{width:28px;height:28px;object-fit:contain}
 .safe{color:var(--green);font-size:12px;font-weight:500;letter-spacing:0.2px}
@@ -244,7 +249,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button type="button" class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v06032618:23h</div>
+    <div class="login-version">v06032618:50h</div>
   </div>
 </div>
 
@@ -477,7 +482,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v06032618:23h</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v06032618:50h</span></div>
     <button type="button" class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section">
@@ -1125,7 +1130,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.4-0603261823',
+    version:'1.0.4-0603261850',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -1694,12 +1699,14 @@ function sanitizeProductList(list){
       if(itemTs > prevTs && item.last_analysis_id != null){ prev.last_analysis_id = item.last_analysis_id; prev.last_analysis_timestamp = item.last_analysis_timestamp; }
       if(item._src) prev._src = item._src;
       if(item._updated_at) prev._updated_at = item._updated_at;
+      if(item._thumb && !prev._thumb) prev._thumb = item._thumb;
     } else {
       const obj = { n:name, a:allergens };
       if(item.last_analysis_id != null) obj.last_analysis_id = item.last_analysis_id;
       if(item.last_analysis_timestamp != null) obj.last_analysis_timestamp = item.last_analysis_timestamp;
       if(item._src) obj._src = item._src;
       if(item._updated_at) obj._updated_at = item._updated_at;
+      if(item._thumb) obj._thumb = item._thumb;
       map.set(key, obj);
     }
   });
@@ -2752,6 +2759,7 @@ function mergeProduct(idx,nn,na,opts){
   ex._src='app';
   ex._updated_at=(opts&&opts.analysisTimestamp)||(opts&&opts.last_analysis_timestamp)||new Date().toISOString();
   if(opts&&opts.analysisId!= null){ ex.last_analysis_id=opts.analysisId; ex.last_analysis_timestamp=opts.analysisTimestamp||new Date().toISOString(); }
+  if(opts&&opts.photoDataUrl&&!ex._thumb&&typeof scheduleThumbnailCompression==='function')scheduleThumbnailCompression(ex.n,opts.photoDataUrl);
   pushToHistory(ex.n,'modified');
   saveDB({
     changeType:'edit_product',
@@ -2851,7 +2859,8 @@ function renderProducts(){
       const reviewBadge=p.requires_review?'<span class="audit-badge medium">Revisar IA</span>':'';
       const fromApp=p._src==='app'?' card-from-app':'';
       const appLabel=formatUpdatedAtLabel(p);
-      h+=`<div class="card audit-${severity}${fromApp}" data-idx="${oi}"><div class="card-name">${nm}${badge}${reviewBadge}</div>${ic}${count}${appLabel}</div>`;
+      const thumbHtml=p._thumb?`<div class="card-thumb" data-idx="${oi}"><img src="${p._thumb}" alt=""></div>`:'';
+      h+=`<div class="card audit-${severity}${fromApp}" data-idx="${oi}"><div class="card-body"><div class="card-content"><div class="card-name">${nm}${badge}${reviewBadge}</div>${ic}${count}</div>${thumbHtml}</div>${appLabel}</div>`;
     });
     h+='<hr class="audit-separator">';
   }
@@ -2862,12 +2871,12 @@ function renderProducts(){
     if(idxInNormal>=0&&idxInNormal>=renderLimit)renderLimit=Math.max(renderLimit,idxInNormal+1);
   }
   const show=normal.slice(0,renderLimit);
-  show.forEach(p=>{const oi=P.indexOf(p);let nm=esc(p.n);const query=norm(q.value.trim());if(query)nm=hi(nm,query);let ic='';if(!p.a.length)ic='<span class="safe">✓ Sin alérgenos</span>';else{ic='<div class="icons-row">';p.a.forEach(a=>{if(IC[a])ic+=`<img class="a-icon" src="${IC[a]}" alt="${a}" title="${a}">`});ic+='</div>'}const isHL=lastSavedName&&norm(p.n)===norm(lastSavedName);const fromApp=p._src==='app'?' card-from-app':'';const appLabel=formatUpdatedAtLabel(p);const count=p.a.length?`<div class="a-count">${p.a.length} alérgeno${p.a.length>1?'s':''}</div>`:'';const reviewBadge=p.requires_review?'<span class="audit-badge medium">Revisar IA</span>':'';h+=`<div class="card${isHL?' highlight':''}${fromApp}" data-idx="${oi}"><div class="card-name">${nm}${reviewBadge}</div>${ic}${count}${appLabel}</div>`});
+  show.forEach(p=>{const oi=P.indexOf(p);let nm=esc(p.n);const query=norm(q.value.trim());if(query)nm=hi(nm,query);let ic='';if(!p.a.length)ic='<span class="safe">✓ Sin alérgenos</span>';else{ic='<div class="icons-row">';p.a.forEach(a=>{if(IC[a])ic+=`<img class="a-icon" src="${IC[a]}" alt="${a}" title="${a}">`});ic+='</div>'}const isHL=lastSavedName&&norm(p.n)===norm(lastSavedName);const fromApp=p._src==='app'?' card-from-app':'';const appLabel=formatUpdatedAtLabel(p);const count=p.a.length?`<div class="a-count">${p.a.length} alérgeno${p.a.length>1?'s':''}</div>`:'';const reviewBadge=p.requires_review?'<span class="audit-badge medium">Revisar IA</span>':'';const thumbHtml=p._thumb?`<div class="card-thumb" data-idx="${oi}"><img src="${p._thumb}" alt=""></div>`:'';h+=`<div class="card${isHL?' highlight':''}${fromApp}" data-idx="${oi}"><div class="card-body"><div class="card-content"><div class="card-name">${nm}${reviewBadge}</div>${ic}${count}</div>${thumbHtml}</div>${appLabel}</div>`});
   if(normal.length>renderLimit)h+=`<div class="empty" id="loadMore">Mostrando ${renderLimit} de ${normal.length} — Baja para cargar más</div>`;
   ls.innerHTML=h;
   updateCancelReviewUI();
   if(lastSavedName){const el=ls.querySelector('.card.highlight');if(el){el.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>el.classList.remove('highlight'),2500)}lastSavedName=null}else if(renderLimit===150&&!window.__scrollTourActive)ls.scrollTop=0;
-  ls.querySelectorAll('.card[data-idx]').forEach(c=>c.addEventListener('click',()=>openEdit(parseInt(c.dataset.idx))))
+  ls.querySelectorAll('.card[data-idx]').forEach(c=>{c.addEventListener('click',e=>{if(e.target.closest('.card-thumb')){e.preventDefault();e.stopPropagation();const idx=parseInt(c.dataset.idx);if(idx>=0&&P[idx]&&P[idx]._thumb)openPhotoViewer(P[idx]._thumb);return}openEdit(parseInt(c.dataset.idx))})});
 }
 
 function runBatchScrollTour(productNames){
@@ -3109,6 +3118,7 @@ function addNewProduct(name,al,opts){
   if(opts&&opts.analysisId!=null){ obj.last_analysis_id=opts.analysisId; obj.last_analysis_timestamp=opts.analysisTimestamp||new Date().toISOString(); }
   P.splice(idx,0,obj);
   pushToHistory(name,'added');
+  if(opts&&opts.photoDataUrl&&typeof scheduleThumbnailCompression==='function')scheduleThumbnailCompression(name,opts.photoDataUrl);
   saveDB({changeType:'create_product',origin:'addNewProduct',recordKey:name});updateAppStatus();
 }
 let deleteTarget=-1;const confirmBg=document.getElementById('confirmBg');
@@ -3257,10 +3267,10 @@ function batchReviewConfirm(){
   const displayName=buildProductName(r);
   const match=findMatch(displayName);
   if(match){
-    mergeProduct(match.index,displayName,allA);
+    mergeProduct(match.index,displayName,allA,{photoDataUrl:item.dataUrl});
     showToast(`✓ "${displayName}" guardado`,'update');
   }else{
-    addNewProduct(displayName,allA);
+    addNewProduct(displayName,allA,{photoDataUrl:item.dataUrl});
     showToast(`✓ "${displayName}" añadido`,'new');
   }
   lastSavedName=displayName;save();render();updateAppStatus();
@@ -3652,6 +3662,45 @@ async function apiCall(content, options){
 const PHOTO_MAX_SIZE=1120;
 const PHOTO_JPEG_QUALITY=0.85;
 const VISION_QUALITY_OPTS={maxSize:4096,quality:0.95};
+const THUMB_MAX_SIZE=256;
+const THUMB_QUALITY=0.5;
+function compressThumbnail(dataUrl){
+  return new Promise((resolve)=>{
+    const img=new Image();
+    img.onload=()=>{
+      let w=img.width,h=img.height;
+      if(w>THUMB_MAX_SIZE||h>THUMB_MAX_SIZE){
+        const r=Math.min(THUMB_MAX_SIZE/w,THUMB_MAX_SIZE/h);
+        w=Math.round(w*r);h=Math.round(h*r);
+      }
+      const canvas=document.createElement('canvas');
+      canvas.width=w;canvas.height=h;
+      const ctx=canvas.getContext('2d');
+      if(!ctx){resolve(dataUrl);return;}
+      ctx.drawImage(img,0,0,w,h);
+      try{resolve(canvas.toDataURL('image/jpeg',THUMB_QUALITY));}catch(e){resolve(dataUrl);}
+    };
+    img.onerror=()=>resolve(null);
+    img.src=dataUrl;
+  });
+}
+let thumbnailCompressionQueue=[];
+function scheduleThumbnailCompression(productName,dataUrl){
+  if(!dataUrl||!productName)return;
+  thumbnailCompressionQueue.push({name:productName,dataUrl});
+  const run=()=>{
+    if(thumbnailCompressionQueue.length===0)return;
+    const item=thumbnailCompressionQueue.shift();
+    compressThumbnail(item.dataUrl).then(thumb=>{
+      if(!thumb)return;
+      const idx=P.findIndex(p=>norm(p.n)===norm(item.name));
+      if(idx>=0&&!P[idx]._thumb){P[idx]._thumb=thumb;saveDB({changeType:'edit_product',origin:'thumbnail_compression',recordKey:item.name});render();}
+      if(thumbnailCompressionQueue.length>0)requestIdleCallback?requestIdleCallback(run,{timeout:2000}):setTimeout(run,500);
+    });
+  };
+  if(typeof requestIdleCallback!=='undefined')requestIdleCallback(run,{timeout:3000});
+  else setTimeout(run,1500);
+}
 function compressPhotoForAI(dataUrl, opts=null){
   return new Promise((resolve,reject)=>{
     const img=new Image();
@@ -3910,7 +3959,7 @@ document.getElementById('aiSave').addEventListener('click',()=>{
   }
   if(aiCurrentMatch){
     const prev=P[aiCurrentMatch.index]||{};
-    const r=mergeProduct(aiCurrentMatch.index,name,al,analysisId?{analysisId,analysisTimestamp}:undefined);
+    const r=mergeProduct(aiCurrentMatch.index,name,al,analysisId?{analysisId,analysisTimestamp,photoDataUrl:photos[1]||photos[0]}:{photoDataUrl:photos[1]||photos[0]});
     if(P[aiCurrentMatch.index]){
       P[aiCurrentMatch.index].requires_review=!!(aiMeta&&aiMeta.requires_review);
       P[aiCurrentMatch.index].review_alerts=(aiMeta&&aiMeta.review_alerts)||prev.review_alerts||null;
@@ -3925,7 +3974,7 @@ document.getElementById('aiSave').addEventListener('click',()=>{
     save(); lastSavedName=aiCurrentMatch.product.n;render();
     showToast(r.added.length?`✓ "${aiCurrentMatch.product.n}" · +${r.added.length} alérgeno${r.added.length>1?'s':''}`:`✓ "${aiCurrentMatch.product.n}" verificado`,'update')
   }else{
-    addNewProduct(name,al,analysisId?{analysisId,analysisTimestamp}:undefined);
+    addNewProduct(name,al,analysisId?{analysisId,analysisTimestamp,photoDataUrl:photos[1]||photos[0]}:{photoDataUrl:photos[1]||photos[0]});
     const idx=P.findIndex(x=>norm(x.n)===norm(name));
     if(idx>=0){
       P[idx].requires_review=!!(aiMeta&&aiMeta.requires_review);
@@ -4008,7 +4057,7 @@ async function processQueue(){
           if(isAutoOk(result)){
             const match=findMatch(displayName);
             if(match){
-              const r=mergeProduct(match.index,displayName,allA,{analysisId,analysisTimestamp:ts});
+              const r=mergeProduct(match.index,displayName,allA,{analysisId,analysisTimestamp:ts,photoDataUrl:pl[0]});
               addAnalysisSection(analysisId,'F_decision',{decision:'actualizar',motivo:'auto_guardar',product_name:displayName});
               addAnalysisSection(analysisId,'G_saved_result',{product_index:match.index,product_name:displayName,alergenos:P[match.index].a,timestamp:ts,declarable:true});
               finishPhotoAnalysis(analysisId);
@@ -4023,7 +4072,7 @@ async function processQueue(){
               lastSavedName=displayName;
               addLog(LOG_LEVELS.INFO,'QUEUE_UPDATED',`Cola - Actualizado: ${match.product.n}`,{added:r.added.length});
             }else{
-              addNewProduct(displayName,allA,{analysisId,analysisTimestamp:ts});
+              addNewProduct(displayName,allA,{analysisId,analysisTimestamp:ts,photoDataUrl:pl[0]});
               const idx=P.findIndex(x=>norm(x.n)===norm(displayName));
               if(idx>=0){
                 addAnalysisSection(analysisId,'F_decision',{decision:'crear',motivo:'auto_guardar',product_name:displayName});
@@ -4293,7 +4342,7 @@ async function autoProcessPhoto(dataUrl){
     const match=findMatch(displayName);
     const ts=new Date().toISOString();
     if(match){
-      const r=mergeProduct(match.index,displayName,allA,{analysisId,analysisTimestamp:ts});
+      const r=mergeProduct(match.index,displayName,allA,{analysisId,analysisTimestamp:ts,photoDataUrl:dataUrl});
       addAnalysisSection(analysisId,'F_decision',{decision:'actualizar',motivo:'auto_guardar',product_name:displayName});
       addAnalysisSection(analysisId,'G_saved_result',{product_index:match.index,product_name:displayName,alergenos:P[match.index].a,timestamp:ts,declarable:true});
       finishPhotoAnalysis(analysisId);
@@ -4303,7 +4352,7 @@ async function autoProcessPhoto(dataUrl){
       showToast(r.added.length?`⚡ "${match.product.n}" actualizado +${r.added.length}`:`⚡ "${match.product.n}" verificado`,'update');
       addLog(LOG_LEVELS.INFO,'AUTO_UPDATED',`Auto - Actualizado: ${match.product.n}`,{added:r.added.length});
     }else{
-      addNewProduct(displayName,allA,{analysisId,analysisTimestamp:ts});
+      addNewProduct(displayName,allA,{analysisId,analysisTimestamp:ts,photoDataUrl:dataUrl});
       const idx=P.findIndex(x=>norm(x.n)===norm(displayName));
       if(idx>=0){
         addAnalysisSection(analysisId,'F_decision',{decision:'crear',motivo:'auto_guardar',product_name:displayName});
@@ -4684,13 +4733,13 @@ async function processBatch(){
         const match=findMatch(displayName);
         const ts=new Date().toISOString();
         if(match){
-          const r=mergeProduct(match.index,displayName,allA,{analysisId,analysisTimestamp:ts});
+          const r=mergeProduct(match.index,displayName,allA,{analysisId,analysisTimestamp:ts,photoDataUrl:dataUrl});
           addAnalysisSection(analysisId,'F_decision',{decision:'actualizar',motivo:'lote_auto',product_name:displayName});
           addAnalysisSection(analysisId,'G_saved_result',{product_index:match.index,product_name:displayName,alergenos:P[match.index].a,timestamp:ts,declarable:true});
           finishPhotoAnalysis(analysisId);
           successes.push(r.added.length?`${match.product.n} — +${r.added.join(', ')} · actualizado`:`${match.product.n} — ${allA.length?allA.join(', ')+' · ':''}verificado`);
         }else{
-          addNewProduct(displayName,allA,{analysisId,analysisTimestamp:ts});
+          addNewProduct(displayName,allA,{analysisId,analysisTimestamp:ts,photoDataUrl:dataUrl});
           const idx=P.findIndex(x=>norm(x.n)===norm(displayName));
           if(idx>=0){
             addAnalysisSection(analysisId,'F_decision',{decision:'crear',motivo:'lote_auto',product_name:displayName});
