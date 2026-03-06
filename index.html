@@ -244,7 +244,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button type="button" class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v06032600:16h</div>
+    <div class="login-version">v06032607:00h</div>
   </div>
 </div>
 
@@ -469,7 +469,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v06032600:16h</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v06032607:00h</span></div>
     <button type="button" class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section">
@@ -1117,7 +1117,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.4-0603260016',
+    version:'1.0.4-0603260700',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -1572,6 +1572,9 @@ function fixNombreFromOcr(nombre, ocrText){
       if(/^\d+$/.test(line)) continue;
       if(/\d{2,}/.test(line)) continue;
       if((line.match(/[,;:]/g)||[]).length>=2) continue;
+      if(/^\s*\*/.test(line)) continue;
+      if(/^(aromatis[eé]|aromatisé|flavoured?|aromatizado)\s*$/i.test(line.trim())) continue;
+      if(line.trim().length<4) continue;
       titleLines.push(line);
       if(titleLines.length>=3) break;
     }
@@ -1593,8 +1596,10 @@ function fixNombreFromOcr(nombre, ocrText){
   }
 
   const ocrTitle=extractTitleFromPrimaryPhoto(ocr);
-  if((!n||looksLikeIngredients||looksLikeMergedTitle||n.length>90) && ocrTitle) n=ocrTitle;
+  const looksLikeValidSpanishProduct=/\b(helado|crema|yogur|salsa|sopa|mermelada|conserva|paté|puré|caldo|pesto)\b.*\b(con|y|de|al)\b/i.test(n) || /^(helado|crema|yogur|salsa)\s+/.test(n);
   if(!n&&ocrTitle) n=ocrTitle;
+  else if((looksLikeIngredients||(!n&&ocrTitle)) && ocrTitle) n=ocrTitle;
+  else if((looksLikeMergedTitle||n.length>90) && ocrTitle && !looksLikeValidSpanishProduct) n=ocrTitle;
   if(looksLikeMergedTitle){
     const m=n.match(/\b(helado|yogur|yogurt|pizza|hamburguesa|croqueta|sandwich|sándwich|barrita|batido)\b[\s\S]{0,120}\by\s+\1\b/i);
     const type=(m&&m[1])?String(m[1]).toLowerCase():'';
