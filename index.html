@@ -250,7 +250,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button type="button" class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v06032622:35h</div>
+    <div class="login-version">v06032623:48h</div>
   </div>
 </div>
 
@@ -483,7 +483,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v06032622:35h</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v06032623:48h</span></div>
     <button type="button" class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section">
@@ -1105,7 +1105,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.4-0603262235',
+    version:'1.0.4-0603262348',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -3683,6 +3683,9 @@ async function apiCall(content, options){
 const PHOTO_MAX_SIZE=1120;
 const PHOTO_JPEG_QUALITY=0.85;
 const VISION_QUALITY_OPTS={maxSize:4096,quality:0.95};
+// Miniatura dentro de las tarjetas de producto: foto pequeña que se muestra en cada tarjeta.
+// THUMB_MAX_SIZE: lado máximo en píxeles (600). THUMB_QUALITY: compresión JPEG 95% (0.95).
+// Se comprime en segundo plano tras añadir producto para que se vea bien al ampliar.
 const THUMB_MAX_SIZE=600;
 const THUMB_QUALITY=0.95;
 function compressThumbnail(dataUrl){
