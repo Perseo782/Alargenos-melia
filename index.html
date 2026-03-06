@@ -250,7 +250,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button type="button" class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v06032621:10h</div>
+    <div class="login-version">v06032622:27h</div>
   </div>
 </div>
 
@@ -483,7 +483,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v06032621:10h</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v06032622:27h</span></div>
     <button type="button" class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section">
@@ -638,33 +638,7 @@ function openSettings(){
     }else{originWarn.style.display='none';}
   }
   const histList=document.getElementById('historyList');
-  if(histList){
-    const h=loadHistory();
-    if(!h.length){histList.innerHTML='<div class="settings-info" style="margin:0;color:var(--text2)">Sin historial aún</div>';}
-    else{
-      const rev=[...h].reverse();
-      histList.innerHTML=rev.map((item,i)=>{
-        const d=new Date(item.timestamp);
-        const dd=String(d.getDate()).padStart(2,'0'),mm=String(d.getMonth()+1).padStart(2,'0'),yy=d.getFullYear();
-        const hh=String(d.getHours()).padStart(2,'0'),min=String(d.getMinutes()).padStart(2,'0');
-        const fecha=`${dd}/${mm}/${yy} ${hh}:${min}`;
-        const lab=item.action==='added'?'agregado':item.action==='modified'?'modificado':'eliminado';
-        const cls=item.action==='deleted'?' history-item deleted':' history-item';
-        const raw=String(item.name||'');
-        const safe=raw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-        return `<div class="${cls}" data-name="${safe}" data-action="${item.action}">`+
-          `<span class="history-name">${safe}</span>`+
-          `<span class="history-meta">${lab}: ${fecha}</span></div>`;
-      }).join('');
-      histList.querySelectorAll('.history-item:not(.deleted)').forEach(el=>{
-        el.addEventListener('click',()=>{
-          const name=el.dataset.name;
-          const idx=P.findIndex(p=>norm(p.n)===norm(name));
-          if(idx>=0){openedFromEventHistory=true;closeSettings();setTimeout(()=>{openEdit(idx);},150);}
-        });
-      });
-    }
-  }
+  if(histList) refreshHistoryList();
   navPush('settings');
   settingsBg.classList.add('open');
 }
@@ -1131,7 +1105,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.4-0603262110',
+    version:'1.0.4-0603262227',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -1819,6 +1793,33 @@ function pushToHistory(name,action){
   arr.push({name:n,action:action,timestamp:new Date().toISOString()});
   const kept=arr.slice(-HISTORY_MAX);
   try{localStorage.setItem(HISTORY_KEY,JSON.stringify(kept));}catch(_){}
+}
+function refreshHistoryList(){
+  const histList=document.getElementById('historyList');
+  if(!histList)return;
+  const h=loadHistory();
+  if(!h.length){histList.innerHTML='<div class="settings-info" style="margin:0;color:var(--text2)">Sin historial aún</div>';return;}
+  const rev=[...h].reverse();
+  histList.innerHTML=rev.map((item)=>{
+    const d=new Date(item.timestamp);
+    const dd=String(d.getDate()).padStart(2,'0'),mm=String(d.getMonth()+1).padStart(2,'0'),yy=d.getFullYear();
+    const hh=String(d.getHours()).padStart(2,'0'),min=String(d.getMinutes()).padStart(2,'0');
+    const fecha=`${dd}/${mm}/${yy} ${hh}:${min}`;
+    const lab=item.action==='added'?'agregado':item.action==='modified'?'modificado':'eliminado';
+    const cls=item.action==='deleted'?' history-item deleted':' history-item';
+    const raw=String(item.name||'');
+    const safe=raw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return `<div class="${cls}" data-name="${safe}" data-action="${item.action}">`+
+      `<span class="history-name">${safe}</span>`+
+      `<span class="history-meta">${lab}: ${fecha}</span></div>`;
+  }).join('');
+  histList.querySelectorAll('.history-item:not(.deleted)').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const name=el.dataset.name;
+      const idx=P.findIndex(p=>norm(p.n)===norm(name));
+      if(idx>=0){openedFromEventHistory=true;closeSettings();setTimeout(()=>{openEdit(idx);},150);}
+    });
+  });
 }
 
 function loadPendingFixes(){
@@ -2876,7 +2877,7 @@ function renderProducts(){
   if(normal.length>renderLimit)h+=`<div class="empty" id="loadMore">Mostrando ${renderLimit} de ${normal.length} — Baja para cargar más</div>`;
   ls.innerHTML=h;
   updateCancelReviewUI();
-  if(lastSavedName){const nameToScroll=lastSavedName;lastSavedName=null;setTimeout(()=>{const idx=P.findIndex(p=>norm(p.n)===norm(nameToScroll));if(idx>=0){const el=ls.querySelector(`.card[data-idx="${idx}"]`);if(el){el.classList.add('highlight');el.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>el.classList.remove('highlight'),3000)}}},400)}else if(renderLimit===150&&!window.__scrollTourActive)ls.scrollTop=0;
+  if(lastSavedName){const nameToScroll=lastSavedName;lastSavedName=null;window.__scrollToCardScheduled=true;setTimeout(()=>{const idx=P.findIndex(p=>norm(p.n)===norm(nameToScroll));if(idx>=0){const el=ls.querySelector(`.card[data-idx="${idx}"]`);if(el){el.classList.add('highlight');el.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>{el.classList.remove('highlight');window.__scrollToCardScheduled=false;},4000);return}}window.__scrollToCardScheduled=false;},500)}else if(renderLimit===150&&!window.__scrollTourActive&&!window.__scrollToCardScheduled)ls.scrollTop=0;
   ls.querySelectorAll('.card[data-idx]').forEach(c=>{c.addEventListener('click',e=>{if(e.target.closest('.card-thumb')){e.preventDefault();e.stopPropagation();const idx=parseInt(c.dataset.idx);if(idx>=0&&P[idx]&&P[idx]._thumb)openPhotoViewer(P[idx]._thumb);return}openEdit(parseInt(c.dataset.idx))})});
 }
 
@@ -2886,6 +2887,7 @@ function runBatchScrollTour(productNames){
   renderLimit=Math.max(renderLimit,P.length);
   render();
   let i=0;
+  const DURATION_MS=4000;
   function next(){
     if(i>=productNames.length){window.__scrollTourActive=false;return;}
     const name=productNames[i];
@@ -2895,18 +2897,20 @@ function runBatchScrollTour(productNames){
       if(el){
         el.classList.add('highlight');
         el.scrollIntoView({behavior:'smooth',block:'center'});
+        const isLast=i===productNames.length-1;
         setTimeout(()=>{
           el.classList.remove('highlight');
+          if(isLast){window.__scrollTourActive=false;return;}
           i++;
-          setTimeout(next,300);
-        },3000);
+          setTimeout(next,400);
+        },DURATION_MS);
         return;
       }
     }
     i++;
     setTimeout(next,100);
   }
-  setTimeout(next,400);
+  setTimeout(next,500);
 }
 
 // Pull-to-refresh
@@ -5229,6 +5233,7 @@ async function gdriveConsolidateProductosJson(folderId) {
     all: inspected,
     valid: inspected.filter(x=>x.valid),
     products: selected && selected.valid ? selected.parsed.products : null,
+    history: selected && selected.valid && selected.parsed && Array.isArray(selected.parsed.history) ? selected.parsed.history : null,
     remoteLastUpdate: selected && selected.valid ? (parseInt(selected.ts||0)) : 0,
     remoteCount: selected && selected.valid ? (selected.count||0) : 0
   };
@@ -5240,7 +5245,7 @@ async function gdriveReadRemoteState() {
   const consolidated = await gdriveConsolidateProductosJson(folderId);
 
   if(!consolidated.found || !consolidated.selected) {
-    return { found: false, fileId: null, remoteCount: 0, remoteLastUpdate: 0, products: null };
+    return { found: false, fileId: null, remoteCount: 0, remoteLastUpdate: 0, products: null, history: null };
   }
 
   const fileId = consolidated.selected.id;
@@ -5249,7 +5254,7 @@ async function gdriveReadRemoteState() {
   localStorage.setItem('remote_file_id', fileId);
 
   if(!consolidated.products) {
-    return { found: true, fileId, remoteCount: 0, remoteLastUpdate: 0, products: null };
+    return { found: true, fileId, remoteCount: 0, remoteLastUpdate: 0, products: null, history: null };
   }
 
   const remoteLastUpdate = consolidated.remoteLastUpdate || 0;
@@ -5259,7 +5264,7 @@ async function gdriveReadRemoteState() {
   localStorage.setItem('remote_last_count', remoteCount.toString());
   localStorage.setItem('remote_last_update_read', remoteLastUpdate.toString());
 
-  return { found: true, fileId, remoteCount, remoteLastUpdate, products: consolidated.products };
+  return { found: true, fileId, remoteCount, remoteLastUpdate, products: consolidated.products, history: consolidated.history || null };
 }
 
 async function gdriveSmartSync(trigger = 'manual', opts = {}) {
@@ -5327,8 +5332,13 @@ async function gdriveSmartSync(trigger = 'manual', opts = {}) {
         reason = 'Remoto más nuevo';
       }
     } else if(localLastUpdate > remoteState.remoteLastUpdate) {
-      decision = 'upload';
-      reason = 'Local más nuevo';
+      if(trigger === 'manual' && remoteState.remoteCount > localCount) {
+        decision = 'download';
+        reason = 'Sync manual: remoto tiene más productos, descargar';
+      } else {
+        decision = 'upload';
+        reason = 'Local más nuevo';
+      }
     } else {
       // Empate de timestamp: preferir el que tenga más productos para no perder datos
       if(remoteState.remoteCount > localCount) {
@@ -5433,17 +5443,22 @@ async function gdriveSmartSync(trigger = 'manual', opts = {}) {
           remote_count_after: verifyState.remoteCount,
           remote_last_update_after: verifyState.remoteLastUpdate
         });
-        showToast('✓ Sincronizado', 'info');
+        if(trigger==='manual')showToast('✓ Sincronizado','info');
         finishSyncSession(session, 'upload', 'ok', `Subido y verificado: ${localCount} productos`);
       }
 
     } else if(decision === 'download') {
       P = sanitizeProductList(remoteState.products);
+      if(remoteState.history&&Array.isArray(remoteState.history)){
+        const kept=remoteState.history.slice(-HISTORY_MAX);
+        try{localStorage.setItem(HISTORY_KEY,JSON.stringify(kept));}catch(_){}
+      }
       saveDB({ skipAutoSync: true });
       render();
+      if(settingsBg&&settingsBg.classList.contains('open')&&typeof refreshHistoryList==='function')refreshHistoryList();
       clearSyncOutbox();
       addLog('SYNC_DOWNLOAD_APPLIED', { sync_session_id: session.sync_session_id, trigger, remote_count: remoteState.remoteCount, reason });
-      showToast('✓ Sincronizado', 'info');
+      if(trigger==='manual')showToast('✓ Sincronizado', 'info');
       session.remote_count_after = remoteState.remoteCount;
       finishSyncSession(session, 'download', 'ok', `Descargado: ${remoteState.remoteCount} productos`);
 
