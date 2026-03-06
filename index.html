@@ -244,7 +244,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button type="button" class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v06032608:41h</div>
+    <div class="login-version">v06032618:23h</div>
   </div>
 </div>
 
@@ -371,6 +371,14 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <button type="button" class="save-btn" id="photoSourceCancel" style="background:var(--warm8-20);color:var(--text)">Cancelar</button>
 </div></div>
 
+<!-- VISOR FOTO (tras análisis: pulsar miniatura, pellizcar para ampliar, cerrar para verificar alérgenos) -->
+<div class="modal-bg" id="photoViewerBg" style="z-index:10003;background:rgba(0,0,0,0.92);align-items:center;justify-content:center;padding:20px;overflow:auto;touch-action:none">
+  <div id="photoViewerWrap" style="position:relative;display:flex;align-items:center;justify-content:center;min-height:100%;transform-origin:center center">
+    <img id="photoViewerImg" style="max-width:100%;max-height:95vh;object-fit:contain;pointer-events:none;user-select:none" alt="Foto">
+  </div>
+  <button type="button" class="save-btn" id="photoViewerClose" style="position:fixed;top:16px;right:16px;z-index:10004;padding:10px 16px;background:rgba(255,255,255,0.9);color:#333">Cerrar</button>
+</div>
+
 <!-- ERROR MODAL (con miniatura) -->
 <div class="modal-bg" id="errorModalBg" style="z-index:10001"><div class="modal" style="border-radius:12px;max-width:420px;margin:auto;padding:24px 20px">
   <div style="text-align:center">
@@ -469,7 +477,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v06032608:41h</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v06032618:23h</span></div>
     <button type="button" class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section">
@@ -646,7 +654,7 @@ function openSettings(){
         el.addEventListener('click',()=>{
           const name=el.dataset.name;
           const idx=P.findIndex(p=>norm(p.n)===norm(name));
-          if(idx>=0){closeSettings();setTimeout(()=>{openEdit(idx);},150);}
+          if(idx>=0){openedFromEventHistory=true;closeSettings();setTimeout(()=>{openEdit(idx);},150);}
         });
       });
     }
@@ -1117,7 +1125,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.4-0603260841',
+    version:'1.0.4-0603261823',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -2991,7 +2999,7 @@ function hi(original,query){
 let dt;q.addEventListener('input',()=>{clearTimeout(dt);dt=setTimeout(render,100)});xb.addEventListener('click',()=>{q.value='';q.focus();render()});
 
 let analysisAborted=false;
-const modalBg=document.getElementById('modalBg');let editMode=false,editIdx=-1;
+const modalBg=document.getElementById('modalBg');let editMode=false,editIdx=-1;let openedFromEventHistory=false;
 document.getElementById('addBtn').addEventListener('click',()=>{editMode=false;editIdx=-1;openModal()});
 document.getElementById('cancelReviewBtn').addEventListener('click',()=>{
   auditFlags = {};
@@ -3005,6 +3013,7 @@ function closeModal(){
   analysisAborted=true;
   if(autoMode){if(typeof btnAutoFlow!=='undefined')btnAutoFlow.style.display='';if(typeof btnTerminarAuto!=='undefined')btnTerminarAuto.style.display='none';}
   autoMode=false;
+  if(openedFromEventHistory){openedFromEventHistory=false;modalBg.classList.remove('open');setTimeout(()=>openSettings(),100);return;}
   if(typeof getNavStack==='function'&&getNavStack().length>1) navBack();
   else {
     modalBg.classList.remove('open');
@@ -3297,8 +3306,40 @@ const slot1=document.getElementById('slot1'),slot2=document.getElementById('slot
 const img1=document.getElementById('img1'),img2=document.getElementById('img2');
 const analyzeBtn=document.getElementById('analyzeBtn');
 function resetCameraUI(){photos=[null,null];currentSlot=0;pendingPhotoSlot=null;if(photoSourceBg)photoSourceBg.classList.remove('open');img1.style.display='none';img2.style.display='none';slot1.classList.remove('filled');slot2.classList.remove('filled');analyzeBtn.style.display='none';document.getElementById('aiStatus').classList.remove('show');document.getElementById('aiResult').classList.remove('show');document.getElementById('aiWarn').textContent='';hideMatch('aiMatch')}
-slot1.addEventListener('click',()=>openPhotoSourceChooser(0));
-slot2.addEventListener('click',()=>openPhotoSourceChooser(1));
+let photoViewerScale=1,photoViewerLastDist=0,photoViewerLastCenter={x:0,y:0};
+function openPhotoViewer(dataUrl){
+  const bg=document.getElementById('photoViewerBg'),img=document.getElementById('photoViewerImg'),wrap=document.getElementById('photoViewerWrap');
+  if(bg&&img&&dataUrl){
+    img.src=dataUrl;
+    photoViewerScale=1;
+    if(wrap){wrap.style.transform='scale(1)';wrap.style.transformOrigin='center center';}
+    bg.classList.add('open');
+  }
+}
+function closePhotoViewer(){const bg=document.getElementById('photoViewerBg');if(bg)bg.classList.remove('open');}
+document.getElementById('photoViewerBg').addEventListener('click',closePhotoViewer);
+document.getElementById('photoViewerClose').addEventListener('click',e=>{e.stopPropagation();closePhotoViewer();});
+(function(){
+  const bg=document.getElementById('photoViewerBg'),wrap=document.getElementById('photoViewerWrap');
+  if(!bg||!wrap)return;
+  bg.addEventListener('touchstart',e=>{
+    if(e.touches.length===2){photoViewerLastDist=Math.hypot(e.touches[1].clientX-e.touches[0].clientX,e.touches[1].clientY-e.touches[0].clientY);photoViewerLastCenter={x:(e.touches[0].clientX+e.touches[1].clientX)/2,y:(e.touches[0].clientY+e.touches[1].clientY)/2};}
+  },{passive:true});
+  bg.addEventListener('touchmove',e=>{
+    if(e.touches.length===2){e.preventDefault();const d=Math.hypot(e.touches[1].clientX-e.touches[0].clientX,e.touches[1].clientY-e.touches[0].clientY);const delta=(d-photoViewerLastDist)*0.008;photoViewerScale=Math.max(0.5,Math.min(4,photoViewerScale+delta));photoViewerLastDist=d;wrap.style.transform=`scale(${photoViewerScale})`;}
+  },{passive:false});
+  bg.addEventListener('touchend',e=>{if(e.touches.length<2)photoViewerLastDist=0;},{passive:true});
+})();
+slot1.addEventListener('click',()=>{
+  const aiR=document.getElementById('aiResult');
+  if(aiR&&aiR.classList.contains('show')&&photos[0]){openPhotoViewer(photos[0]);return;}
+  openPhotoSourceChooser(0);
+});
+slot2.addEventListener('click',()=>{
+  const aiR=document.getElementById('aiResult');
+  if(aiR&&aiR.classList.contains('show')&&photos[1]){openPhotoViewer(photos[1]);return;}
+  openPhotoSourceChooser(1);
+});
 document.getElementById('btnPhotoSource').addEventListener('click',()=>{openPhotoSourceChooser(photos[0]?1:0)});
 camInput.addEventListener('change',handleImg);galInput.addEventListener('change',handleImg);
 function handleImg(e){
@@ -5442,7 +5483,7 @@ async function gdriveUpload(){
   const folderId=await gdriveFindOrCreateFolder();
   P = sanitizeProductList(P);
   const nowTs = Date.now();
-  const data={products:P,version:'1.0.4',lastUpdate:nowTs};
+  const data={products:P,history:loadHistory(),version:'1.0.4',lastUpdate:nowTs};
   const content=JSON.stringify(data,null,2);
 
   const boundary='-------314159265358979323846';
@@ -5595,6 +5636,10 @@ async function gdriveDownload(){
     
     if(remoteTime>parseInt(localUpdate)){
       P=sanitizeProductList(data.products);
+      if(data.history&&Array.isArray(data.history)){
+        const kept=data.history.slice(-HISTORY_MAX);
+        try{localStorage.setItem(HISTORY_KEY,JSON.stringify(kept));}catch(_){}
+      }
       saveDB({ skipAutoSync: true });  // NO lanzar upload tras descarga
       render();
       showToast('Datos sincronizados desde Google Drive','info');
