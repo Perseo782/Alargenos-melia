@@ -3662,8 +3662,8 @@ async function apiCall(content, options){
 const PHOTO_MAX_SIZE=1120;
 const PHOTO_JPEG_QUALITY=0.85;
 const VISION_QUALITY_OPTS={maxSize:4096,quality:0.95};
-const THUMB_MAX_SIZE=256;
-const THUMB_QUALITY=0.5;
+const THUMB_MAX_SIZE=420;
+const THUMB_QUALITY=0.72;
 function compressThumbnail(dataUrl){
   return new Promise((resolve)=>{
     const img=new Image();
@@ -3685,21 +3685,24 @@ function compressThumbnail(dataUrl){
   });
 }
 let thumbnailCompressionQueue=[];
+let thumbnailCompressionTimer=null;
+const THUMB_IDLE_DELAY_MS=15000;
 function scheduleThumbnailCompression(productName,dataUrl){
   if(!dataUrl||!productName)return;
   thumbnailCompressionQueue.push({name:productName,dataUrl});
   const run=()=>{
+    thumbnailCompressionTimer=null;
     if(thumbnailCompressionQueue.length===0)return;
     const item=thumbnailCompressionQueue.shift();
     compressThumbnail(item.dataUrl).then(thumb=>{
       if(!thumb)return;
       const idx=P.findIndex(p=>norm(p.n)===norm(item.name));
       if(idx>=0&&!P[idx]._thumb){P[idx]._thumb=thumb;saveDB({changeType:'edit_product',origin:'thumbnail_compression',recordKey:item.name});render();}
-      if(thumbnailCompressionQueue.length>0)requestIdleCallback?requestIdleCallback(run,{timeout:2000}):setTimeout(run,500);
+      if(thumbnailCompressionQueue.length>0)setTimeout(run,800);
     });
   };
-  if(typeof requestIdleCallback!=='undefined')requestIdleCallback(run,{timeout:3000});
-  else setTimeout(run,1500);
+  if(thumbnailCompressionTimer)clearTimeout(thumbnailCompressionTimer);
+  thumbnailCompressionTimer=setTimeout(run,THUMB_IDLE_DELAY_MS);
 }
 function compressPhotoForAI(dataUrl, opts=null){
   return new Promise((resolve,reject)=>{
