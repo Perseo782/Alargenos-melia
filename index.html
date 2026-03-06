@@ -3137,6 +3137,7 @@ const photoSourceTarget=document.getElementById('photoSourceTarget');
 let pendingPhotoSlot=null;
 function openPhotoSourceChooser(slotIdx){
   pendingPhotoSlot=slotIdx;
+  if(typeof setAnalysisPriority==='function')setAnalysisPriority(true);
   if(photoSourceTarget){
     photoSourceTarget.textContent=slotIdx===0?'Envase: elige Cámara o Galería':'Etiquetado: elige Cámara o Galería';
   }
