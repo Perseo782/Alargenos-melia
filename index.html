@@ -581,7 +581,7 @@ const loginScreen=document.getElementById('loginScreen');
 const appEl=document.getElementById('app');
 
 function checkSession(){
-  const s=sessionStorage.getItem('alerg_session');
+  const s=localStorage.getItem('alerg_session');
   if(s){loginScreen.classList.add('hidden');appEl.classList.add('show');document.getElementById('settingsUser').textContent=s;if(typeof ensureAppHistory==='function')ensureAppHistory();return true}
   return false;
 }
@@ -592,16 +592,18 @@ document.getElementById('loginUser').addEventListener('keydown',e=>{if(e.key==='
 
 function doLogin(){
   const u=document.getElementById('loginUser').value.trim().toLowerCase();
-  const p=document.getElementById('loginPass').value;
+  const p=document.getElementById('loginPass').value.trim();
   if(USERS[u]&&USERS[u]===p){
-    sessionStorage.setItem('alerg_session',u);
+    try{localStorage.setItem('alerg_session',u);}catch(e){document.getElementById('loginError').textContent='Error: almacenamiento bloqueado. Abre desde un servidor (http) o desactiva modo privado.';return;}
     loginScreen.classList.add('hidden');appEl.classList.add('show');
     document.getElementById('settingsUser').textContent=u;
-    if(typeof ensureAppHistory==='function')ensureAppHistory();
     document.getElementById('loginError').textContent='';
-    if(typeof render==='function')render();
-    if(typeof updateGDriveUI==='function')updateGDriveUI();
-    if(typeof updateSyncStatusUI==='function')updateSyncStatusUI();
+    try{
+      if(typeof ensureAppHistory==='function')ensureAppHistory();
+      if(typeof render==='function')render();
+      if(typeof updateGDriveUI==='function')updateGDriveUI();
+      if(typeof updateSyncStatusUI==='function')updateSyncStatusUI();
+    }catch(err){if(typeof render==='function'){try{render();}catch(_){}}if(typeof showToast==='function')showToast('Error al cargar: '+err.message,'error');else console.error(err);}
   }else{
     document.getElementById('loginError').textContent='Usuario o contraseña incorrectos';
     document.getElementById('loginPass').value='';
@@ -646,7 +648,8 @@ function applyNavStack(stack){
 
 function navPush(screen){
   const next=[...getNavStack(),screen];
-  history.pushState({app:true,stack:next},'',getNavUrl(next));
+  const url=(window.location.protocol==='file:')?'':getNavUrl(next);
+  try{history.pushState({app:true,stack:next},'',url);}catch(e){}
 }
 
 function navBack(){
@@ -654,22 +657,25 @@ function navBack(){
 }
 
 function navReplace(stack){
-  history.replaceState({app:true,stack:stack||['main']},'',getNavUrl(stack||['main']));
+  const url=(window.location.protocol==='file:')?'':getNavUrl(stack||['main']);
+  try{history.replaceState({app:true,stack:stack||['main']},'',url);}catch(e){}
 }
 
 function ensureAppHistory(){
   if(!appEl.classList.contains('show')) return;
-  APP_ENTRY_URL=window.location.href.replace(/#.*$/,'');
-  const state=history.state;
-  // Queremos siempre dos pasos internos: uno de protección de salida y otro normal
-  if(!state||!state.app){
-    history.replaceState({app:true,stack:['main'],exitGuard:true},'',APP_ENTRY_URL);
-    history.pushState({app:true,stack:['main']},'',APP_ENTRY_URL);
-  }else if(state.app&&!state.exitGuard){
-    const stack=Array.isArray(state.stack)&&state.stack.length?state.stack:['main'];
-    history.replaceState({app:true,stack,exitGuard:true},'',APP_ENTRY_URL);
-    history.pushState({app:true,stack},'',APP_ENTRY_URL);
-  }
+  try{
+    APP_ENTRY_URL=window.location.href.replace(/#.*$/,'');
+    const state=history.state;
+    const url=(window.location.protocol==='file:')?'':APP_ENTRY_URL;
+    if(!state||!state.app){
+      history.replaceState({app:true,stack:['main'],exitGuard:true},'',url);
+      history.pushState({app:true,stack:['main']},'',url);
+    }else if(state.app&&!state.exitGuard){
+      const stack=Array.isArray(state.stack)&&state.stack.length?state.stack:['main'];
+      history.replaceState({app:true,stack,exitGuard:true},'',url);
+      history.pushState({app:true,stack},'',url);
+    }
+  }catch(e){}
 }
 const settingsBg=document.getElementById('settingsBg');
 function openSettings(){
@@ -885,7 +891,7 @@ photoWarningsToggle.addEventListener('change',()=>{
   showToast(photoWarningsToggle.checked?'Advertencias activadas':'Advertencias desactivadas','info');
 });
 
-document.getElementById('logoutBtn').addEventListener('click',()=>{sessionStorage.removeItem('alerg_session');location.reload()});
+document.getElementById('logoutBtn').addEventListener('click',()=>{localStorage.removeItem('alerg_session');location.reload()});
 
 
 // ─── LOGGING SYSTEM ───
@@ -1166,7 +1172,7 @@ function exportDiagnostics(){
     language:navigator.language
   };
   const state={
-    logged_in:!!sessionStorage.getItem('alerg_session'),
+    logged_in:!!localStorage.getItem('alerg_session'),
     products_count:P.length,
     api_configured:!!getApiKey(),
     gdrive_connected:!!localStorage.getItem('gdrive_token'),
