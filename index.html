@@ -229,12 +229,14 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 .api-key-status.ok{color:var(--green)}
 .api-key-status.no{color:var(--warm8-60)}
 #settingsBg .settings-section [id^="syncStatusPanel"],#settingsBg .settings-section [id="syncManualStatus"],#settingsBg .settings-section [id="appStatus"]{margin-top:12px;padding:14px;background:var(--warm8-05);border-radius:var(--radius);font-size:12px;line-height:1.7;border:1px solid var(--warm8-10)}
-.status-minicards{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
-.status-minicard{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;background:var(--white);border-radius:var(--radius);border:1px solid var(--warm8-20);font-size:12px;font-family:var(--sans);color:var(--text)}
-.status-minicard .status-icon{font-size:14px;line-height:1}
+.status-minicards{display:flex;flex-wrap:nowrap;gap:12px;margin-top:10px;justify-content:flex-start;align-items:flex-start;position:sticky;top:0;z-index:5;background:var(--warm8-05);padding:12px 0;margin-left:0;margin-right:0;margin-bottom:6px;overflow-x:auto;overflow-y:visible}
+.status-minicard{display:inline-flex;align-items:center;gap:14px;padding:18px 22px;background:var(--white);border-radius:var(--radius);border:1px solid var(--warm8-20);font-size:17px;font-family:var(--sans);color:var(--text);min-width:180px;flex-shrink:0}
+.status-minicard .status-icon{font-size:32px;line-height:1;flex-shrink:0}
 .status-minicard .status-icon.ok{color:var(--green)}
 .status-minicard .status-icon.warn{color:#b8860b}
 .status-minicard .status-icon.critical{color:var(--red)}
+.status-ok-banner{display:flex;align-items:center;gap:14px;padding:18px 22px;background:var(--white);border-radius:var(--radius);border:2px solid var(--green);font-size:18px;font-weight:600;font-family:var(--sans);color:var(--green);margin-top:10px;position:sticky;top:0;z-index:5;background:var(--warm8-05)}
+.status-ok-banner .status-icon{font-size:32px}
 #settingsBg #logContainer{background:var(--warm8-05);border-radius:var(--radius);padding:14px;margin:12px 0;max-height:280px;overflow-y:auto;font-family:monospace;font-size:11px;line-height:1.8;border:1px solid var(--warm8-10)}
 .settings-subcard{background:var(--warm8-05);border:1px solid var(--warm8-10);border-radius:var(--radius);padding:14px;margin-bottom:12px}
 .settings-subcard:last-child{margin-bottom:0}
@@ -1221,7 +1223,9 @@ function updateAppStatus(){
     {label:'Cola offline',val:offlineQueue+' pendientes',cls:cardCls(offlineQueue===0,'cola')},
     {label:'Sync pendiente',val:String(pendingSync),cls:cardCls(pendingSync===0,'sync')}
   ];
-  status.innerHTML=`<div class="status-minicards">${cards.map(c=>
+  const allOk=cards.every(c=>c.cls==='ok');
+  const banner=allOk?'<div class="status-ok-banner"><span class="status-icon ok">✓</span><span>Todo bien</span></div>':'';
+  status.innerHTML=`${banner}<div class="status-minicards">${cards.map(c=>
     `<div class="status-minicard"><span class="status-icon ${c.cls}">${icon(c.cls)}</span><span>${c.label}: ${c.val}</span></div>`
   ).join('')}</div>`;
 }
