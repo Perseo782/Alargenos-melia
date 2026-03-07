@@ -591,9 +591,7 @@ const AL_GRID_ORDER=['ALTRAMUZ','APIO','CACAHUETES','CEREALES','CRUSTÁCEOS','FR
 const OFFICIAL_ALLERGENS=AL;
 
 // ─── LOGIN ───
-const _pw='fca?cG4F+[DMY1:P6_Q\\._5';
-const USERS={administrador:_pw};
-const _pwAlt=_pw.replace(/\\./g,'.');
+const USERS={administrador:'fca?cG4F+[DMY1:P6_Q._5'};
 const loginScreen=document.getElementById('loginScreen');
 const appEl=document.getElementById('app');
 
@@ -611,8 +609,7 @@ document.getElementById('loginUser').addEventListener('keydown',e=>{if(e.key==='
 function doLogin(){
   const u=document.getElementById('loginUser').value.trim().toLowerCase();
   const p=document.getElementById('loginPass').value.trim();
-  const ok=USERS[u]&&(USERS[u]===p||(u==='administrador'&&_pwAlt===p));
-  if(ok){
+  if(USERS[u]&&USERS[u]===p){
     try{localStorage.setItem('alerg_session',u);}catch(e){document.getElementById('loginError').textContent='Error: almacenamiento bloqueado. Abre desde un servidor (http) o desactiva modo privado.';return;}
     loginScreen.classList.add('hidden');appEl.classList.add('show');
     document.getElementById('settingsUser').textContent=u;
@@ -626,7 +623,7 @@ function doLogin(){
   }else{
     document.getElementById('loginError').textContent='Usuario o contraseña incorrectos';
     document.getElementById('loginPass').value='';
-    if(typeof console!=='undefined'&&console.log)console.log('Login fallido. Usuario:',u,'Longitud contraseña:',p.length,'Esperada:',USERS[u]?USERS[u].length:'—');
+    if(typeof console!=='undefined'&&console.log)console.log('Login fallido. Usuario:',u,'Longitud contraseña:',p.length);
   }
 }
 
@@ -3089,7 +3086,7 @@ function renderProducts(){
   if(normal.length>renderLimit)h+=`<div class="empty" id="loadMore">Mostrando ${renderLimit} de ${normal.length} — Baja para cargar más</div>`;
   ls.innerHTML=h;
   updateCancelReviewUI();
-  if(lastSavedIndex!=null){const idxToScroll=lastSavedIndex;lastSavedIndex=null;window.__scrollToCardScheduled=true;setTimeout(()=>{requestAnimationFrame(()=>{const el=ls.querySelector(`.card[data-idx="${idxToScroll}"]`);if(el){el.classList.add('highlight');const er=el.getBoundingClientRect(),lr=ls.getBoundingClientRect();const cardScrollOffset=ls.scrollTop+(er.top-lr.top);const listH=ls.clientHeight,cardH=er.height;const targetScroll=Math.max(0,Math.min(cardScrollOffset-listH/2+cardH/2,ls.scrollHeight-listH));ls.scrollTo({top:targetScroll,behavior:'smooth'});setTimeout(()=>{el.classList.remove('highlight');window.__scrollToCardScheduled=false;},4000)}}window.__scrollToCardScheduled=false;})},800)}else if(lastSavedName){const nameToScroll=lastSavedName;lastSavedName=null;window.__scrollToCardScheduled=true;setTimeout(()=>{requestAnimationFrame(()=>{const idx=P.findIndex(p=>norm(p.n)===norm(nameToScroll));if(idx>=0){const el=ls.querySelector(`.card[data-idx="${idx}"]`);if(el){el.classList.add('highlight');const er=el.getBoundingClientRect(),lr=ls.getBoundingClientRect();const cardScrollOffset=ls.scrollTop+(er.top-lr.top);const listH=ls.clientHeight,cardH=er.height;const targetScroll=Math.max(0,Math.min(cardScrollOffset-listH/2+cardH/2,ls.scrollHeight-listH));ls.scrollTo({top:targetScroll,behavior:'smooth'});setTimeout(()=>{el.classList.remove('highlight');window.__scrollToCardScheduled=false;},4000);return}}window.__scrollToCardScheduled=false;})},800)}else if(renderLimit===150&&!window.__scrollTourActive&&!window.__scrollToCardScheduled)ls.scrollTop=0;
+  if(lastSavedIndex!=null){const idxToScroll=lastSavedIndex;lastSavedIndex=null;window.__scrollToCardScheduled=true;setTimeout(()=>{requestAnimationFrame(()=>{const el=ls.querySelector(`.card[data-idx="${idxToScroll}"]`);if(el){el.classList.add('highlight');const er=el.getBoundingClientRect(),lr=ls.getBoundingClientRect();const cardScrollOffset=ls.scrollTop+(er.top-lr.top);const listH=ls.clientHeight,cardH=er.height;const targetScroll=Math.max(0,Math.min(cardScrollOffset-listH/2+cardH/2,ls.scrollHeight-listH));ls.scrollTo({top:targetScroll,behavior:'smooth'});setTimeout(()=>{el.classList.remove('highlight');window.__scrollToCardScheduled=false;},4000)}})window.__scrollToCardScheduled=false;})},800)}else if(lastSavedName){const nameToScroll=lastSavedName;lastSavedName=null;window.__scrollToCardScheduled=true;setTimeout(()=>{requestAnimationFrame(()=>{const idx=P.findIndex(p=>norm(p.n)===norm(nameToScroll));if(idx>=0){const el=ls.querySelector(`.card[data-idx="${idx}"]`);if(el){el.classList.add('highlight');const er=el.getBoundingClientRect(),lr=ls.getBoundingClientRect();const cardScrollOffset=ls.scrollTop+(er.top-lr.top);const listH=ls.clientHeight,cardH=er.height;const targetScroll=Math.max(0,Math.min(cardScrollOffset-listH/2+cardH/2,ls.scrollHeight-listH));ls.scrollTo({top:targetScroll,behavior:'smooth'});setTimeout(()=>{el.classList.remove('highlight');window.__scrollToCardScheduled=false;},4000);return}}window.__scrollToCardScheduled=false;})},800)}else if(renderLimit===150&&!window.__scrollTourActive&&!window.__scrollToCardScheduled)ls.scrollTop=0;
   ls.querySelectorAll('.card[data-idx]').forEach(c=>{c.addEventListener('click',e=>{if(e.target.closest('.card-thumb')){e.preventDefault();e.stopPropagation();const idx=parseInt(c.dataset.idx);if(idx>=0&&P[idx]&&P[idx]._thumb)openPhotoViewer(P[idx]._thumb);return}openEdit(parseInt(c.dataset.idx))})});
 }
 
