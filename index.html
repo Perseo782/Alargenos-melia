@@ -229,6 +229,12 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 .api-key-status.ok{color:var(--green)}
 .api-key-status.no{color:var(--warm8-60)}
 #settingsBg .settings-section [id^="syncStatusPanel"],#settingsBg .settings-section [id="syncManualStatus"],#settingsBg .settings-section [id="appStatus"]{margin-top:12px;padding:14px;background:var(--warm8-05);border-radius:var(--radius);font-size:12px;line-height:1.7;border:1px solid var(--warm8-10)}
+.status-minicards{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.status-minicard{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;background:var(--white);border-radius:var(--radius);border:1px solid var(--warm8-20);font-size:12px;font-family:var(--sans);color:var(--text)}
+.status-minicard .status-icon{font-size:14px;line-height:1}
+.status-minicard .status-icon.ok{color:var(--green)}
+.status-minicard .status-icon.warn{color:#b8860b}
+.status-minicard .status-icon.critical{color:var(--red)}
 #settingsBg #logContainer{background:var(--warm8-05);border-radius:var(--radius);padding:14px;margin:12px 0;max-height:280px;overflow-y:auto;font-family:monospace;font-size:11px;line-height:1.8;border:1px solid var(--warm8-10)}
 .settings-subcard{background:var(--warm8-05);border:1px solid var(--warm8-10);border-radius:var(--radius);padding:14px;margin-bottom:12px}
 .settings-subcard:last-child{margin-bottom:0}
@@ -930,7 +936,7 @@ const ERROR_CODES={
 };
 
 let diagnosticLogs=[];
-const MAX_LOGS=250;
+const MAX_LOGS=80;
 const LOG_RETENTION_DAYS=1;
 
 // Cargar logs persistidos
@@ -1152,6 +1158,19 @@ function updateLogDisplay(){
   container.innerHTML=html+footer;
 }
 
+function analyzeLogSeverity(){
+  const logs=(typeof diagnosticLogs==='undefined'?[]:diagnosticLogs).slice(0,30);
+  let critical=false,mild=false;
+  const critPat=/colapso|quota|DB_SAVE|GDRIVE_AUTH|GDRIVE_QUOTA|GDRIVE_FREQUENT_DISCONNECT|PERF_SLOW_RENDER|MEMORY_HIGH|DATA_OVERLOAD|THUMBNAILS_OVERLOAD|fallo|error crítico|sin espacio|SYNC_ERROR|breaking/i;
+  const mildPat=/unverified|revisar|warning|warn|pendiente|retry|timeout|GDRIVE_DISCONNECTED/i;
+  for(const l of logs){
+    const txt=((l&&l.message)||'')+((l&&l.code)||'')+((l&&l.level)||'');
+    if(critPat.test(txt)){critical=true;break;}
+    if(mildPat.test(txt)||(l&&l.level==='WARN'))mild=true;
+  }
+  return {critical,mild};
+}
+
 function updateAppStatus(){
   const status=document.getElementById('appStatus');
   if(!status)return;
@@ -1159,13 +1178,23 @@ function updateAppStatus(){
   const gdriveConnected=!!localStorage.getItem('gdrive_token');
   const offlineQueue=(typeof photoQueue!=='undefined' && Array.isArray(photoQueue))?photoQueue.length:0;
   const pendingSync=getPendingSyncCount();
-  status.innerHTML=`
-    • Productos: ${P.length}
-    • API Gemini: ${apiConfigured?'✓ Configurada':'❌ Sin configurar'}
-    • Google Drive: ${gdriveConnected?'✓ Conectado':'❌ Desconectado'}
-    • Cola offline: ${offlineQueue} pendientes
-    • Sync pendiente: ${pendingSync}
-  `;
+  const sev=analyzeLogSeverity();
+  const iconClass=(ok,hasCritical,hasMild)=>{
+    if(hasCritical)return 'critical';
+    if(!ok||hasMild)return 'warn';
+    return 'ok';
+  };
+  const icon=(cls)=>cls==='critical'?'⚠':cls==='warn'?'◐':'✓';
+  const cards=[
+    {label:'Productos',val:P.length,cls:iconClass(true,sev.critical,sev.mild)},
+    {label:'API Gemini',val:apiConfigured?'Configurada':'Sin configurar',cls:iconClass(apiConfigured,sev.critical,sev.mild)},
+    {label:'Google Drive',val:gdriveConnected?'Conectado':'Desconectado',cls:iconClass(gdriveConnected,sev.critical,sev.mild)},
+    {label:'Cola offline',val:offlineQueue+' pendientes',cls:iconClass(offlineQueue===0,sev.critical,sev.mild)},
+    {label:'Sync pendiente',val:String(pendingSync),cls:iconClass(pendingSync===0,sev.critical,sev.mild)}
+  ];
+  status.innerHTML=`<div class="status-minicards">${cards.map(c=>
+    `<div class="status-minicard"><span class="status-icon ${c.cls}">${icon(c.cls)}</span><span>${c.label}: ${c.val}</span></div>`
+  ).join('')}</div>`;
 }
 
 function exportDiagnostics(){
@@ -1912,8 +1941,8 @@ function refreshHistoryList(){
   if(!histList)return;
   const h=loadHistory();
   if(!h.length){histList.innerHTML='<div class="settings-info" style="margin:0;color:var(--text2)">Sin historial aún</div>';return;}
-  const rev=[...h].reverse();
-  histList.innerHTML=rev.map((item)=>{
+  const sorted=[...h].sort((a,b)=>(new Date(b.timestamp)).getTime()-(new Date(a.timestamp)).getTime());
+  histList.innerHTML=sorted.map((item)=>{
     const d=new Date(item.timestamp);
     const dd=String(d.getDate()).padStart(2,'0'),mm=String(d.getMonth()+1).padStart(2,'0'),yy=d.getFullYear();
     const hh=String(d.getHours()).padStart(2,'0'),min=String(d.getMinutes()).padStart(2,'0');
@@ -2159,6 +2188,19 @@ function saveDB(options = {}) {
     const json = JSON.stringify(P);
     if(json.length > 4.5 * 1024 * 1024){
       addLog(LOG_LEVELS.WARN,'DB_SAVE_ERROR','Base de datos muy grande (cerca del límite)',{bytes:json.length});
+    }
+    const withThumb=P.filter(p=>p._thumb);
+    let thumbBytes=0;
+    withThumb.forEach(p=>{const b64=(p._thumb&&String(p._thumb).split(',')[1])||'';thumbBytes+=(b64.length*3)/4;});
+    const thumbMb=thumbBytes/(1024*1024);
+    if(withThumb.length>=350&&thumbMb>=2.5){
+      addLog(LOG_LEVELS.WARN,'THUMBNAILS_OVERLOAD','App con muchas miniaturas: riesgo de colapso. Recomprimir o eliminar fotos.',{count:withThumb.length,mb:thumbMb.toFixed(2)});
+    }else if(json.length>4*1024*1024&&withThumb.length>=200){
+      addLog(LOG_LEVELS.WARN,'THUMBNAILS_OVERLOAD','Base de datos inflada por miniaturas: app puede colapsar.',{count:withThumb.length,bytes:json.length});
+    }
+    if(P.length>650){
+      const last=window.__lastDataOverloadLog||0;
+      if(Date.now()-last>60000){window.__lastDataOverloadLog=Date.now();addLog(LOG_LEVELS.WARN,'DATA_OVERLOAD','DATA_OVERLOAD',{count:P.length,reason:'riesgo_colapso_gestion_datos'});}
     }
     const dbChanged = prevJson !== json;
     localStorage.setItem('alergenos_db_v3', json);
@@ -2918,6 +2960,7 @@ function formatUpdatedAtLabel(p){
 }
 
 function render(){
+  const t0=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
   const raw=q.value.trim(),query=norm(raw);
   xb.classList.toggle('on',raw.length>0);
   let f=P;
@@ -2945,9 +2988,14 @@ function render(){
   updatePendingFilterIndicator();
   if(!f.length){
     ls.innerHTML='<div class="empty">Sin resultados</div>';
+    const dt=(typeof performance!=='undefined'&&performance.now)?performance.now()-t0:0;
+    if(dt>800&&typeof addLog==='function')addLog(LOG_LEVELS.WARN,'PERF_SLOW_RENDER','PERF_SLOW_RENDER',{ms:Math.round(dt),reason:'render_vacio'});
     return;
   }
   renderProducts();
+  const dt=(typeof performance!=='undefined'&&performance.now)?performance.now()-t0:0;
+  if(dt>800&&typeof addLog==='function')addLog(LOG_LEVELS.WARN,'PERF_SLOW_RENDER','PERF_SLOW_RENDER',{ms:Math.round(dt),cards:currentFiltered.length});
+  if(typeof performance!=='undefined'&&performance.memory&&performance.memory.usedJSHeapSize>45e6&&typeof addLog==='function')addLog(LOG_LEVELS.WARN,'MEMORY_HIGH','MEMORY_HIGH',{used_mb:(performance.memory.usedJSHeapSize/1048576).toFixed(1)});
 }
 
 function renderProducts(){
@@ -5052,6 +5100,26 @@ let gisLoaded=false;
 let googleApisLoadingPromise=null;
 let tokenClient;
 
+const GDRIVE_DISCONNECT_WINDOW_MS=10*60*1000;
+const GDRIVE_FREQUENT_THRESHOLD=3;
+function gdriveLogDisconnect(reason){
+  if(typeof addLog!=='function')return;
+  addLog(LOG_LEVELS.WARN,'GDRIVE_DISCONNECTED','GDRIVE_DISCONNECTED',{reason,service:'Google Drive'});
+  if(reason==='user')return;
+  try{
+    let ts=[];const raw=localStorage.getItem('gdrive_disconnect_ts');
+    if(raw){try{ts=JSON.parse(raw);}catch(_){ts=[];}}
+    const now=Date.now();
+    const cutoff=now-GDRIVE_DISCONNECT_WINDOW_MS;
+    ts=ts.filter(t=>t>=cutoff);
+    ts.push(now);
+    localStorage.setItem('gdrive_disconnect_ts',JSON.stringify(ts));
+    if(ts.length>=GDRIVE_FREQUENT_THRESHOLD){
+      addLog(LOG_LEVELS.WARN,'GDRIVE_FREQUENT_DISCONNECT','GDRIVE_FREQUENT_DISCONNECT',{count:ts.length,window_min:10,reason,service:'Google Drive'});
+    }
+  }catch(_){}
+}
+
 function gdriveSaveTokenExpiry(expiresInSeconds){
   const sec=typeof expiresInSeconds==='number'&&expiresInSeconds>0?expiresInSeconds:3600;
   localStorage.setItem('gdrive_token_expiry',String(Date.now()+sec*1000));
@@ -5313,6 +5381,7 @@ document.getElementById('gdriveConfigSave').addEventListener('click',()=>{
 
 document.getElementById('gdriveDisconnectBtn').addEventListener('click',()=>{
   if(confirm('¿Desconectar Google Drive? Los datos locales se mantendrán.')){
+    if(typeof gdriveLogDisconnect==='function')gdriveLogDisconnect('user');
     localStorage.removeItem('gdrive_token');
     localStorage.removeItem('gdrive_token_expiry');
     localStorage.removeItem('gdrive_folder_id');
@@ -5506,13 +5575,23 @@ async function gdriveEnsureValidToken(){
   }
 }
 async function gdriveSmartSync(trigger = 'manual', opts = {}) {
-  if(!gdriveToken || syncInProgress) return;
-  if(typeof analysisPriorityActive!=='undefined'&&analysisPriorityActive){setTimeout(()=>gdriveSmartSync(trigger,opts),1500);return;}
+  if(!gdriveToken || syncInProgress) {
+    if(trigger==='manual'&&typeof addLog==='function') addLog('SYNC_SKIPPED',{trigger,reason:!gdriveToken?'no_token':'sync_in_progress'});
+    return;
+  }
+  if(typeof analysisPriorityActive!=='undefined'&&analysisPriorityActive){
+    if(trigger==='manual'&&typeof addLog==='function') addLog('SYNC_DEFERRED',{trigger,reason:'analysis_priority'});
+    setTimeout(()=>gdriveSmartSync(trigger,opts),1500);return;
+  }
   syncInProgress = true;
 
   await gdriveEnsureValidToken();
   gdriveToken=localStorage.getItem('gdrive_token');
-  if(!gdriveToken){ syncInProgress=false; updateSyncStatusUI(); return; }
+  if(!gdriveToken){
+    syncInProgress=false; updateSyncStatusUI();
+    if(trigger==='manual'&&typeof addLog==='function') addLog('SYNC_ABORTED',{trigger,reason:'token_lost'});
+    return;
+  }
 
   const session = createSyncSession(trigger);
   addLog('SYNC_STARTED', {
@@ -5760,6 +5839,7 @@ async function gdriveSmartSync(trigger = 'manual', opts = {}) {
           return gdriveSmartSync(trigger, { retriedAfter401: true, retriedAfter403: true });
         } catch(consentErr) {
           if(status===401) {
+            if(typeof gdriveLogDisconnect==='function')gdriveLogDisconnect('token_expired');
             finishSyncSession(session, 'error', 'error', 'Error: ' + err.message, err.message);
             localStorage.removeItem('gdrive_token');
             localStorage.removeItem('gdrive_token_expiry');
@@ -5774,6 +5854,7 @@ async function gdriveSmartSync(trigger = 'manual', opts = {}) {
     }
     finishSyncSession(session, 'error', 'error', 'Error: ' + err.message, err.message);
     if(status===401) {
+      if(typeof gdriveLogDisconnect==='function')gdriveLogDisconnect('token_expired');
       localStorage.removeItem('gdrive_token');
       localStorage.removeItem('gdrive_token_expiry');
       gdriveToken = null;
