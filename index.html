@@ -286,7 +286,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
       <button type="button" class="login-btn" id="loginBtn">Entrar</button>
     </form>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v07.03.2026.19:56h</div>
+    <div class="login-version">v07.03.2026.22:25h</div>
   </div>
 </div>
 
@@ -519,7 +519,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">v07.03.2026.19:56h</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">v07.03.2026.22:25h</span></div>
     <button type="button" class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section" id="photoDetailsSection">
@@ -1259,7 +1259,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'v07.03.2026.19:56h',
+    version:'v07.03.2026.22:25h',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -2245,7 +2245,8 @@ function saveDB(options = {}) {
     }
     const dbChanged = prevJson !== json;
     localStorage.setItem('alergenos_db_v3', json);
-    if(dbChanged) localStorage.setItem('local_last_update', Date.now().toString());
+    const isMigrationOrInit = (options.origin === 'init' || options.changeType === 'migration');
+    if(dbChanged && !isMigrationOrInit) localStorage.setItem('local_last_update', Date.now().toString());
     if (!skipAutoSync && dbChanged) {
       let recordKeys = dedupeRecordKeys([
         ...(Array.isArray(options.recordKeys)?options.recordKeys:[]),
@@ -5671,6 +5672,11 @@ async function gdriveSmartSync(trigger = 'manual', opts = {}) {
     return;
   }
 
+  if(trigger==='manual'&&Array.isArray(driveOutbox)&&driveOutbox.length>0){
+    const onlyLegacy=driveOutbox.every(function(entry){return entry&&entry.type==='legacy_pending';});
+    if(onlyLegacy){clearSyncOutbox();}
+  }
+
   const session = createSyncSession(trigger);
   addLog('SYNC_STARTED', {
     sync_session_id: session.sync_session_id,
@@ -5706,7 +5712,7 @@ async function gdriveSmartSync(trigger = 'manual', opts = {}) {
         probable_cause: classifyHttpFailure(status || 0, msg)
       });
       finishSyncSession(session, 'error', 'error', 'Error leyendo estado remoto: ' + msg, msg);
-      showToast('Error al leer Google Drive', 'info');
+      if(trigger==='manual') showToast('Error al leer Google Drive', 'info');
       return;
     }
 
@@ -5728,14 +5734,8 @@ async function gdriveSmartSync(trigger = 'manual', opts = {}) {
       decision = 'upload';
       reason = 'No existe archivo remoto';
     } else if(remoteState.remoteLastUpdate > localLastUpdate) {
-      // Remoto más nuevo → gana remoto (download), salvo si local tiene más registros (evitar pérdida)
-      if(remoteState.remoteCount < localCount) {
-        decision = 'upload';
-        reason = 'Remoto más nuevo pero local tiene más productos; subir para no perder registros';
-      } else {
-        decision = 'download';
-        reason = 'Remoto más nuevo';
-      }
+      decision = 'download';
+      reason = 'Remoto más nuevo';
     } else if(localLastUpdate > remoteState.remoteLastUpdate) {
       if(trigger === 'manual' && remoteState.remoteCount > localCount) {
         decision = 'download';
@@ -5849,7 +5849,7 @@ async function gdriveSmartSync(trigger = 'manual', opts = {}) {
           verify_error: verifyError ? verifyError.message : null
         });
         localStorage.setItem('last_sync_decision', 'upload_unverified');
-        showToast('⚠ Subida no confirmada. Revisa historial de sync.', 'info');
+        if(trigger==='manual') showToast('⚠ Subida no confirmada. Revisa historial de sync.', 'info');
         finishSyncSession(session, 'upload', 'error', msg, msg);
       } else {
         clearSyncOutbox();
@@ -5938,11 +5938,11 @@ async function gdriveSmartSync(trigger = 'manual', opts = {}) {
       gdriveToken = null;
       if(gdriveProactiveRefreshTimer){ clearInterval(gdriveProactiveRefreshTimer); gdriveProactiveRefreshTimer=null; }
       updateGDriveUI();
-      showToast('Sesión Google Drive expirada. Reconecta.', 'info');
+      if(trigger==='manual') showToast('Sesión Google Drive expirada. Reconecta.', 'info');
     } else if(status===403) {
-      showToast('Error de permisos o cuota en Drive. Revisa el archivo.', 'info');
+      if(trigger==='manual') showToast('Error de permisos o cuota en Drive. Revisa el archivo.', 'info');
     } else {
-      showToast('Error sincronizando: ' + err.message, 'info');
+      if(trigger==='manual') showToast('Error sincronizando: ' + err.message, 'info');
     }
   } finally {
     syncInProgress = false;
@@ -6008,7 +6008,7 @@ async function gdriveUpload(){
   const folderId=await gdriveFindOrCreateFolder();
   P = sanitizeProductList(P);
   const nowTs = Date.now();
-  const data={products:P,history:loadHistory(),version:'v07.03.2026.19:56h',lastUpdate:nowTs};
+  const data={products:P,history:loadHistory(),version:'v07.03.2026.22:25h',lastUpdate:nowTs};
   const content=JSON.stringify(data,null,2);
 
   const boundary='-------314159265358979323846';
@@ -6168,7 +6168,6 @@ async function gdriveDownload(){
       }
       saveDB({ skipAutoSync: true });  // NO lanzar upload tras descarga
       render();
-      showToast('Datos sincronizados desde Google Drive','info');
     }
   }
 }
