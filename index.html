@@ -25,10 +25,15 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{
-  --warm8:#928981;--warm8-80:#A29897;--warm8-60:#B9B4B1;--warm8-40:#D1CDCB;
-  --warm8-20:#E8E6E5;--warm8-10:#F3F2F2;--warm8-05:#F8F7F6;--warm4:#B4ACA7;--gray-comp:#E2E5E5;
-  --bg:#F3F2F2;--white:#FFFFFF;--text:#3a3632;--text2:var(--warm8);--text3:var(--warm8-60);
-  --green:#5a7a5a;--red:#8c3a3a;--radius:8px;
+  /* Meliá brand — Warm Gray 8 tonal palette */
+  --warm8:#928981;--warm8-80:#a29b97;--warm8-60:#b9b4b1;--warm8-40:#d1cdcb;
+  --warm8-20:#e8e6e5;--warm8-10:#f3f2f2;--warm8-05:#f8f7f6;--warm4:#b4aca7;--gray-comp:#e2e5e5;
+  --bg:#f3f2f2;--white:#ffffff;--text:#3a3632;--text2:var(--warm8);--text3:var(--warm8-60);
+  /* Brand main colours — greens (sustainability) */
+  --evening-sea:#035e56;--breaker-bay:#4f978e;--swamp-green:#b3c186;--summer-green:#aac7bb;
+  /* Brand secondary colours */
+  --blush:#c25170;--eunry:#d49f9e;--jelly-bean:#225575;--heather:#b8c8d3;
+  --green:#4f978e;--red:#8c3a3a;--radius:8px;
   --serif:'Adobe Caslon Pro','Libre Baskerville',Georgia,'Times New Roman',serif;
   --sans:graphik,'Graphik Web','Century Gothic','CenturyGothic',Avenir,-apple-system,Arial,sans-serif;
   --logo-font:'Century Gothic','CenturyGothic',AppleGothic,sans-serif;
@@ -208,7 +213,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 /* ─── SETTINGS MODAL (tarjetas estilo Meliá) ─── */
 #settingsBg .modal{background:var(--bg);padding:20px 16px 28px}
 #settingsBg .modal h2{font-family:var(--serif);font-size:24px;font-weight:400;letter-spacing:-0.3px;color:var(--text);margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--warm8-20)}
-.settings-section{background:var(--white);border-radius:var(--card-radius);box-shadow:var(--card-shadow);border:1px solid var(--warm8-20);padding:18px 16px;margin-bottom:12px}
+.settings-section{background:var(--white);border-radius:var(--card-radius);box-shadow:var(--card-shadow);border:1px solid var(--warm8-20);border-left:4px solid var(--warm8);padding:18px 16px;margin-bottom:12px}
 .settings-section:last-of-type{margin-bottom:16px}
 .settings-section h3{font-family:var(--serif);font-size:16px;font-weight:400;letter-spacing:0.2px;color:var(--text);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--warm8-10);display:flex;align-items:center;gap:8px}
 .settings-info{font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:12px;font-family:var(--sans)}
@@ -280,7 +285,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
       <button type="submit" class="login-btn" id="loginBtn">Entrar</button>
     </form>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">V070320261844H</div>
+    <div class="login-version">v07.03.2026.19:56h</div>
   </div>
 </div>
 
@@ -513,7 +518,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">V070320261844H</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">v07.03.2026.19:56h</span></div>
     <button type="button" class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section" id="photoDetailsSection">
@@ -1255,7 +1260,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'V070320261844H',
+    version:'v07.03.2026.19:56h',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -2546,7 +2551,7 @@ document.getElementById('gearBtn').addEventListener('click', () => {
 });
 
 // ============================================================
-let af=new Set(),sinMode=false,lastSavedName=null;
+let af=new Set(),sinMode=false,lastSavedName=null,lastSavedIndex=null;
 const q=document.getElementById('q'),xb=document.getElementById('xb'),ls=document.getElementById('ls'),cnt=document.getElementById('cnt'),fl=document.getElementById('fl');
 const pendingChip=document.getElementById('pendingChip');
 const pendingCountLabel=document.getElementById('pendingCountLabel');
@@ -3070,17 +3075,20 @@ function renderProducts(){
     h+='<hr class="audit-separator">';
   }
 
-  // Normal section — si lastSavedName, asegurar que la tarjeta esté en el DOM
-  if(lastSavedName){
+  // Normal section — si lastSavedName o lastSavedIndex, asegurar que la tarjeta esté en el DOM
+  if(lastSavedIndex!=null&&P[lastSavedIndex]){
+    const idxInNormal=normal.findIndex(p=>p===P[lastSavedIndex]);
+    if(idxInNormal>=0&&idxInNormal>=renderLimit)renderLimit=Math.max(renderLimit,idxInNormal+1);
+  }else if(lastSavedName){
     const idxInNormal=normal.findIndex(p=>norm(p.n)===norm(lastSavedName));
     if(idxInNormal>=0&&idxInNormal>=renderLimit)renderLimit=Math.max(renderLimit,idxInNormal+1);
   }
   const show=normal.slice(0,renderLimit);
-  show.forEach(p=>{const oi=P.indexOf(p);let nm=esc(p.n);const query=norm(q.value.trim());if(query)nm=hi(nm,query);let ic='';if(!p.a.length)ic='<span class="safe">✓ Sin alérgenos</span>';else{ic='<div class="icons-row">';p.a.forEach(a=>{if(IC[a])ic+=`<img class="a-icon" src="${IC[a]}" alt="${a}" title="${a}">`});ic+='</div>'}const isHL=lastSavedName&&norm(p.n)===norm(lastSavedName);const fromApp=p._src==='app'?' card-from-app':'';const appLabel=formatUpdatedAtLabel(p);const count=p.a.length?`<div class="a-count">${p.a.length} alérgeno${p.a.length>1?'s':''}</div>`:'';const reviewBadge=p.requires_review?'<span class="audit-badge medium">Revisar IA</span>':'';const thumbHtml=p._thumb?`<div class="card-thumb" data-idx="${oi}"><img src="${p._thumb}" alt=""></div>`:'';h+=`<div class="card${isHL?' highlight':''}${fromApp}" data-idx="${oi}"><div class="card-body"><div class="card-content"><div class="card-name">${nm}${reviewBadge}</div>${ic}${count}</div>${thumbHtml}</div>${appLabel}</div>`});
+  show.forEach(p=>{const oi=P.indexOf(p);let nm=esc(p.n);const query=norm(q.value.trim());if(query)nm=hi(nm,query);let ic='';if(!p.a.length)ic='<span class="safe">✓ Sin alérgenos</span>';else{ic='<div class="icons-row">';p.a.forEach(a=>{if(IC[a])ic+=`<img class="a-icon" src="${IC[a]}" alt="${a}" title="${a}">`});ic+='</div>'}const isHL=(lastSavedIndex!=null&&oi===lastSavedIndex)||(lastSavedName&&norm(p.n)===norm(lastSavedName));const fromApp=p._src==='app'?' card-from-app':'';const appLabel=formatUpdatedAtLabel(p);const count=p.a.length?`<div class="a-count">${p.a.length} alérgeno${p.a.length>1?'s':''}</div>`:'';const reviewBadge=p.requires_review?'<span class="audit-badge medium">Revisar IA</span>':'';const thumbHtml=p._thumb?`<div class="card-thumb" data-idx="${oi}"><img src="${p._thumb}" alt=""></div>`:'';h+=`<div class="card${isHL?' highlight':''}${fromApp}" data-idx="${oi}"><div class="card-body"><div class="card-content"><div class="card-name">${nm}${reviewBadge}</div>${ic}${count}</div>${thumbHtml}</div>${appLabel}</div>`});
   if(normal.length>renderLimit)h+=`<div class="empty" id="loadMore">Mostrando ${renderLimit} de ${normal.length} — Baja para cargar más</div>`;
   ls.innerHTML=h;
   updateCancelReviewUI();
-  if(lastSavedName){const nameToScroll=lastSavedName;lastSavedName=null;window.__scrollToCardScheduled=true;setTimeout(()=>{requestAnimationFrame(()=>{const idx=P.findIndex(p=>norm(p.n)===norm(nameToScroll));if(idx>=0){const el=ls.querySelector(`.card[data-idx="${idx}"]`);if(el){el.classList.add('highlight');const er=el.getBoundingClientRect(),lr=ls.getBoundingClientRect();const cardScrollOffset=ls.scrollTop+(er.top-lr.top);const listH=ls.clientHeight,cardH=er.height;const targetScroll=Math.max(0,Math.min(cardScrollOffset-listH/2+cardH/2,ls.scrollHeight-listH));ls.scrollTo({top:targetScroll,behavior:'smooth'});setTimeout(()=>{el.classList.remove('highlight');window.__scrollToCardScheduled=false;},4000);return}}window.__scrollToCardScheduled=false;})},800)}else if(renderLimit===150&&!window.__scrollTourActive&&!window.__scrollToCardScheduled)ls.scrollTop=0;
+  if(lastSavedIndex!=null){const idxToScroll=lastSavedIndex;lastSavedIndex=null;window.__scrollToCardScheduled=true;setTimeout(()=>{requestAnimationFrame(()=>{const el=ls.querySelector(`.card[data-idx="${idxToScroll}"]`);if(el){el.classList.add('highlight');const er=el.getBoundingClientRect(),lr=ls.getBoundingClientRect();const cardScrollOffset=ls.scrollTop+(er.top-lr.top);const listH=ls.clientHeight,cardH=er.height;const targetScroll=Math.max(0,Math.min(cardScrollOffset-listH/2+cardH/2,ls.scrollHeight-listH));ls.scrollTo({top:targetScroll,behavior:'smooth'});setTimeout(()=>{el.classList.remove('highlight');window.__scrollToCardScheduled=false;},4000)}}window.__scrollToCardScheduled=false;})},800)}else if(lastSavedName){const nameToScroll=lastSavedName;lastSavedName=null;window.__scrollToCardScheduled=true;setTimeout(()=>{requestAnimationFrame(()=>{const idx=P.findIndex(p=>norm(p.n)===norm(nameToScroll));if(idx>=0){const el=ls.querySelector(`.card[data-idx="${idx}"]`);if(el){el.classList.add('highlight');const er=el.getBoundingClientRect(),lr=ls.getBoundingClientRect();const cardScrollOffset=ls.scrollTop+(er.top-lr.top);const listH=ls.clientHeight,cardH=er.height;const targetScroll=Math.max(0,Math.min(cardScrollOffset-listH/2+cardH/2,ls.scrollHeight-listH));ls.scrollTo({top:targetScroll,behavior:'smooth'});setTimeout(()=>{el.classList.remove('highlight');window.__scrollToCardScheduled=false;},4000);return}}window.__scrollToCardScheduled=false;})},800)}else if(renderLimit===150&&!window.__scrollTourActive&&!window.__scrollToCardScheduled)ls.scrollTop=0;
   ls.querySelectorAll('.card[data-idx]').forEach(c=>{c.addEventListener('click',e=>{if(e.target.closest('.card-thumb')){e.preventDefault();e.stopPropagation();const idx=parseInt(c.dataset.idx);if(idx>=0&&P[idx]&&P[idx]._thumb)openPhotoViewer(P[idx]._thumb);return}openEdit(parseInt(c.dataset.idx))})});
 }
 
@@ -3316,12 +3324,12 @@ function updateSave(gid){if(gid==='manualAllergens')document.getElementById('man
 buildGrid('manualAllergens');buildGrid('aiAllergens');
 function showMatch(boxId,match,newName){const nm=document.getElementById(boxId+'Name'),dt=document.getElementById(boxId+'Detail');nm.textContent=match.product.n;const detail=`Similitud: ${Math.round(match.score*100)}% · ${match.product.a.length} alérgenos · Se actualizará con el nombre indicado arriba`;dt.textContent=newName&&norm(newName)!==norm(match.product.n)?detail:`Similitud: ${Math.round(match.score*100)}% · ${match.product.a.length} alérgenos · Se fusionarán`;document.getElementById(boxId).classList.add('show')}
 function hideMatch(boxId){document.getElementById(boxId).classList.remove('show')}
-function autoResizeNameField(el){if(!el)return;el.style.height='auto';el.style.height=Math.max(44,el.scrollHeight)+'px'}
+function autoResizeNameField(el){if(!el)return;el.style.height='1px';el.style.height=Math.max(44,el.scrollHeight)+'px';requestAnimationFrame(()=>{el.style.height='1px';el.style.height=Math.max(44,el.scrollHeight)+'px'})}
 let matchTimer,manualCurrentMatch=null;const manualNameInput=document.getElementById('manualName');
 manualNameInput.addEventListener('input',()=>{autoResizeNameField(manualNameInput);updateSave('manualAllergens');clearTimeout(matchTimer);matchTimer=setTimeout(()=>{if(editMode)return;const name=manualNameInput.value.trim();if(name.length<3){hideMatch('manualMatch');manualCurrentMatch=null;document.getElementById('manualSave').textContent='Guardar producto';return}const match=findMatch(name);manualCurrentMatch=match;if(match){showMatch('manualMatch',match);document.getElementById('manualSave').textContent='Actualizar existente'}else{hideMatch('manualMatch');document.getElementById('manualSave').textContent='Guardar producto nuevo'}},300)});
 manualNameInput.addEventListener('blur',()=>{const v=manualNameInput.value.trim();if(v){const c=autoCorrectName(v);if(c!==v){manualNameInput.value=c;showToast('Ortografía corregida','info')}}});
 
-document.getElementById('manualSave').addEventListener('click',()=>{let name=manualNameInput.value.trim();if(!name)return;name=autoCorrectName(name);const al=sortAllergens(getSelected('manualAllergens'));if(editMode&&editIdx>=0){const before={n:P[editIdx].n,a:[...P[editIdx].a]};P[editIdx].n=name;P[editIdx].a=al;P[editIdx]._src='app';P[editIdx]._updated_at=new Date().toISOString();pushToHistory(name,'modified');saveDB({changeType:'edit_product',origin:'manualSave',recordKeys:[before.n,name]});clearFlagOnSave(name,before,{n:name,a:[...al]});closeModal();lastSavedName=name;render();showToast(`✓ "${name}" actualizado`,'update')}else if(manualCurrentMatch){const r=mergeProduct(manualCurrentMatch.index,name,al);logAuditEvent('merge_save',{target:manualCurrentMatch.product.n, merged_name:name, added_allergens:r.added});if(q)q.value='';closeModal();lastSavedName=name;render();showToast(r.added.length?`✓ "${name}" · +${r.added.length} alérgeno${r.added.length>1?'s':''}`:`✓ "${name}" verificado`,'update')}else{addNewProduct(name,al);logAuditEvent('new_product',{product:name, allergens:al});if(q)q.value='';closeModal();lastSavedName=name;render();showToast(`✓ "${name}" añadido`,'new')}if(window.__batchReviewCorrecting){window.__batchReviewCorrecting=false;const p=window.__batchPendingReview||[];p.shift();if(p.length>0){if(typeof navPush==='function')navPush('batchReview');showNextBatchPending()}else closeModal();}});
+document.getElementById('manualSave').addEventListener('click',()=>{let name=manualNameInput.value.trim();if(!name)return;name=autoCorrectName(name);const al=sortAllergens(getSelected('manualAllergens'));if(editMode&&editIdx>=0){const before={n:P[editIdx].n,a:[...P[editIdx].a]};P[editIdx].n=name;P[editIdx].a=al;P[editIdx]._src='app';P[editIdx]._updated_at=new Date().toISOString();pushToHistory(name,'modified');saveDB({changeType:'edit_product',origin:'manualSave',recordKeys:[before.n,name]});clearFlagOnSave(name,before,{n:name,a:[...al]});closeModal();lastSavedName=name;lastSavedIndex=editIdx;render();showToast(`✓ "${name}" actualizado`,'update')}else if(manualCurrentMatch){const r=mergeProduct(manualCurrentMatch.index,name,al);logAuditEvent('merge_save',{target:manualCurrentMatch.product.n, merged_name:name, added_allergens:r.added});if(q)q.value='';closeModal();lastSavedName=name;lastSavedIndex=manualCurrentMatch.index;render();showToast(r.added.length?`✓ "${name}" · +${r.added.length} alérgeno${r.added.length>1?'s':''}`:`✓ "${name}" verificado`,'update')}else{addNewProduct(name,al);logAuditEvent('new_product',{product:name, allergens:al});if(q)q.value='';closeModal();lastSavedName=name;lastSavedIndex=null;render();showToast(`✓ "${name}" añadido`,'new')}if(window.__batchReviewCorrecting){window.__batchReviewCorrecting=false;const p=window.__batchPendingReview||[];p.shift();if(p.length>0){if(typeof navPush==='function')navPush('batchReview');showNextBatchPending()}else closeModal();}});
 function addNewProduct(name,al,opts){
   const nk=norm(name);
   let idx=P.findIndex(p=>norm(p.n)>nk);
@@ -3483,9 +3491,11 @@ function batchReviewConfirm(){
   const match=findMatch(displayName);
   if(match){
     mergeProduct(match.index,displayName,allA,{photoDataUrl:item.dataUrl});
+    lastSavedIndex=match.index;
     showToast(`✓ "${displayName}" guardado`,'update');
   }else{
     addNewProduct(displayName,allA,{photoDataUrl:item.dataUrl});
+    lastSavedIndex=null;
     showToast(`✓ "${displayName}" añadido`,'new');
   }
   save();
@@ -4288,7 +4298,7 @@ document.getElementById('aiSave').addEventListener('click',()=>{
       finishPhotoAnalysis(analysisId);
     }
     if(typeof q!=='undefined'&&q)q.value='';
-    save(); closeModal(); lastSavedName=name;render();
+    save(); closeModal(); lastSavedName=name;lastSavedIndex=aiCurrentMatch.index;render();
     showToast(r.added.length?`✓ "${name}" · +${r.added.length} alérgeno${r.added.length>1?'s':''}`:`✓ "${name}" verificado`,'update')
   }else{
     addNewProduct(name,al,analysisId?{analysisId,analysisTimestamp,photoDataUrl:photos[1]||photos[0]}:{photoDataUrl:photos[1]||photos[0]});
@@ -4305,7 +4315,7 @@ document.getElementById('aiSave').addEventListener('click',()=>{
       }
       save();
     }
-    if(typeof q!=='undefined'&&q)q.value=''; closeModal(); lastSavedName=name;render();showToast(`✓ "${name}" añadido`,'new')
+    if(typeof q!=='undefined'&&q)q.value=''; closeModal(); lastSavedName=name;lastSavedIndex=null;render();showToast(`✓ "${name}" añadido`,'new')
   }
   window.__lastAnalysisId=null;
 });
@@ -4389,7 +4399,7 @@ async function processQueue(){
               saveDB({changeType:'edit_product',origin:'queue_auto_update',recordKeys:[match.product.n,displayName]});
               if(result.requires_review) showToast('⚠ Revisar IA: posible omisión','info');
               showToast(r.added.length?`✓ Cola: "${match.product.n}" +${r.added.length}`:`✓ Cola: "${match.product.n}" verificado`,'update');
-              lastSavedName=displayName;
+              lastSavedName=displayName;lastSavedIndex=match.index;
               addLog(LOG_LEVELS.INFO,'QUEUE_UPDATED',`Cola - Actualizado: ${match.product.n}`,{added:r.added.length});
             }else{
               addNewProduct(displayName,allA,{analysisId,analysisTimestamp:ts,photoDataUrl:pl[0]});
@@ -4406,7 +4416,7 @@ async function processQueue(){
               if(result.requires_review) showToast('⚠ Revisar IA: posible omisión','info');
               showToast(`✓ Cola: "${displayName}" añadido`,'new');
               addLog(LOG_LEVELS.INFO,'QUEUE_SAVED',`Cola - Guardado: ${displayName}`,{allergens:allA.length});
-              lastSavedName=displayName;
+              lastSavedName=displayName;lastSavedIndex=null;
             }
           }else{
             addAnalysisSection(analysisId,'F_decision',{decision:'bloquear_revision',motivo:buildReviewReason(result)});
@@ -4677,7 +4687,7 @@ async function autoProcessPhoto(dataUrl){
       addAnalysisSection(analysisId,'F_decision',{decision:'actualizar',motivo:'auto_guardar',product_name:displayName});
       addAnalysisSection(analysisId,'G_saved_result',{product_index:match.index,product_name:displayName,alergenos:P[match.index].a,timestamp:ts,declarable:true});
       finishPhotoAnalysis(analysisId);
-      lastSavedName=displayName;
+      lastSavedName=displayName;lastSavedIndex=match.index;
       scanSession.productsSaved++;
       render();updateAppStatus();
       showToast(r.added.length?`⚡ "${match.product.n}" actualizado +${r.added.length}`:`⚡ "${match.product.n}" verificado`,'update');
@@ -4687,10 +4697,10 @@ async function autoProcessPhoto(dataUrl){
       const idx=P.findIndex(x=>norm(x.n)===norm(displayName));
       if(idx>=0){
         addAnalysisSection(analysisId,'F_decision',{decision:'crear',motivo:'auto_guardar',product_name:displayName});
-        addAnalysisSection(analysisId,'G_saved_result',{product_index:idx,product_name:displayName,alergenos:P[idx].a,timestamp:ts,declarable:true});
-        finishPhotoAnalysis(analysisId);
-      }
-      lastSavedName=displayName;
+addAnalysisSection(analysisId,'G_saved_result',{product_index:idx,product_name:displayName,alergenos:P[idx].a,timestamp:ts,declarable:true});
+      finishPhotoAnalysis(analysisId);
+    }
+      lastSavedName=displayName;lastSavedIndex=null;
       scanSession.productsSaved++;
       render();updateAppStatus();
       showToast(`⚡ "${displayName}" añadido`,'new');
@@ -5985,7 +5995,7 @@ async function gdriveUpload(){
   const folderId=await gdriveFindOrCreateFolder();
   P = sanitizeProductList(P);
   const nowTs = Date.now();
-  const data={products:P,history:loadHistory(),version:'V070320261844H',lastUpdate:nowTs};
+  const data={products:P,history:loadHistory(),version:'v07.03.2026.19:56h',lastUpdate:nowTs};
   const content=JSON.stringify(data,null,2);
 
   const boundary='-------314159265358979323846';
