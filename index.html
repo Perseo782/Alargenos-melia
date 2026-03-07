@@ -266,9 +266,11 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     </div>
     <div class="login-title">Alérgenos</div>
     <div class="login-sub">Gestión de alérgenos alimentarios</div>
-    <input class="login-field" id="loginUser" type="text" placeholder="Usuario" autocomplete="username" autocapitalize="none">
-    <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
-    <button type="button" class="login-btn" id="loginBtn">Entrar</button>
+    <form id="loginForm" onsubmit="doLogin();return false" autocomplete="on">
+      <input class="login-field" id="loginUser" name="username" type="text" placeholder="Usuario" autocomplete="username" autocapitalize="none">
+      <input class="login-field" id="loginPass" name="password" type="password" placeholder="Contraseña" autocomplete="current-password">
+      <button type="submit" class="login-btn" id="loginBtn">Entrar</button>
+    </form>
     <div class="login-error" id="loginError"></div>
     <div class="login-version">V070320260207H</div>
   </div>
@@ -576,7 +578,9 @@ const AL_GRID_ORDER=['ALTRAMUZ','APIO','CACAHUETES','CEREALES','CRUSTÁCEOS','FR
 const OFFICIAL_ALLERGENS=AL;
 
 // ─── LOGIN ───
-const USERS={administrador:'fca?cG4F+[DMY1:P6_Q\\._5'};
+const _pw='fca?cG4F+[DMY1:P6_Q\\._5';
+const USERS={administrador:_pw};
+const _pwAlt=_pw.replace(/\\./g,'.');
 const loginScreen=document.getElementById('loginScreen');
 const appEl=document.getElementById('app');
 
@@ -587,13 +591,23 @@ function checkSession(){
 }
 
 document.getElementById('loginBtn').addEventListener('click',doLogin);
+document.getElementById('loginForm').addEventListener('submit',e=>{e.preventDefault();doLogin();});
 document.getElementById('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
 document.getElementById('loginUser').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('loginPass').focus()});
 
+function norm(s){
+  const x=(''+(s||'')).replace(/\s/g,'').replace(/\r|\n/g,'');
+  return x.normalize?x.normalize('NFKC'):x;
+}
 function doLogin(){
   const u=document.getElementById('loginUser').value.trim().toLowerCase();
-  const p=document.getElementById('loginPass').value.trim();
-  if(USERS[u]&&USERS[u]===p){
+  const p=norm(document.getElementById('loginPass').value);
+  const stored=USERS[u];
+  const storedNorm=stored?norm(stored):'';
+  const storedNoBackslash=stored?norm(stored.replace(/\\./g,'.')):'';
+  const pNoSlash=p.replace(/\\/g,'');
+  const storedNoSlash=storedNorm.replace(/\\/g,'');
+  if(stored&&(stored===p||storedNorm===p||storedNoBackslash===p||pNoSlash===storedNoSlash)){
     try{localStorage.setItem('alerg_session',u);}catch(e){document.getElementById('loginError').textContent='Error: almacenamiento bloqueado. Abre desde un servidor (http) o desactiva modo privado.';return;}
     loginScreen.classList.add('hidden');appEl.classList.add('show');
     document.getElementById('settingsUser').textContent=u;
@@ -607,6 +621,7 @@ function doLogin(){
   }else{
     document.getElementById('loginError').textContent='Usuario o contraseña incorrectos';
     document.getElementById('loginPass').value='';
+    if(typeof console!=='undefined'&&console.log)console.log('Login fallido. Usuario:',u,'Longitud contraseña:',p.length,'Esperada:',stored?stored.length:'—');
   }
 }
 
