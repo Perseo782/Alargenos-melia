@@ -219,6 +219,14 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
 .api-key-status.no{color:var(--warm8-60)}
 #settingsBg .settings-section [id^="syncStatusPanel"],#settingsBg .settings-section [id="syncManualStatus"],#settingsBg .settings-section [id="appStatus"]{margin-top:12px;padding:14px;background:var(--warm8-05);border-radius:var(--radius);font-size:12px;line-height:1.7;border:1px solid var(--warm8-10)}
 #settingsBg #logContainer{background:var(--warm8-05);border-radius:var(--radius);padding:14px;margin:12px 0;max-height:280px;overflow-y:auto;font-family:monospace;font-size:11px;line-height:1.8;border:1px solid var(--warm8-10)}
+.settings-subcard{background:var(--warm8-05);border:1px solid var(--warm8-10);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+.settings-subcard:last-child{margin-bottom:0}
+.settings-select{width:100%;padding:10px 12px;border:1px solid var(--warm8-40);border-radius:var(--radius);font-size:13px;font-family:var(--sans);color:var(--text);background:var(--white);outline:none;margin-bottom:10px}
+.settings-select:focus{border-color:var(--warm8)}
+.thumb-quality-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.thumb-quality-btn{flex:1;min-width:50px;padding:8px;border-radius:var(--radius);border:1px solid var(--warm8-40);background:var(--white);font-size:12px;font-weight:500;color:var(--text2);cursor:pointer;font-family:var(--sans);transition:all .15s}
+.thumb-quality-btn:hover{background:var(--warm8-10);border-color:var(--warm8-60)}
+.thumb-quality-btn.active{border-color:var(--warm8);background:var(--warm8-20);color:var(--text)}
 .logout-btn{width:100%;padding:14px;border-radius:var(--card-radius);border:1px solid var(--red);background:var(--white);color:var(--red);font-size:13px;font-weight:500;font-family:var(--sans);cursor:pointer;margin-top:8px;box-shadow:var(--card-shadow);transition:background .15s,color .15s}
 .logout-btn:active{background:var(--red);color:#fff}
 .sync-status-grid{display:grid;grid-template-columns:1fr;gap:2px}
@@ -486,6 +494,44 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v06032623:47h</span></div>
     <button type="button" class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
+  <div class="settings-section" id="photoDetailsSection">
+    <h3>📷 Detalles de fotografías</h3>
+    <div class="settings-row"><span class="settings-label">Fotografías</span><span class="settings-val" id="photoDetailsCount">0</span></div>
+    <div class="settings-row"><span class="settings-label">Peso total</span><span class="settings-val" id="photoDetailsWeight">0 MB</span></div>
+    <div class="settings-row"><span class="settings-label">Configuración actual</span><span class="settings-val" id="photoDetailsConfig">—</span></div>
+    <div class="settings-subcard">
+      <div class="settings-info" style="margin-bottom:10px">Formato y calidad. Se aplicará a las nuevas fotografías que añadas.</div>
+      <label class="settings-label" style="margin-bottom:4px;display:block">Formato</label>
+      <select class="settings-select" id="thumbFormatSelect">
+        <option value="1">Máxima compresión (WebP)</option>
+        <option value="2">Equilibrado (WebP)</option>
+        <option value="3">Alta calidad (JPEG)</option>
+      </select>
+      <label class="settings-label" style="margin-bottom:4px;display:block">Calidad</label>
+      <select class="settings-select" id="thumbQualitySelect">
+        <option value="20">20%</option>
+        <option value="40">40%</option>
+        <option value="60">60%</option>
+        <option value="80">80%</option>
+        <option value="100">100%</option>
+      </select>
+      <button type="button" class="save-btn" id="thumbFormatSave">Guardar</button>
+    </div>
+    <div class="settings-subcard">
+      <div class="settings-info" style="margin-bottom:10px">Menor resolución = menos peso. Recomendado: 600 px.</div>
+      <label class="settings-label" style="margin-bottom:4px;display:block">Resolución máxima</label>
+      <select class="settings-select" id="thumbSizeSelect">
+        <option value="400">400 px</option>
+        <option value="600">600 px</option>
+        <option value="800">800 px</option>
+      </select>
+      <button type="button" class="save-btn" id="thumbSizeSave">Guardar</button>
+    </div>
+    <div class="settings-subcard">
+      <div class="settings-info" style="margin-bottom:10px">Aplica la configuración actual a todas las fotografías existentes. Puede tardar unos segundos.</div>
+      <button type="button" class="save-btn" id="thumbRecompressBtn" style="background:var(--warm8-80)">Recomprimir todas</button>
+    </div>
+  </div>
   <div class="settings-section">
     <h3>Historial de eventos</h3>
     <div class="settings-info">Últimos 30 productos agregados, modificados o eliminados.</div>
@@ -639,6 +685,7 @@ function openSettings(){
   }
   const histList=document.getElementById('historyList');
   if(histList) refreshHistoryList();
+  if(typeof refreshPhotoDetailsStats==='function') refreshPhotoDetailsStats();
   navPush('settings');
   settingsBg.classList.add('open');
 }
@@ -747,6 +794,16 @@ document.getElementById('apiKeySave').addEventListener('click',()=>{
   if(key){localStorage.setItem('alerg_apikey',key);document.getElementById('apiKeyInput').value=key;const st=document.getElementById('apiKeyStatus');st.textContent='✓ Clave guardada';st.className='api-key-status ok';showToast('Clave API guardada','info')}
   else{localStorage.removeItem('alerg_apikey');const st=document.getElementById('apiKeyStatus');st.textContent='Clave eliminada';st.className='api-key-status no'}
 });
+document.getElementById('thumbFormatSave').addEventListener('click',()=>{
+  const fmt=document.getElementById('thumbFormatSelect');
+  const qual=document.getElementById('thumbQualitySelect');
+  if(fmt&&qual){setThumbConfig({format:parseInt(fmt.value,10),quality:parseInt(qual.value,10)/100});refreshPhotoDetailsStats();showToast('Formato y calidad guardados','info');}
+});
+document.getElementById('thumbSizeSave').addEventListener('click',()=>{
+  const sz=document.getElementById('thumbSizeSelect');
+  if(sz){setThumbConfig({maxSize:parseInt(sz.value,10)});refreshPhotoDetailsStats();showToast('Resolución guardada','info');}
+});
+document.getElementById('thumbRecompressBtn').addEventListener('click',()=>{recompressAllThumbnails();});
 const apiKeyTestBtn=document.getElementById('apiKeyTestBtn');
 if(apiKeyTestBtn){
   apiKeyTestBtn.addEventListener('click',async()=>{
@@ -1605,6 +1662,7 @@ function fixNombreFromOcr(nombre, ocrText){
     }
   }
   n=n.replace(/\s+/g,' ').replace(/^[\-–—:;,. ]+|[\-–—:;,. ]+$/g,'').trim();
+  n=stripLanguageCountryCodePrefix(n);
   if(n.length>90) n=n.slice(0,90).trim();
   return n;
 }
@@ -1645,8 +1703,19 @@ function autoCorrectName(name){return name.split(/(\s+)/).map(p=>{if(/^\s+$/.tes
 function canonicalizeProductName(name){
   return autoCorrectName(String(name||'').trim().replace(/\s+/g,' '));
 }
+/** Quita códigos de idioma/país (ES, FR, DE, IT, EN, PT) al inicio del nombre. En etiquetas UE multilingües aparecen como "ES FILETES DE..." y no deben formar parte del nombre. */
+function stripLanguageCountryCodePrefix(name){
+  let n=String(name||'').trim();
+  const codePrefix=/^(ES|FR|DE|IT|EN|PT)\s+/i;
+  if(codePrefix.test(n)){
+    const after=n.replace(codePrefix,'').trim();
+    if(after.length>=3)n=after;
+  }
+  return n;
+}
 function canonicalizeProductNameForStorage(name){
   let n=String(name||'').trim().replace(/\s+/g,' ');
+  n=stripLanguageCountryCodePrefix(n);
   const idx=Math.min(n.indexOf('/')>=0?n.indexOf('/'):999,n.indexOf(' - ')>=0?n.indexOf(' - '):999,n.indexOf(' | ')>=0?n.indexOf(' | '):999);
   if(idx<999&&idx>5)n=n.slice(0,idx).trim();
   if(n.length>80)n=n.slice(0,80).trim();
@@ -3492,6 +3561,7 @@ Revisa que no hayas omitido ningún alérgeno o traza que SÍ aparezca escrito e
 
 NOMBRE DEL PRODUCTO — SIEMPRE EN ESPAÑOL:
 El campo "nombre" debe estar SIEMPRE en español, sea cual sea el formato de la etiqueta.
+CÓDIGOS DE IDIOMA/PAÍS: NUNCA incluyas ES, FR, DE, IT, EN, PT al inicio del nombre. Son marcadores de idioma en etiquetas multilingües UE, NO parte del producto. Ejemplo: si la etiqueta muestra "ES FILETES DE CABALLA", el nombre correcto es "FILETES DE CABALLA" (sin "ES").
 ETIQUETAS CON VARIOS IDIOMAS: Identifica la versión en español (por marcadores como ES, Español, Spanish, versión española, o por el propio texto). Usa SIEMPRE el nombre en español cuando exista. No uses italiano, portugués, francés, inglés u otro idioma aunque aparezca antes o más destacado.
 ETIQUETAS EN UN SOLO IDIOMA (distinto del español): Traduce el nombre del producto al español.
 Prioriza la variante española sin importar el orden. Máximo 80 caracteres. No concatenes títulos con "y". NUNCA incluyas números sueltos en el nombre (códigos de lote, porcentajes); solo el nombre del producto.
@@ -3563,6 +3633,7 @@ Revisa que no hayas omitido ningún alérgeno o traza que SÍ aparezca escrito e
 
 NOMBRE DEL PRODUCTO — SIEMPRE EN ESPAÑOL:
 El campo "nombre" debe estar SIEMPRE en español, sea cual sea el formato de la etiqueta.
+CÓDIGOS DE IDIOMA/PAÍS: NUNCA incluyas ES, FR, DE, IT, EN, PT al inicio del nombre. Son marcadores de idioma en etiquetas multilingües UE, NO parte del producto. Ejemplo: si el texto muestra "ES FILETES DE CABALLA", el nombre correcto es "FILETES DE CABALLA" (sin "ES").
 ETIQUETAS CON VARIOS IDIOMAS: Identifica la versión en español (por marcadores como ES, Español, Spanish, versión española, o por el propio texto: albahaca, aceite vs basilico, olio, etc.). Usa SIEMPRE el nombre en español cuando exista. No uses italiano, portugués, francés, inglés u otro idioma aunque aparezca antes o más destacado.
 ETIQUETAS EN UN SOLO IDIOMA (distinto del español): Traduce el nombre del producto al español.
 Prioriza la variante española sin importar el orden en el OCR. Máximo 80 caracteres. No concatenes títulos con "y". NUNCA incluyas números sueltos en el nombre (códigos de lote, porcentajes); solo el nombre del producto.
@@ -3683,18 +3754,35 @@ async function apiCall(content, options){
 const PHOTO_MAX_SIZE=1120;
 const PHOTO_JPEG_QUALITY=0.85;
 const VISION_QUALITY_OPTS={maxSize:4096,quality:0.95};
-// Miniatura dentro de las tarjetas de producto: foto pequeña que se muestra en cada tarjeta.
-// THUMB_MAX_SIZE: lado máximo en píxeles (600). THUMB_QUALITY: compresión JPEG 95% (0.95).
-// Se comprime en segundo plano tras añadir producto para que se vea bien al ampliar.
-const THUMB_MAX_SIZE=600;
-const THUMB_QUALITY=0.95;
+// ─── MINIATURAS DE FOTOS (Detalles de fotografías) ─────────────────────────────
+// Las miniaturas son fotos pequeñas en cada tarjeta de producto (p._thumb).
+// El usuario configura en Ajustes: formato (WebP/JPEG), calidad (20-100%) y resolución (400/600/800 px).
+// refreshPhotoDetailsStats: actualiza contador, peso total (MB) y config en la sección Ajustes.
+// getThumbConfig/setThumbConfig: leen/guardan en localStorage (thumb_format, thumb_quality, thumb_max_size).
+// compressThumbnail: comprime la foto con la config actual; usada por nuevas fotos y por "Recomprimir todas".
+// recompressAllThumbnails: aplica la config actual a todas las fotos existentes.
+const THUMB_DEFAULTS={format:2,quality:80,maxSize:600};
+const THUMB_STORAGE_KEYS={format:'thumb_format',quality:'thumb_quality',maxSize:'thumb_max_size'};
+function getThumbConfig(){
+  const f=parseInt(localStorage.getItem(THUMB_STORAGE_KEYS.format)||THUMB_DEFAULTS.format,10);
+  const q=parseInt(localStorage.getItem(THUMB_STORAGE_KEYS.quality)||THUMB_DEFAULTS.quality,10);
+  const s=parseInt(localStorage.getItem(THUMB_STORAGE_KEYS.maxSize)||THUMB_DEFAULTS.maxSize,10);
+  return{format:Math.max(1,Math.min(3,f)),quality:Math.max(20,Math.min(100,q))/100,maxSize:Math.max(400,Math.min(800,s))};
+}
+function setThumbConfig(cfg){
+  if(cfg.format!=null)localStorage.setItem(THUMB_STORAGE_KEYS.format,String(cfg.format));
+  if(cfg.quality!=null)localStorage.setItem(THUMB_STORAGE_KEYS.quality,String(Math.round(cfg.quality*100)));
+  if(cfg.maxSize!=null)localStorage.setItem(THUMB_STORAGE_KEYS.maxSize,String(cfg.maxSize));
+}
 function compressThumbnail(dataUrl){
+  const cfg=getThumbConfig();
+  const mime=cfg.format<=2?'image/webp':'image/jpeg';
   return new Promise((resolve)=>{
     const img=new Image();
     img.onload=()=>{
       let w=img.width,h=img.height;
-      if(w>THUMB_MAX_SIZE||h>THUMB_MAX_SIZE){
-        const r=Math.min(THUMB_MAX_SIZE/w,THUMB_MAX_SIZE/h);
+      if(w>cfg.maxSize||h>cfg.maxSize){
+        const r=Math.min(cfg.maxSize/w,cfg.maxSize/h);
         w=Math.round(w*r);h=Math.round(h*r);
       }
       const canvas=document.createElement('canvas');
@@ -3702,11 +3790,61 @@ function compressThumbnail(dataUrl){
       const ctx=canvas.getContext('2d');
       if(!ctx){resolve(dataUrl);return;}
       ctx.drawImage(img,0,0,w,h);
-      try{resolve(canvas.toDataURL('image/jpeg',THUMB_QUALITY));}catch(e){resolve(dataUrl);}
+      try{
+        const out=canvas.toDataURL(mime,cfg.quality);
+        resolve(out);
+      }catch(e){
+        try{resolve(canvas.toDataURL('image/jpeg',cfg.quality));}catch(e2){resolve(dataUrl);}
+      }
     };
     img.onerror=()=>resolve(null);
     img.src=dataUrl;
   });
+}
+function getPhotoDetailsStats(){
+  const withThumb=P.filter(p=>p._thumb);
+  const count=withThumb.length;
+  let totalBytes=0;
+  withThumb.forEach(p=>{const b64=(p._thumb.split(',')[1]||'');totalBytes+=(b64.length*3)/4;});
+  const mb=totalBytes/(1024*1024);
+  const cfg=getThumbConfig();
+  const fmtLabel=cfg.format===1?'Máx. compresión':cfg.format===2?'Equilibrado':'Alta calidad';
+  const cfgLabel=`${fmtLabel}, ${Math.round(cfg.quality*100)}%, ${cfg.maxSize} px`;
+  return{count,mb,cfgLabel};
+}
+function refreshPhotoDetailsStats(){
+  const el=document.getElementById('photoDetailsSection');
+  if(!el)return;
+  const s=getPhotoDetailsStats();
+  const c=document.getElementById('photoDetailsCount');
+  const w=document.getElementById('photoDetailsWeight');
+  const cfg=document.getElementById('photoDetailsConfig');
+  if(c)c.textContent=String(s.count);
+  if(w)w.textContent=s.mb<0.01?'< 0,01 MB':s.mb.toFixed(2)+' MB';
+  if(cfg)cfg.textContent=s.cfgLabel;
+  const fmt=document.getElementById('thumbFormatSelect');
+  const qual=document.getElementById('thumbQualitySelect');
+  const sz=document.getElementById('thumbSizeSelect');
+  const cfg2=getThumbConfig();
+  if(fmt)fmt.value=String(cfg2.format);
+  if(qual)qual.value=String(Math.round(cfg2.quality*100));
+  if(sz)sz.value=String(cfg2.maxSize);
+}
+async function recompressAllThumbnails(){
+  const withThumb=P.filter(p=>p._thumb);
+  if(withThumb.length===0){showToast('No hay fotografías para recomprimir','info');return;}
+  const btn=document.getElementById('thumbRecompressBtn');
+  if(btn){btn.disabled=true;btn.textContent='Recomprimiendo...';}
+  let done=0;
+  for(let i=0;i<P.length;i++){
+    if(!P[i]._thumb)continue;
+    const thumb=await compressThumbnail(P[i]._thumb);
+    if(thumb){P[i]._thumb=thumb;done++;}
+  }
+  if(done>0){saveDB({changeType:'edit_product',origin:'recompress_all'});render();}
+  if(btn){btn.disabled=false;btn.textContent='Recomprimir todas';}
+  showToast(done>0?`Recomprimidas ${done} fotografías`:'Sin cambios','info');
+  refreshPhotoDetailsStats();
 }
 let thumbnailCompressionQueue=[];
 let thumbnailCompressionTimer=null;
@@ -4174,7 +4312,13 @@ window.addEventListener('online',()=>{
   if(photoQueue.length&&getApiKey())processQueue();
   const autoQ=loadAutoScanQueue();
   if(autoQ.length&&navigator.onLine){showToast(autoQ.length+' foto(s) encoladas. Abre Modo automático para procesarlas.','info');}
-  if(gdriveToken && getPendingSyncCount()>0) setTimeout(()=>gdriveSmartSync('online_reconnect'),800);
+  if(gdriveToken && getPendingSyncCount()>0){
+    if(typeof gdriveIsTokenExpiringSoon==='function'&&gdriveIsTokenExpiringSoon()){
+      loadGoogleAPIs().then(()=>gdriveRefreshAccessToken({})).catch(()=>{}).finally(()=>{
+        setTimeout(()=>gdriveSmartSync('online_reconnect'),800);
+      });
+    }else setTimeout(()=>gdriveSmartSync('online_reconnect'),800);
+  }
   updatePendingSyncChip();
 });
 window.addEventListener('offline',()=>{
@@ -4862,7 +5006,18 @@ let gisLoaded=false;
 let googleApisLoadingPromise=null;
 let tokenClient;
 
-function gdriveRefreshAccessToken(){
+function gdriveSaveTokenExpiry(expiresInSeconds){
+  const sec=typeof expiresInSeconds==='number'&&expiresInSeconds>0?expiresInSeconds:3600;
+  localStorage.setItem('gdrive_token_expiry',String(Date.now()+sec*1000));
+}
+function gdriveIsTokenExpiringSoon(){
+  const exp=localStorage.getItem('gdrive_token_expiry');
+  if(!exp) return true;
+  const expiry=parseInt(exp,10);
+  return Date.now()>=expiry-1500000;
+}
+function gdriveRefreshAccessToken(opts){
+  const useConsent=opts&&opts.useConsentPrompt===true;
   return new Promise((resolve,reject)=>{
     const cfg=getGdriveConfig();
     if(!cfg.clientId||!cfg.scopes){reject(new Error('Configuración Google Drive incompleta'));return;}
@@ -4877,6 +5032,8 @@ function gdriveRefreshAccessToken(){
         if(response&&response.access_token){
           gdriveToken=response.access_token;
           localStorage.setItem('gdrive_token',gdriveToken);
+          const exp=response.expires_in;
+          if(typeof exp==='number'&&exp>0)gdriveSaveTokenExpiry(exp);else gdriveSaveTokenExpiry(3600);
           if(typeof gapi!=='undefined'&&gapi.client)gapi.client.setToken({access_token:gdriveToken});
           resolve(gdriveToken);
         }else{
@@ -4884,7 +5041,7 @@ function gdriveRefreshAccessToken(){
         }
       }
     });
-    try{client.requestAccessToken({prompt:'none'});}catch(e){reject(e);}
+    try{client.requestAccessToken({prompt:useConsent?'consent':'none'});}catch(e){reject(e);}
   });
 }
 function getGdriveAuthErrorMessage(response){
@@ -5063,9 +5220,12 @@ document.getElementById('gdriveConnectBtn').addEventListener('click',()=>{
       if(response&&response.access_token){
         gdriveToken=response.access_token;
         localStorage.setItem('gdrive_token',gdriveToken);
+        const exp=response.expires_in;
+        if(typeof exp==='number'&&exp>0)gdriveSaveTokenExpiry(exp);else gdriveSaveTokenExpiry(3600);
         gapi.client.setToken({access_token:gdriveToken});
         showToast('Google Drive conectado','info');
         updateGDriveUI();
+        gdriveStartProactiveRefresh();
         setTimeout(()=>gdriveSmartSync('startup'),1000);
       }else{
         const errorMsg=getGdriveAuthErrorMessage(response);
@@ -5108,12 +5268,14 @@ document.getElementById('gdriveConfigSave').addEventListener('click',()=>{
 document.getElementById('gdriveDisconnectBtn').addEventListener('click',()=>{
   if(confirm('¿Desconectar Google Drive? Los datos locales se mantendrán.')){
     localStorage.removeItem('gdrive_token');
+    localStorage.removeItem('gdrive_token_expiry');
     localStorage.removeItem('gdrive_folder_id');
     localStorage.removeItem('gdrive_file_id');
     localStorage.removeItem('gdrive_last_sync');
     gdriveToken=null;
     gdriveFolderId=null;
     gdriveFileId=null;
+    if(gdriveProactiveRefreshTimer){ clearInterval(gdriveProactiveRefreshTimer); gdriveProactiveRefreshTimer=null; }
     if(gapiLoaded)gapi.client.setToken(null);
     updateGDriveUI();
     showToast('Google Drive desconectado','info');
@@ -5283,9 +5445,27 @@ async function gdriveReadRemoteState() {
   return { found: true, fileId, remoteCount, remoteLastUpdate, products: consolidated.products, history: consolidated.history || null };
 }
 
+function gdriveNormalizeErrorStatus(err){
+  if(!err) return 0;
+  if(typeof err.status==='number') return err.status;
+  const code=err.result&&err.result.error&&err.result.error.code;
+  return typeof code==='number'?code:0;
+}
+async function gdriveEnsureValidToken(){
+  if(!gdriveToken) return;
+  if(!gdriveIsTokenExpiringSoon()) return;
+  if(typeof gdriveTryRefreshToken==='function') await gdriveTryRefreshToken();
+  else {
+    try{ await loadGoogleAPIs(); await gdriveRefreshAccessToken({}); }catch(_){}
+  }
+}
 async function gdriveSmartSync(trigger = 'manual', opts = {}) {
   if(!gdriveToken || syncInProgress) return;
   syncInProgress = true;
+
+  await gdriveEnsureValidToken();
+  gdriveToken=localStorage.getItem('gdrive_token');
+  if(!gdriveToken){ syncInProgress=false; updateSyncStatusUI(); return; }
 
   const session = createSyncSession(trigger);
   addLog('SYNC_STARTED', {
@@ -5308,15 +5488,20 @@ async function gdriveSmartSync(trigger = 'manual', opts = {}) {
     try {
       remoteState = await gdriveReadRemoteState();
     } catch(err) {
+      const status = gdriveNormalizeErrorStatus(err);
+      if(status === 401 || status === 403) {
+        throw err;
+      }
+      const msg = (err && (err.message || (err.result && err.result.error && err.result.error.message) || String(err))) || 'Error desconocido';
       addLog('SYNC_ERROR', {
         sync_session_id: session.sync_session_id,
         trigger,
         reason: 'Error leyendo remoto',
-        error: err.message,
-        status: err && err.status ? err.status : null,
-        probable_cause: classifyHttpFailure((err&&err.status)||0, (err&&err.message)||'')
+        error: msg,
+        status: status || null,
+        probable_cause: classifyHttpFailure(status || 0, msg)
       });
-      finishSyncSession(session, 'error', 'error', 'Error leyendo estado remoto: ' + err.message, err.message);
+      finishSyncSession(session, 'error', 'error', 'Error leyendo estado remoto: ' + msg, msg);
       showToast('Error al leer Google Drive', 'info');
       return;
     }
@@ -5493,33 +5678,47 @@ async function gdriveSmartSync(trigger = 'manual', opts = {}) {
     updateGDriveUI();
 
   } catch(err) {
+    const status = gdriveNormalizeErrorStatus(err);
     console.error('Error sync:', err);
     addLog('SYNC_ERROR', {
       sync_session_id: session.sync_session_id,
       trigger,
       error: err.message,
-      status: err && err.status ? err.status : null,
-      probable_cause: classifyHttpFailure((err&&err.status)||0, (err&&err.message)||'')
+      status: status || null,
+      probable_cause: classifyHttpFailure(status||0, (err&&err.message)||'')
     });
-    if(err.status === 401 && !opts.retriedAfter401) {
+    if((status===401||status===403) && !opts.retriedAfter401 && !opts.retriedAfter403) {
       try {
-        await gdriveRefreshAccessToken();
-        return gdriveSmartSync(trigger, { retriedAfter401: true });
+        await gdriveRefreshAccessToken({});
+        return gdriveSmartSync(trigger, { retriedAfter401: status===401, retriedAfter403: status===403 });
       } catch(refreshErr) {
-        finishSyncSession(session, 'error', 'error', 'Error: ' + err.message, err.message);
-        localStorage.removeItem('gdrive_token');
-        gdriveToken = null;
-        updateGDriveUI();
-        showToast('Sesión Google Drive expirada. Reconecta.', 'info');
-        return;
+        try {
+          await gdriveRefreshAccessToken({ useConsentPrompt: true });
+          return gdriveSmartSync(trigger, { retriedAfter401: true, retriedAfter403: true });
+        } catch(consentErr) {
+          if(status===401) {
+            finishSyncSession(session, 'error', 'error', 'Error: ' + err.message, err.message);
+            localStorage.removeItem('gdrive_token');
+            localStorage.removeItem('gdrive_token_expiry');
+            gdriveToken = null;
+            if(gdriveProactiveRefreshTimer){ clearInterval(gdriveProactiveRefreshTimer); gdriveProactiveRefreshTimer=null; }
+            updateGDriveUI();
+            showToast('Sesión Google Drive expirada. Pulsa Conectar para renovar.', 'info');
+            return;
+          }
+        }
       }
     }
     finishSyncSession(session, 'error', 'error', 'Error: ' + err.message, err.message);
-    if(err.status === 401 || err.status === 403) {
+    if(status===401) {
       localStorage.removeItem('gdrive_token');
+      localStorage.removeItem('gdrive_token_expiry');
       gdriveToken = null;
+      if(gdriveProactiveRefreshTimer){ clearInterval(gdriveProactiveRefreshTimer); gdriveProactiveRefreshTimer=null; }
       updateGDriveUI();
       showToast('Sesión Google Drive expirada. Reconecta.', 'info');
+    } else if(status===403) {
+      showToast('Error de permisos o cuota en Drive. Revisa el archivo.', 'info');
     } else {
       showToast('Error sincronizando: ' + err.message, 'info');
     }
@@ -5764,6 +5963,63 @@ if(gdriveToken&&checkSession()){
     });
   });
 }
+
+// Renovación proactiva: intenta silenciosa, si falla abre popup de Google (evita buscar "Conectar")
+async function gdriveTryRefreshToken(){
+  try{
+    await loadGoogleAPIs();
+    await gdriveRefreshAccessToken({});
+    gdriveToken=localStorage.getItem('gdrive_token');
+    if(typeof updateGDriveUI==='function')updateGDriveUI();
+    if(getPendingSyncCount&&getPendingSyncCount()>0)setTimeout(()=>gdriveSmartSync('token_refreshed'),500);
+    return true;
+  }catch(_){
+    try{
+      await gdriveRefreshAccessToken({useConsentPrompt:true});
+      gdriveToken=localStorage.getItem('gdrive_token');
+      if(typeof updateGDriveUI==='function')updateGDriveUI();
+      showToast('Google Drive reconectado','info');
+      setTimeout(()=>gdriveSmartSync('token_refreshed'),500);
+      return true;
+    }catch(__){ return false; }
+  }
+}
+
+// Renovación proactiva del token cada 2 min (evita desconexión por caducidad)
+let gdriveProactiveRefreshTimer=null;
+function gdriveStartProactiveRefresh(){
+  if(gdriveProactiveRefreshTimer) return;
+  gdriveProactiveRefreshTimer=setInterval(async()=>{
+    if(!gdriveToken||syncInProgress) return;
+    if(!gdriveIsTokenExpiringSoon()) return;
+    await gdriveTryRefreshToken();
+  },120000);
+}
+if(gdriveToken)gdriveStartProactiveRefresh();
+
+// Renovar token al volver a la pestaña (evita desconexión si el usuario estuvo en otra app)
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState!=='visible') return;
+  if(!gdriveToken||syncInProgress) return;
+  if(typeof gdriveIsTokenExpiringSoon!=='function'||!gdriveIsTokenExpiringSoon()) return;
+  gdriveTryRefreshToken();
+});
+
+// Sincronizar token entre pestañas
+window.addEventListener('storage',(e)=>{
+  if(e.key==='gdrive_token'){
+    const next=localStorage.getItem('gdrive_token');
+    if(next!==gdriveToken){
+      gdriveToken=next;
+      if(typeof updateGDriveUI==='function')updateGDriveUI();
+      if(gdriveToken&&!gdriveProactiveRefreshTimer)gdriveStartProactiveRefresh();
+      else if(!gdriveToken&&gdriveProactiveRefreshTimer){
+        clearInterval(gdriveProactiveRefreshTimer);
+        gdriveProactiveRefreshTimer=null;
+      }
+    }
+  }
+});
 
 // Init
 if(checkSession()){if(Array.isArray(P)&&P.some(p=>p._src==='app'&&!p._updated_at))saveDB({changeType:'migration',origin:'init'});render();updateGDriveUI();updateSyncStatusUI();if(photoQueue.length&&navigator.onLine&&getApiKey())setTimeout(processQueue,1000)}
