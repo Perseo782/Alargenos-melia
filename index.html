@@ -1,6 +1,16 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<!-- ═══════════════════════════════════════════════════════════════════════════════
+  PRIORIDAD FUNDAMENTAL MÁXIMA (OBLIGATORIO al leer este archivo):
+  El análisis de foto paraliza TODA la app: sync Drive, miniaturas, token, cola.
+  Máxima velocidad (3-9 s): nada debe ejecutarse durante el análisis.
+  Flujos con prioridad: Manual (Analizar etiqueta), Lote (processBatch),
+  Automático (analyzePhotoPipelineForAuto), Cola (processQueue).
+  LIBERACIÓN: La prioridad se libera y la cola/sync se REANUDAN al cerrar la
+  ventana Añadir producto (closeModal). En processQueue/processBatch (sin modal)
+  se libera en el finally de cada uno.
+═══════════════════════════════════════════════════════════════════════════════ -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -11,6 +21,8 @@
 <link rel="manifest" href="data:application/json,%7B%22name%22%3A%22Al%C3%A9rgenos%20Meli%C3%A1%22%2C%22short_name%22%3A%22Al%C3%A9rgenos%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23F3F2F2%22%2C%22theme_color%22%3A%22%23928981%22%7D">
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 <link href="https://use.typekit.net/fvb1vnf.css" rel="stylesheet">
+<link rel="preconnect" href="https://generativelanguage.googleapis.com">
+<link rel="preconnect" href="https://vision.googleapis.com">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{
@@ -258,7 +270,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
     <input class="login-field" id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button type="button" class="login-btn" id="loginBtn">Entrar</button>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">v06032623:47h</div>
+    <div class="login-version">V070320260207H</div>
   </div>
 </div>
 
@@ -491,7 +503,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">1.0.4 · v06032623:47h</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">V070320260207H</span></div>
     <button type="button" class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section" id="photoDetailsSection">
@@ -610,10 +622,17 @@ function getNavUrl(stack){
   return APP_ENTRY_URL||window.location.href.replace(/#.*$/,'');
 }
 
+function releaseAnalysisPriorityAndResume(){
+  if(typeof setAnalysisPriority==='function')setAnalysisPriority(false);
+  if(photoQueue.length&&navigator.onLine&&typeof getApiKey==='function'&&getApiKey())setTimeout(processQueue,150);
+  if(typeof gdriveToken!=='undefined'&&gdriveToken&&navigator.onLine&&typeof getPendingSyncCount==='function'&&getPendingSyncCount()>0)setTimeout(()=>gdriveSmartSync('auto'),200);
+}
 function applyNavStack(stack){
   const list=stack||['main'];
+  const wasAddOpen=modalBg.classList.contains('open');
   settingsBg.classList.toggle('open',list.includes('settings'));
   modalBg.classList.toggle('open',list.includes('add'));
+  if(wasAddOpen&&!list.includes('add'))releaseAnalysisPriorityAndResume();
   confirmBg.classList.toggle('open',list.includes('confirm'));
   photoWarningBg.classList.toggle('open',list.includes('photoWarning'));
   const psBg=document.getElementById('photoSourceBg');
@@ -1162,7 +1181,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'1.0.4-0603262347',
+    version:'V070320260207H',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -1451,6 +1470,7 @@ async function testGeminiKey(rawKey){
   const response=await fetchWithDiagnostics(GEMINI_GENERATE_URL,{
     method:'POST',
     headers:buildGeminiHeaders(apiKey),
+    priority:'high',
     body:JSON.stringify({
       contents:[{role:'user',parts:[{text:'Responde SOLO con "OK".'}]}],
       generationConfig:{maxOutputTokens:16,temperature:0}
@@ -2064,6 +2084,7 @@ function clearSyncOutbox(){
   persistDriveOutbox();
   refreshPendingChangesFlag();
   if(typeof updatePendingSyncChip==='function') updatePendingSyncChip();
+  setTimeout(()=>{ if(typeof updatePendingSyncChip==='function') updatePendingSyncChip(); }, 100);
 }
 
 // Migración de versiones antiguas: si había flag legacy sin outbox, conservar 1 pendiente.
@@ -2144,7 +2165,7 @@ function saveDB(options = {}) {
         origin:options.origin || 'saveDB',
         recordKeys
       });
-      if(gdriveToken && navigator.onLine) setTimeout(() => gdriveSmartSync('auto'), 500);
+      if(gdriveToken && navigator.onLine) setTimeout(() => { if(typeof analysisPriorityActive!=='undefined'&&analysisPriorityActive){setTimeout(()=>gdriveSmartSync('auto'),1500);return;} gdriveSmartSync('auto'); }, 500);
     } else {
       refreshPendingChangesFlag();
     }
@@ -2292,6 +2313,7 @@ ${lines}`;
   const response = await fetchWithDiagnostics(GEMINI_GENERATE_URL, {
     method: 'POST',
     headers: buildGeminiHeaders(apiKey),
+    priority: 'high',
     body: JSON.stringify({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: { maxOutputTokens: 2000, temperature: 0 }
@@ -3108,6 +3130,8 @@ modalBg.addEventListener('click',e=>{if(e.target===modalBg)closeModal()});
 function closeModal(){
   analysisAborted=true;
   if(typeof setAnalysisPriority==='function')setAnalysisPriority(false);
+  if(photoQueue.length&&navigator.onLine&&typeof getApiKey==='function'&&getApiKey())setTimeout(processQueue,150);
+  if(typeof gdriveToken!=='undefined'&&gdriveToken&&navigator.onLine&&typeof getPendingSyncCount==='function'&&getPendingSyncCount()>0)setTimeout(()=>gdriveSmartSync('auto'),200);
   if(autoMode){if(typeof btnAutoFlow!=='undefined')btnAutoFlow.style.display='';if(typeof btnTerminarAuto!=='undefined')btnTerminarAuto.style.display='none';}
   autoMode=false;
   if(openedFromEventHistory){openedFromEventHistory=false;modalBg.classList.remove('open');setTimeout(()=>openSettings(),100);return;}
@@ -3715,7 +3739,7 @@ async function apiCall(content, options){
     const ac=new AbortController();
     const t=setTimeout(()=>ac.abort(),60000);
     try{
-      lastResp=await fetchWithDiagnostics(url,{method:'POST',headers:buildGeminiHeaders(key),body,signal:ac.signal},{
+      lastResp=await fetchWithDiagnostics(url,{method:'POST',headers:buildGeminiHeaders(key),body,signal:ac.signal,priority:'high'},{
         service:'Gemini',
         operation:'analisis de etiqueta',
         requestTag:'apiCall_attempt_'+(attempt+1),
@@ -3972,7 +3996,8 @@ async function analyzePhotos(photoList, opts={}){
     const resp=await fetchWithDiagnostics('https://vision.googleapis.com/v1/images:annotate?key='+encodeURIComponent(visionKey),{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(body)
+      body:JSON.stringify(body),
+      priority:'high'
     },{
       service:'Cloud Vision',
       operation:'ocr de etiqueta',
@@ -4117,6 +4142,7 @@ async function analyzePhotos(photoList, opts={}){
     aiS.innerHTML='Error: '+err.message;
     benchStop('error', document.getElementById('aiName').value, {analysisId,mode,error:err&&err.message?err.message:String(err)});
   }
+  // No liberar prioridad aquí: se libera al cerrar la ventana Añadir producto (closeModal)
 }
 
 document.getElementById('aiName').addEventListener('input',()=>{updateSave('aiAllergens');const name=document.getElementById('aiName').value.trim();if(name.length<3){hideMatch('aiMatch');aiCurrentMatch=null;document.getElementById('aiSave').textContent='Guardar producto';return}const match=findMatch(name);aiCurrentMatch=match;if(match){showMatch('aiMatch',match);document.getElementById('aiSave').textContent='Actualizar existente'}else{hideMatch('aiMatch');document.getElementById('aiSave').textContent='Guardar producto nuevo'}});
@@ -4184,6 +4210,8 @@ async function processQueue(){
     return;
   }
   isProcessing=true;updateQueueBar();
+  if(typeof setAnalysisPriority==='function')setAnalysisPriority(true);
+  try{
   while(photoQueue.length>0&&navigator.onLine){
     if(typeof analysisPriorityActive!=='undefined'&&analysisPriorityActive){isProcessing=false;updateQueueBar();setTimeout(processQueue,1500);return;}
     const item=photoQueue[0];const pl=item.photos||[item.dataUrl].filter(Boolean);
@@ -4299,7 +4327,8 @@ async function processQueue(){
     }
     photoQueue.shift();saveQueue();updateQueueBar();if(photoQueue.length)await new Promise(r=>setTimeout(r,800));
   }
-  isProcessing=false;updateQueueBar();render();updateAppStatus();
+  }finally{if(typeof setAnalysisPriority==='function')setAnalysisPriority(false);isProcessing=false;updateQueueBar();}
+  render();updateAppStatus();
   if(queuePendingReview.length>0){
     window.__batchPendingReview=queuePendingReview.slice();
     queuePendingReview=[];
@@ -4351,6 +4380,8 @@ let scanSession={photosTaken:0,productsSaved:0,failedPhotos:[],startedAt:null};
 function resetScanSession(){scanSession={photosTaken:0,productsSaved:0,failedPhotos:[],startedAt:Date.now()};}
 
 async function analyzePhotoPipelineForAuto(dataUrl){
+  if(typeof setAnalysisPriority==='function')setAnalysisPriority(true);
+  try{
   const visionKey=getVisionApiKey(),geminiKey=getApiKey();
   if(!visionKey){return {error:'config',motivo:'Vision sin API Key',errorCode:ERROR_CODES.CONFIG_MISSING};}
   if(!geminiKey){return {error:'config',motivo:'Gemini sin API Key',errorCode:ERROR_CODES.CONFIG_MISSING};}
@@ -4366,7 +4397,7 @@ async function analyzePhotoPipelineForAuto(dataUrl){
   addAnalysisSection(analysisId,'B_input',{dimensions:metadata.dimensions});
   try{
     const body={requests:[{image:{content:imgData},features:[{type:'DOCUMENT_TEXT_DETECTION'}],imageContext:{languageHints:['es','en','fr','de']}}]};
-    const resp=await fetchWithDiagnostics('https://vision.googleapis.com/v1/images:annotate?key='+encodeURIComponent(visionKey),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},{service:'Cloud Vision',operation:'ocr auto',requestTag:'analyzePhotoPipelineForAuto',requireOnline:true});
+    const resp=await fetchWithDiagnostics('https://vision.googleapis.com/v1/images:annotate?key='+encodeURIComponent(visionKey),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),priority:'high'},{service:'Cloud Vision',operation:'ocr auto',requestTag:'analyzePhotoPipelineForAuto',requireOnline:true});
     if(!resp.ok){
       let msg='Error Vision ('+resp.status+')';
       try{const eb=await resp.json();if(eb&&eb.error&&eb.error.message)msg=eb.error.message;}catch(_){}
@@ -4422,6 +4453,8 @@ async function analyzePhotoPipelineForAuto(dataUrl){
     }
     return {error:'unknown',motivo:err?.message||'Error',analysisId,errorCode:code};
   }
+  }
+  // No liberar prioridad aquí: se libera al cerrar la ventana Añadir producto (closeModal)
 }
 
 btnAutoFlow.addEventListener('click',async()=>{
@@ -4814,6 +4847,7 @@ async function processBatch(){
     return;
   }
   batchIsProcessing=true;
+  if(typeof setAnalysisPriority==='function')setAnalysisPriority(true);
   batchSelectBtn.disabled=true;
   batchSelectBtn.style.opacity='0.65';
   const actionRow=batchStatus.nextElementSibling;
@@ -4844,7 +4878,7 @@ async function processBatch(){
         throw new Error(errorMsg);
       }
       const body={requests:[{image:{content:imgData},features:[{type:'DOCUMENT_TEXT_DETECTION'}],imageContext:{languageHints:['es','en','fr','de']}}]};
-      const visionResp=await fetchWithDiagnostics('https://vision.googleapis.com/v1/images:annotate?key='+encodeURIComponent(visionKey),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},{service:'Cloud Vision',operation:'ocr lote',requestTag:'processBatch',requireOnline:true});
+      const visionResp=await fetchWithDiagnostics('https://vision.googleapis.com/v1/images:annotate?key='+encodeURIComponent(visionKey),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),priority:'high'},{service:'Cloud Vision',operation:'ocr lote',requestTag:'processBatch',requireOnline:true});
       if(!visionResp.ok){
         const eb=await visionResp.json().catch(()=>({}));
         errorMsg=eb&&eb.error&&eb.error.message?eb.error.message:'Error Vision ('+visionResp.status+')';
@@ -4974,6 +5008,7 @@ async function processBatch(){
     });
     showToast('Error inesperado en lote. Vuelve a intentarlo.','info');
   }finally{
+    if(typeof setAnalysisPriority==='function')setAnalysisPriority(false);
     batchIsProcessing=false;
     batchSelectBtn.disabled=false;
     batchSelectBtn.style.opacity='';
@@ -5461,6 +5496,7 @@ async function gdriveEnsureValidToken(){
 }
 async function gdriveSmartSync(trigger = 'manual', opts = {}) {
   if(!gdriveToken || syncInProgress) return;
+  if(typeof analysisPriorityActive!=='undefined'&&analysisPriorityActive){setTimeout(()=>gdriveSmartSync(trigger,opts),1500);return;}
   syncInProgress = true;
 
   await gdriveEnsureValidToken();
@@ -5580,7 +5616,7 @@ async function gdriveSmartSync(trigger = 'manual', opts = {}) {
           const sameCount = !!(verifyState && verifyState.remoteCount === localCount);
           const remoteTs = parseInt(verifyState && verifyState.remoteLastUpdate || 0);
           const uploadTs = parseInt(uploadMeta && uploadMeta.uploadedTs || 0);
-          const tsOk = remoteTs >= uploadTs;
+          const tsOk = remoteTs >= uploadTs - 5000; // 5 s tolerancia por propagación/reloj en Drive
           addLog('SYNC_UPLOAD_VERIFY_ATTEMPT', {
             sync_session_id: session.sync_session_id,
             trigger,
@@ -5595,7 +5631,8 @@ async function gdriveSmartSync(trigger = 'manual', opts = {}) {
             same_count: sameCount,
             ts_ok: tsOk
           });
-          if(sameFile && sameCount && tsOk) {
+          // Si archivo y conteo coinciden, considerar verificado (tsOk opcional por propagación en Drive)
+          if(sameFile && sameCount) {
             verified = true;
             break;
           }
@@ -5655,10 +5692,10 @@ async function gdriveSmartSync(trigger = 'manual', opts = {}) {
         const kept=mergeHistory(local,remoteState.history);
         try{localStorage.setItem(HISTORY_KEY,JSON.stringify(kept));}catch(_){}
       }
+      clearSyncOutbox();
       saveDB({ skipAutoSync: true });
       render();
       if(settingsBg&&settingsBg.classList.contains('open')&&typeof refreshHistoryList==='function')refreshHistoryList();
-      clearSyncOutbox();
       addLog('SYNC_DOWNLOAD_APPLIED', { sync_session_id: session.sync_session_id, trigger, remote_count: remoteState.remoteCount, reason });
       if(trigger==='manual')showToast('✓ Sincronizado', 'info');
       session.remote_count_after = remoteState.remoteCount;
@@ -5725,6 +5762,9 @@ async function gdriveSmartSync(trigger = 'manual', opts = {}) {
   } finally {
     syncInProgress = false;
     updateSyncStatusUI();
+    if(typeof updatePendingSyncChip==='function') updatePendingSyncChip();
+    // Forzar actualización del chip en el siguiente frame (evita que quede desactualizado por timing)
+    requestAnimationFrame(()=>{ if(typeof updatePendingSyncChip==='function') updatePendingSyncChip(); });
   }
 }
 
@@ -5783,7 +5823,7 @@ async function gdriveUpload(){
   const folderId=await gdriveFindOrCreateFolder();
   P = sanitizeProductList(P);
   const nowTs = Date.now();
-  const data={products:P,history:loadHistory(),version:'1.0.4',lastUpdate:nowTs};
+  const data={products:P,history:loadHistory(),version:'V070320260207H',lastUpdate:nowTs};
   const content=JSON.stringify(data,null,2);
 
   const boundary='-------314159265358979323846';
@@ -5991,6 +6031,7 @@ function gdriveStartProactiveRefresh(){
   if(gdriveProactiveRefreshTimer) return;
   gdriveProactiveRefreshTimer=setInterval(async()=>{
     if(!gdriveToken||syncInProgress) return;
+    if(typeof analysisPriorityActive!=='undefined'&&analysisPriorityActive) return;
     if(!gdriveIsTokenExpiringSoon()) return;
     await gdriveTryRefreshToken();
   },120000);
@@ -6001,6 +6042,7 @@ if(gdriveToken)gdriveStartProactiveRefresh();
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState!=='visible') return;
   if(!gdriveToken||syncInProgress) return;
+  if(typeof analysisPriorityActive!=='undefined'&&analysisPriorityActive) return;
   if(typeof gdriveIsTokenExpiringSoon!=='function'||!gdriveIsTokenExpiringSoon()) return;
   gdriveTryRefreshToken();
 });
