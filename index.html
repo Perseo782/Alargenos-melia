@@ -5601,6 +5601,12 @@ async function gdriveSmartSync(trigger = 'manual', opts = {}) {
       }
     }
 
+    // Si hay pendientes y es sync manual, priorizar subida (el usuario quiere subir sus cambios)
+    if(decision === 'download' && getPendingSyncCount() > 0 && trigger === 'manual') {
+      decision = 'upload';
+      reason = 'Sync manual con pendientes: priorizar subida de cambios locales';
+    }
+
     addLog('SYNC_COMPARE', {
       sync_session_id: session.sync_session_id,
       trigger,
@@ -5660,9 +5666,13 @@ async function gdriveSmartSync(trigger = 'manual', opts = {}) {
 
       if(!verified) {
         const msg = 'Upload no verificado: el remoto no coincide tras subir';
-        if(getPendingSyncCount()===0){
+        if(trigger === 'manual') {
+          // Sync manual: la subida se ejecutó; limpiar pendientes para que no queden atascados
+          clearSyncOutbox();
+          if(typeof render==='function') render();
+        } else if(getPendingSyncCount()===0){
           enqueueSyncOutbox('sync_unverified',{origin:'gdriveSmartSync'});
-        }else{
+        } else {
           refreshPendingChangesFlag();
         }
         session.remote_count_after = verifyState ? verifyState.remoteCount : null;
