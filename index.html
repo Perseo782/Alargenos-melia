@@ -13,14 +13,13 @@
 ═══════════════════════════════════════════════════════════════════════════════ -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#928981">
 <meta name="description" content="Gestión de alérgenos alimentarios para establecimientos Meliá">
 <title>Alérgenos · Meliá</title>
 <link rel="manifest" href="data:application/json,%7B%22name%22%3A%22Al%C3%A9rgenos%20Meli%C3%A1%22%2C%22short_name%22%3A%22Al%C3%A9rgenos%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23F3F2F2%22%2C%22theme_color%22%3A%22%23928981%22%7D">
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
-<link href="https://use.typekit.net/fvb1vnf.css" rel="stylesheet">
 <link rel="preconnect" href="https://generativelanguage.googleapis.com">
 <link rel="preconnect" href="https://vision.googleapis.com">
 <style>
@@ -595,19 +594,10 @@ document.getElementById('loginForm').addEventListener('submit',e=>{e.preventDefa
 document.getElementById('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
 document.getElementById('loginUser').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('loginPass').focus()});
 
-function norm(s){
-  const x=(''+(s||'')).replace(/\s/g,'').replace(/\r|\n/g,'');
-  return x.normalize?x.normalize('NFKC'):x;
-}
 function doLogin(){
   const u=document.getElementById('loginUser').value.trim().toLowerCase();
-  const p=norm(document.getElementById('loginPass').value);
-  const stored=USERS[u];
-  const storedNorm=stored?norm(stored):'';
-  const storedNoBackslash=stored?norm(stored.replace(/\\./g,'.')):'';
-  const pNoSlash=p.replace(/\\/g,'');
-  const storedNoSlash=storedNorm.replace(/\\/g,'');
-  if(stored&&(stored===p||storedNorm===p||storedNoBackslash===p||pNoSlash===storedNoSlash)){
+  const p=document.getElementById('loginPass').value.trim();
+  if(USERS[u]&&USERS[u]===p){
     try{localStorage.setItem('alerg_session',u);}catch(e){document.getElementById('loginError').textContent='Error: almacenamiento bloqueado. Abre desde un servidor (http) o desactiva modo privado.';return;}
     loginScreen.classList.add('hidden');appEl.classList.add('show');
     document.getElementById('settingsUser').textContent=u;
@@ -4474,7 +4464,7 @@ async function analyzePhotoPipelineForAuto(dataUrl){
     }
     return {error:'unknown',motivo:err?.message||'Error',analysisId,errorCode:code};
   }
-  }
+  }catch(e){throw e;}
   // No liberar prioridad aquí: se libera al cerrar la ventana Añadir producto (closeModal)
 }
 
