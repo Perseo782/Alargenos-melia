@@ -3313,7 +3313,7 @@ let matchTimer,manualCurrentMatch=null;const manualNameInput=document.getElement
 manualNameInput.addEventListener('input',()=>{updateSave('manualAllergens');clearTimeout(matchTimer);matchTimer=setTimeout(()=>{if(editMode)return;const name=manualNameInput.value.trim();if(name.length<3){hideMatch('manualMatch');manualCurrentMatch=null;document.getElementById('manualSave').textContent='Guardar producto';return}const match=findMatch(name);manualCurrentMatch=match;if(match){showMatch('manualMatch',match);document.getElementById('manualSave').textContent='Actualizar existente'}else{hideMatch('manualMatch');document.getElementById('manualSave').textContent='Guardar producto nuevo'}},300)});
 manualNameInput.addEventListener('blur',()=>{const v=manualNameInput.value.trim();if(v){const c=autoCorrectName(v);if(c!==v){manualNameInput.value=c;showToast('Ortografía corregida','info')}}});
 
-document.getElementById('manualSave').addEventListener('click',()=>{let name=manualNameInput.value.trim();if(!name)return;name=autoCorrectName(name);const al=sortAllergens(getSelected('manualAllergens'));if(editMode&&editIdx>=0){const before={n:P[editIdx].n,a:[...P[editIdx].a]};P[editIdx].n=name;P[editIdx].a=al;P[editIdx]._src='app';P[editIdx]._updated_at=new Date().toISOString();pushToHistory(name,'modified');saveDB({changeType:'edit_product',origin:'manualSave',recordKeys:[before.n,name]});clearFlagOnSave(name,before,{n:name,a:[...al]});lastSavedName=name;render();showToast(`✓ "${name}" actualizado`,'update')}else if(manualCurrentMatch){const r=mergeProduct(manualCurrentMatch.index,name,al);logAuditEvent('merge_save',{target:manualCurrentMatch.product.n, merged_name:name, added_allergens:r.added});lastSavedName=manualCurrentMatch.product.n;render();showToast(r.added.length?`✓ "${manualCurrentMatch.product.n}" · +${r.added.length} alérgeno${r.added.length>1?'s':''}`:`✓ "${manualCurrentMatch.product.n}" sin cambios`,'update')}else{addNewProduct(name,al);logAuditEvent('new_product',{product:name, allergens:al});lastSavedName=name;render();showToast(`✓ "${name}" añadido`,'new')}closeModal();if(window.__batchReviewCorrecting){window.__batchReviewCorrecting=false;const p=window.__batchPendingReview||[];p.shift();if(p.length>0){if(typeof navPush==='function')navPush('batchReview');showNextBatchPending()}else closeModal();}});
+document.getElementById('manualSave').addEventListener('click',()=>{let name=manualNameInput.value.trim();if(!name)return;name=autoCorrectName(name);const al=sortAllergens(getSelected('manualAllergens'));if(editMode&&editIdx>=0){const before={n:P[editIdx].n,a:[...P[editIdx].a]};P[editIdx].n=name;P[editIdx].a=al;P[editIdx]._src='app';P[editIdx]._updated_at=new Date().toISOString();pushToHistory(name,'modified');saveDB({changeType:'edit_product',origin:'manualSave',recordKeys:[before.n,name]});clearFlagOnSave(name,before,{n:name,a:[...al]});closeModal();lastSavedName=name;render();showToast(`✓ "${name}" actualizado`,'update')}else if(manualCurrentMatch){const r=mergeProduct(manualCurrentMatch.index,name,al);logAuditEvent('merge_save',{target:manualCurrentMatch.product.n, merged_name:name, added_allergens:r.added});closeModal();lastSavedName=manualCurrentMatch.product.n;render();showToast(r.added.length?`✓ "${manualCurrentMatch.product.n}" · +${r.added.length} alérgeno${r.added.length>1?'s':''}`:`✓ "${manualCurrentMatch.product.n}" sin cambios`,'update')}else{addNewProduct(name,al);logAuditEvent('new_product',{product:name, allergens:al});if(q)q.value='';closeModal();lastSavedName=name;render();showToast(`✓ "${name}" añadido`,'new')}if(window.__batchReviewCorrecting){window.__batchReviewCorrecting=false;const p=window.__batchPendingReview||[];p.shift();if(p.length>0){if(typeof navPush==='function')navPush('batchReview');showNextBatchPending()}else closeModal();}});
 function addNewProduct(name,al,opts){
   const nk=norm(name);
   let idx=P.findIndex(p=>norm(p.n)>nk);
@@ -3392,6 +3392,7 @@ document.getElementById('batchSummaryOk').addEventListener('click',()=>{
     if(successNames.length>0){
       navReplace(['main']);
       applyNavStack(['main']);
+      if(typeof q!=='undefined'&&q)q.value='';
       setTimeout(()=>runBatchScrollTour(successNames),300);
     }else navBack();
   }
@@ -3479,8 +3480,18 @@ function batchReviewConfirm(){
     addNewProduct(displayName,allA,{photoDataUrl:item.dataUrl});
     showToast(`✓ "${displayName}" añadido`,'new');
   }
-  lastSavedName=displayName;save();render();updateAppStatus();
-  if(pending.length===0){ navReplace(['main']); applyNavStack(['main']); return; }
+  save();
+  if(pending.length===0){
+    if(typeof q!=='undefined'&&q)q.value='';
+    lastSavedName=displayName;
+    batchReviewModalBg.classList.remove('open');
+    navReplace(['main']);
+    applyNavStack(['main']);
+    render();
+    updateAppStatus();
+    return;
+  }
+  render();updateAppStatus();
   showNextBatchPending();
 }
 function batchReviewSkip(){
@@ -4265,7 +4276,7 @@ document.getElementById('aiSave').addEventListener('click',()=>{
       addAnalysisSection(analysisId,'G_saved_result',{product_index:aiCurrentMatch.index,product_name:name,alergenos:P[aiCurrentMatch.index].a,trazas:[],timestamp:analysisTimestamp,declarable:true});
       finishPhotoAnalysis(analysisId);
     }
-    save(); lastSavedName=aiCurrentMatch.product.n;render();
+    save(); closeModal(); lastSavedName=aiCurrentMatch.product.n;render();
     showToast(r.added.length?`✓ "${aiCurrentMatch.product.n}" · +${r.added.length} alérgeno${r.added.length>1?'s':''}`:`✓ "${aiCurrentMatch.product.n}" verificado`,'update')
   }else{
     addNewProduct(name,al,analysisId?{analysisId,analysisTimestamp,photoDataUrl:photos[1]||photos[0]}:{photoDataUrl:photos[1]||photos[0]});
@@ -4282,10 +4293,9 @@ document.getElementById('aiSave').addEventListener('click',()=>{
       }
       save();
     }
-    lastSavedName=name;render();showToast(`✓ "${name}" añadido`,'new')
+    if(typeof q!=='undefined'&&q)q.value=''; closeModal(); lastSavedName=name;render();showToast(`✓ "${name}" añadido`,'new')
   }
   window.__lastAnalysisId=null;
-  closeModal()
 });
 
 const queueBar=document.getElementById('queueBar'),queueText=document.getElementById('queueText'),queueDot=document.getElementById('queueDot');
