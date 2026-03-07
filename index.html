@@ -279,7 +279,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
       <button type="submit" class="login-btn" id="loginBtn">Entrar</button>
     </form>
     <div class="login-error" id="loginError"></div>
-    <div class="login-version">V070320260207H</div>
+    <div class="login-version">V070320261434H</div>
   </div>
 </div>
 
@@ -512,7 +512,7 @@ html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--t
   <div class="settings-section">
     <h3>Base de datos</h3>
     <div class="settings-row"><span class="settings-label">Productos</span><span class="settings-val" id="settingsCount">0</span></div>
-    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">V070320260207H</span></div>
+    <div class="settings-row"><span class="settings-label">Versión</span><span class="settings-val">V070320261434H</span></div>
     <button type="button" class="save-btn" id="exportExcelBtn" style="background:var(--warm8-80)">Exportar Excel</button>
   </div>
   <div class="settings-section" id="photoDetailsSection">
@@ -1254,7 +1254,7 @@ function exportDiagnostics(){
   };
   const diagnostic={
     app:'Alérgenos Meliá',
-    version:'V070320260207H',
+    version:'V070320261434H',
     timestamp_export:new Date().toISOString(),
     environment:env,
     state:state,
@@ -1672,8 +1672,9 @@ function buildResultFromOcrText(rawText){
     const u=(pesoSimple[2]||'').toLowerCase();
     const unit=/\bk(?:g|ilo)?/i.test(u)||u==='k'?'kg':(u||'g');
     const cand=`${pesoSimple[1]} ${unit}`.slice(0,22);
-    const es100gTablaNutricional=(/^100\s*g$/i.test(cand)||/^100g$/i.test(cand))&&/per\s+100|por\s+100|pour\s+100|100\s*g\s*(?:of\s+)?(?:product|produit|prodotto)|valores?\s+.*100|nutritional.*100|edi\s+per\s+100\s*g/i.test(fullText);
-    if(!es100gTablaNutricional)peso_unidades=cand;
+    const es100gSolo=(/^100\s*g(?:r)?\.?$/i.test(cand));
+    if(es100gSolo) peso_unidades='';
+    else peso_unidades=cand;
   }
   return{
     nombre,
@@ -1762,6 +1763,8 @@ function fixNombreFromOcr(nombre, ocrText){
 /** Corrige peso solo cuando la IA devolvió un valor (formato europeo, multipack). Si la IA devolvió vacío, no inventar: devolver vacío. */
 function fixPesoFromOcr(aiPeso,ocrText){
   if(!(aiPeso||'').trim()) return aiPeso;
+  const pu=String(aiPeso||'').trim();
+  if(/^100\s*g(?:r)?\.?$/i.test(pu)) return '';
   const ocr=String(ocrText||'').trim();
   if(!ocr) return aiPeso;
   const multipack=ocr.match(/(\d+)\s*(?:u\.?|uds?\.?|unidades?)?\s*[x×*·]\s*(\d+)\s*(g|kg|ml|gr)?/i)||ocr.match(/(\d+)\s*[x×*·]\s*(\d+)\s*(g|kg|ml|gr)?/i)||ocr.match(/(\d+)[x×*·](\d+)\s*(g|kg|ml|gr)?/i);
@@ -2762,11 +2765,13 @@ function normalizeAIPhotoResult(obj){
     const n=parseFloat(raw.replace(',','.'));
     if(n>=0.01&&n<=999){out.peso_unidades=`${raw} kg`;nom=nom.replace(/\s+\d+(?:[.,]\d+)?\s*k(?:g|ilos?)?\b\s*$/i,'').trim();}
   }
+  if(/\s+100\s*g(?:r)?\.?\s*$/i.test(nom)){nom=nom.replace(/\s+100\s*g(?:r)?\.?\s*$/i,'').trim();if(!(out.peso_unidades||'').trim())out.peso_unidades='';}
   if(nom) nom=unitsToSpanish(toSpanishOrthography(nom));
   out.nombre=nom;
   let pu=unitsToSpanish((String(out.peso_unidades||'').trim())).replace(/\bmle\b/gi,'ml').replace(/\bge\b/gi,'g');
   pu=pu.replace(/(\d+(?:[.,]\d+)?)\s*(kilos?|kilo)\b/gi,'$1 kg').replace(/(\d+(?:[.,]\d+)?)\s*k\b(?!g)/gi,'$1 kg');
   if(pu&&!/\b(kgs?|g\b|ml|litros?|unidades?)\b|\d+\s*x\s*\d+/i.test(pu)&&/^\d{1,5}\.?\d*\s*$/.test(pu))pu='';
+  if(/^100\s*g(?:r)?\.?$/i.test(pu))pu='';
   out.peso_unidades=pu.slice(0,22);
   out.hallazgos_texto=Array.isArray(out.hallazgos_texto)?out.hallazgos_texto.map(x=>String(x||'').trim()).filter(Boolean):[];
   out.mapeo=Array.isArray(out.mapeo)?out.mapeo.map(m=>({texto:String((m&&m.texto)||'').trim(),alergeno:normalizeAllergen((m&&m.alergeno)||'')})).filter(m=>m.texto||m.alergeno).filter(m=>{const t=norm(m.texto);if(/\b(?:sin\s+gluten|gluten[\s-]?free|libre\s+de\s+gluten)\b/i.test(t)&&m.alergeno==='CEREALES')return false;if(/\b(?:sin\s+lactosa|lactose[\s-]?free)\b/i.test(t)&&m.alergeno==='LÁCTEO')return false;if(/\b(?:sin\s+huevo|egg[\s-]?free)\b/i.test(t)&&m.alergeno==='HUEVO')return false;if(/\b(?:sin\s+cacahuete|peanut[\s-]?free)\b/i.test(t)&&m.alergeno==='CACAHUETES')return false;return true;}):[];
@@ -3697,7 +3702,7 @@ NOMBRE ÚNICO: Si la etiqueta tiene varias variantes (nombre en varios idiomas o
 PESO_UNIDADES — GUÍA COMPLETA:
 DÓNDE BUSCAR: El peso/volumen del envase puede estar en cualquier parte: junto al nombre, en la base, lateral, tapa. Busca etiquetas como "Peso Neto", "Net Weight", "Poids Net", "Peso Netto", "Nettogewicht", "Peso Liquido", "Cantidad neta", "Contenido neto", "Net contents", "Inhalt", "Contenu", "Contenido", o el valor solo (1L, 1 kg) cerca del nombre.
 FORMATOS VÁLIDOS: Peso total (1 kg, 500 g, 1 litro, 1000 ml). Multipack (6 x 100 g, 15 u x 100g, N×M g). Unidades en español: litro/litros, kg, g, ml.
-QUÉ EXCLUIR — NUNCA uses como peso: (1) Códigos E (E-128, E-330, etc.) son aditivos. (2) Números de artículo/lote (Art.Nr., 37227). (3) Tabla nutricional: "por 100 g", "100 g", kcal, kJ — es referencia nutricional, NO peso del paquete. (4) Porcentajes en ingredientes (42%, 19%). (5) Números sueltos que formen parte de palabras o marcas (ej. "128" en "Garde d'Or" no es peso). (6) Valores de "por ración" o "por porción".
+QUÉ EXCLUIR — NUNCA uses como peso: (1) Códigos E (E-128, E-330, etc.) son aditivos. (2) Números de artículo/lote (Art.Nr., 37227). (3) REGLA GENERAL (aplica a TODOS los productos y etiquetas) — Cualquier valor de peso o capacidad que aparezca en el CONTEXTO de la tabla de información nutricional (valores por X g, por X ml, kcal, kJ, grasas, proteínas, etc.) es una REFERENCIA para calcular los valores nutricionales, NO el peso neto del envase. Identifica el contexto: si el valor está junto a "por 100 g", "per 100g", "valores por", "información nutricional", kcal, kJ, grasas, proteínas, hidratos, etc., es referencia nutricional. El peso neto real se indica en "Peso Neto", "Net Weight", "Poids Net", "Contenido neto". Si solo ves pesos en la sección nutricional, deja peso_unidades VACÍO. (4) Porcentajes en ingredientes (42%, 19%). (5) Números sueltos que formen parte de palabras o marcas. (6) Valores de "por ración" o "por porción".
 LÍQUIDOS: Salsas, caldos, bebidas suelen indicar litros o ml (1 L, 1L, 500 ml, 1 litro). Si ves claramente 1L o 1 litro en el envase, usa "1 litro".
 Si no localizas el peso con claridad o hay duda, deja peso_unidades vacío. Mejor vacío que erróneo.
 
@@ -3780,7 +3785,7 @@ QUÉ NO ES PESO — EXCLUIR SIEMPRE:
 - Códigos E (E-128, E-330): aditivos, NO peso.
 - Códigos de artículo (Art.Nr., código): NO peso.
 - Números sueltos junto a marcas (ej. "128" antes de "Garde"): NO peso.
-- Tabla nutricional: "por 100 g", "100 g" = referencia, NO peso. EXCEPCIÓN: "N x 100 g" SÍ.
+- REGLA GENERAL (aplica a TODOS los productos): Cualquier peso o capacidad en CONTEXTO de tabla nutricional = referencia, NO peso del envase. Si está junto a "por 100 g", "valores por", kcal, kJ, grasas, proteínas, etc., es referencia. El peso neto real está en "Peso Neto", "Net Weight", "Contenido neto". Si solo ves pesos en la sección nutricional, deja peso_unidades VACÍO. EXCEPCIÓN: multipack "N x M g" SÍ es válido.
 - Porcentajes (42%, 19%), kcal, kJ: NO peso.
 
 Si hay duda, deja peso_unidades vacío. Unidades en español: litro/litros, kg, g, ml.
@@ -5973,7 +5978,7 @@ async function gdriveUpload(){
   const folderId=await gdriveFindOrCreateFolder();
   P = sanitizeProductList(P);
   const nowTs = Date.now();
-  const data={products:P,history:loadHistory(),version:'V070320260207H',lastUpdate:nowTs};
+  const data={products:P,history:loadHistory(),version:'V070320261434H',lastUpdate:nowTs};
   const content=JSON.stringify(data,null,2);
 
   const boundary='-------314159265358979323846';
