@@ -1171,6 +1171,35 @@ function analyzeLogSeverity(){
   return {critical,mild};
 }
 
+function getCardSeverity(cardKey, apiConfigured, gdriveConnected){
+  const logs=(typeof diagnosticLogs==='undefined'?[]:diagnosticLogs).slice(0,30);
+  const cutoff=Date.now()-5*60*1000;
+  let critical=false,mild=false;
+  for(const l of logs){
+    const ts=l&&l.timestamp?new Date(l.timestamp).getTime():0;
+    if(ts<cutoff)continue;
+    const code=(l&&l.code)||'';
+    const txt=((l&&l.message)||'')+code+((l&&l.level)||'');
+    const details=(l&&l.details)||{};
+    if(cardKey==='productos'){
+      if(/DATA_OVERLOAD|THUMBNAILS_OVERLOAD|MEMORY_HIGH|PERF_SLOW_RENDER|colapso|sin espacio/.test(txt)){critical=true;break;}
+    }else if(cardKey==='api'){
+      if(/API_AUTH|API_DISABLED|API_BILLING|API_RATE_LIMIT|API_TIMEOUT|CONFIG_MISSING|API_SERVER_ERROR|API_INVALID/.test(txt)){critical=true;break;}
+      if(/API_REFERRER|NETWORK_OFFLINE|NETWORK_TIMEOUT/.test(txt))mild=true;
+    }else if(cardKey==='gdrive'){
+      if(/GDRIVE_AUTH|GDRIVE_QUOTA|GDRIVE_FREQUENT_DISCONNECT|GDRIVE_API_LOAD_FAILED/.test(txt)){critical=true;break;}
+      if(/GDRIVE_DISCONNECTED/.test(txt)){
+        if(details.reason==='user'&&gdriveConnected){} else mild=true;
+      }
+    }else if(cardKey==='sync'){
+      if(/SYNC_ERROR|SYNC_ABORTED/.test(txt)){critical=true;break;}
+      if(/SYNC_SKIPPED|SYNC_DEFERRED/.test(txt))mild=true;
+    }
+    // 'cola' no tiene códigos de log asociados, siempre ok
+  }
+  return {critical,mild};
+}
+
 function updateAppStatus(){
   const status=document.getElementById('appStatus');
   if(!status)return;
@@ -1178,19 +1207,19 @@ function updateAppStatus(){
   const gdriveConnected=!!localStorage.getItem('gdrive_token');
   const offlineQueue=(typeof photoQueue!=='undefined' && Array.isArray(photoQueue))?photoQueue.length:0;
   const pendingSync=getPendingSyncCount();
-  const sev=analyzeLogSeverity();
-  const iconClass=(ok,hasCritical,hasMild)=>{
-    if(hasCritical)return 'critical';
-    if(!ok||hasMild)return 'warn';
+  const icon=(cls)=>cls==='critical'?'⚠':cls==='warn'?'◐':'✓';
+  const cardCls=(ok,cardKey)=>{
+    const sev=getCardSeverity(cardKey,apiConfigured,gdriveConnected);
+    if(sev.critical)return 'critical';
+    if(!ok||sev.mild)return 'warn';
     return 'ok';
   };
-  const icon=(cls)=>cls==='critical'?'⚠':cls==='warn'?'◐':'✓';
   const cards=[
-    {label:'Productos',val:P.length,cls:iconClass(true,sev.critical,sev.mild)},
-    {label:'API Gemini',val:apiConfigured?'Configurada':'Sin configurar',cls:iconClass(apiConfigured,sev.critical,sev.mild)},
-    {label:'Google Drive',val:gdriveConnected?'Conectado':'Desconectado',cls:iconClass(gdriveConnected,sev.critical,sev.mild)},
-    {label:'Cola offline',val:offlineQueue+' pendientes',cls:iconClass(offlineQueue===0,sev.critical,sev.mild)},
-    {label:'Sync pendiente',val:String(pendingSync),cls:iconClass(pendingSync===0,sev.critical,sev.mild)}
+    {label:'Productos',val:P.length,cls:cardCls(true,'productos')},
+    {label:'API Gemini',val:apiConfigured?'Configurada':'Sin configurar',cls:cardCls(apiConfigured,'api')},
+    {label:'Google Drive',val:gdriveConnected?'Conectado':'Desconectado',cls:cardCls(gdriveConnected,'gdrive')},
+    {label:'Cola offline',val:offlineQueue+' pendientes',cls:cardCls(offlineQueue===0,'cola')},
+    {label:'Sync pendiente',val:String(pendingSync),cls:cardCls(pendingSync===0,'sync')}
   ];
   status.innerHTML=`<div class="status-minicards">${cards.map(c=>
     `<div class="status-minicard"><span class="status-icon ${c.cls}">${icon(c.cls)}</span><span>${c.label}: ${c.val}</span></div>`
@@ -2198,7 +2227,7 @@ function saveDB(options = {}) {
     }else if(json.length>4*1024*1024&&withThumb.length>=200){
       addLog(LOG_LEVELS.WARN,'THUMBNAILS_OVERLOAD','Base de datos inflada por miniaturas: app puede colapsar.',{count:withThumb.length,bytes:json.length});
     }
-    if(P.length>650){
+    if(P.length>950){
       const last=window.__lastDataOverloadLog||0;
       if(Date.now()-last>60000){window.__lastDataOverloadLog=Date.now();addLog(LOG_LEVELS.WARN,'DATA_OVERLOAD','DATA_OVERLOAD',{count:P.length,reason:'riesgo_colapso_gestion_datos'});}
     }
@@ -2995,7 +3024,7 @@ function render(){
   renderProducts();
   const dt=(typeof performance!=='undefined'&&performance.now)?performance.now()-t0:0;
   if(dt>800&&typeof addLog==='function')addLog(LOG_LEVELS.WARN,'PERF_SLOW_RENDER','PERF_SLOW_RENDER',{ms:Math.round(dt),cards:currentFiltered.length});
-  if(typeof performance!=='undefined'&&performance.memory&&performance.memory.usedJSHeapSize>45e6&&typeof addLog==='function')addLog(LOG_LEVELS.WARN,'MEMORY_HIGH','MEMORY_HIGH',{used_mb:(performance.memory.usedJSHeapSize/1048576).toFixed(1)});
+  if(typeof performance!=='undefined'&&performance.memory&&performance.memory.usedJSHeapSize>80e6&&typeof addLog==='function')addLog(LOG_LEVELS.WARN,'MEMORY_HIGH','MEMORY_HIGH',{used_mb:(performance.memory.usedJSHeapSize/1048576).toFixed(1)});
 }
 
 function renderProducts(){
